@@ -176,6 +176,31 @@ module FieldStruct
         @model_name ||= ModelName.new(name)
       end
 
+      # Parse a JSON string and build an instance.
+      #
+      #   Person.from_json('{"name":"Alice","address":{"street":"1","city":"NYC"}}')
+      #   # => #<Person name: "Alice", address: #<Address ...>>
+      #
+      # The parsed hash is fed through {#initialize} like any other input,
+      # so the full setter pipeline runs: coercion (strings re-coerce to
+      # Date/Time/BigDecimal), nested Hash → Types::Nested instantiation,
+      # +unknown_attributes+ policy, +coercion_policy+. Invalid JSON
+      # surfaces the underlying Oj parse error; a non-object root
+      # (+[...]+, +"hi"+, +42+) raises +ArgumentError+.
+      #
+      # @param json_string [String]
+      # @return [Base]
+      # @raise [ArgumentError] when the parsed root is not a JSON object
+      def from_json(json_string)
+        parsed = Oj.load(json_string, mode: :compat)
+        unless parsed.is_a?(::Hash)
+          raise ArgumentError,
+            "from_json expects a JSON object root, got #{parsed.class}: #{parsed.inspect}"
+        end
+
+        new(parsed)
+      end
+
       private
 
       def namespace_field_types

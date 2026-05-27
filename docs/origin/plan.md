@@ -459,6 +459,41 @@ Commits: `docs: add usage examples to README`, `chore: fill gemspec metadata`, `
 
 ---
 
+## Phase 2 — Extended types + `enum:` / `in:` options (in flight)
+
+### Extended scalar types
+
+| Type | Coerces from | Default `format:` |
+|---|---|---|
+| `:symbol` | Symbol or String | — (no format) |
+| `:uuid`   | inherits :string | `/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/i` |
+| `:url`    | inherits :string | `%r{\Ahttps?://[^\s/$.?#][^\s]*\z}i` |
+| `:email`  | inherits :string | `/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/` |
+
+`:uuid` / `:url` / `:email` are `Types::String` subclasses that expose a class-level `default_format`. The DSL pre-fills the field's `format:` option from the type when the user didn't provide one — so bad input becomes a Phase 1 `'is invalid'` validation error (Option B). User-provided `format:` always wins over the default.
+
+### `enum:` and `in:` field options
+
+Two parallel options for "the coerced value must be in this set":
+
+- `enum: [...]` — Array of allowed values. **String-like types only** (`:string`, `:immutable_string`, `:symbol`, and subclasses like `:uuid` / `:url` / `:email`).
+- `in: [...]` or `in: range` — Array OR Range of allowed values. **Rangy types only** (`:integer`, `:float`, `:big_decimal` / `:decimal`, `:date`, `:time`, `:datetime`).
+
+```ruby
+required :status,    :string,  enum: %w[on off]
+required :position,  :symbol,  enum: %i[before after]
+required :page_size, :integer, in: [10, 20, 30]
+required :amount,    :float,   in: 1.0..10.0
+required :height,    :integer, in: 10..
+required :start_on,  :date,    in: Date.new(2024, 1, 1)..Date.new(2024, 12, 31)
+```
+
+Validation is post-coercion (so `'10'` coerces to `10` then matches `in: [10, 20]`). Mismatch → `'is invalid'`. Nil values are exempt (matching `format:`). Combining `format:` + `enum:` is allowed — both apply, but the field still records at most one `'is invalid'` message regardless of how many checks failed.
+
+Declaration-time guards: passing `enum:` to a rangy field or `in:` to a string-like field raises `ArgumentError` at class load.
+
+---
+
 ## Phase 2 — Field-level coercion_policy override (in flight)
 
 ```ruby
@@ -623,11 +658,10 @@ Surfaced during design but explicitly deferred. Ordered roughly by likely value:
 
 1. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
 2. **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Reuses `of:` as parameterization.
-3. **Extended types** — `:uuid`, `:url`, `:email`, `:symbol`, `:enum`. Same plumbing, more types.
-4. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
-5. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
-6. **`:binary` type** — if anyone asks.
-7. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
+3. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
+4. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
+5. **`:binary` type** — if anyone asks.
+6. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
 
 ---
 

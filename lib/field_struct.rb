@@ -10,6 +10,7 @@ require_relative 'field_struct/types/big_decimal'
 require_relative 'field_struct/types/boolean'
 require_relative 'field_struct/types/date'
 require_relative 'field_struct/types/time'
+require_relative 'field_struct/types/datetime'
 
 module FieldStruct
   class Error < StandardError; end

@@ -256,9 +256,62 @@ module FieldStruct
         end
       end
 
+      public
+
+      # @return [Array<#call>] the registered cross-field validators
+      #   for this class. Each entry is a callable that takes the
+      #   record. Subclasses start with a +dup+ of the parent's list at
+      #   inheritance time and accumulate their own.
+      def validators
+        @validators ||= []
+      end
+
+      # Declare a cross-field validator.
+      #
+      #   class Schedule < FieldStruct::Base
+      #     required :start_date, :date
+      #     required :end_date,   :date
+      #
+      #     validate :ensure_chronological
+      #     validate do |record|
+      #       record.errors.add(:base, '...') if record.something_else?
+      #     end
+      #
+      #     def ensure_chronological
+      #       return unless start_date && end_date
+      #
+      #       errors.add(:base, 'end_date must not precede start_date') if start_date > end_date
+      #     end
+      #   end
+      #
+      # Multiple symbols can be passed in a single call. Method-symbol
+      # and block forms are interchangeable — the symbol form is sugar
+      # for +validate { |r| r.send(:name) }+. Validators run on every
+      # call to {#valid?}, in declaration order, after per-field
+      # validation.
+      #
+      # Per convention, validators add errors via
+      # +record.errors.add(:base, '...')+ — +errors[:base]+ is cleared
+      # at the start of each {#valid?} run, so prior cross-field errors
+      # don't pile up. Adding to a field-specific key bypasses that
+      # auto-clearing; the user is then responsible for clearing those
+      # entries.
+      #
+      # @param method_names [Array<Symbol>] instance methods to invoke
+      # @yield [record] optional block validator
+      # @return [self]
+      def validate(*method_names, &block)
+        method_names.each do |method_name|
+          validators << ->(record) { record.public_send(method_name) }
+        end
+        validators << block if block
+        self
+      end
+
       def inherited(subclass)
         super
         subclass.metadata.merge(metadata)
+        subclass.instance_variable_set(:@validators, validators.dup)
       end
     end
 
@@ -267,6 +320,7 @@ module FieldStruct
       @errors = Errors.new
       apply_defaults
       assign_attributes(attrs)
+      run_cross_field_validators if self.class.validators.any?
       @_initialized = true
     end
 
@@ -318,8 +372,20 @@ module FieldStruct
       @errors ||= Errors.new
     end
 
-    # @return [Boolean] true when {#errors} is empty
+    # Run the class's cross-field validators (if any), then report
+    # whether the record has any errors.
+    #
+    # Each call clears +errors[:base]+ before running validators, so
+    # cross-field errors don't accumulate across calls. Field-level
+    # errors written by setters are NOT cleared by +valid?+ — Phase 1's
+    # "setter owns its field's errors" contract is preserved.
+    #
+    # For classes that declare no +validate+ blocks, +valid?+ stays a
+    # cheap +errors.empty?+ read.
+    #
+    # @return [Boolean]
     def valid?
+      run_cross_field_validators if self.class.validators.any?
       errors.empty?
     end
 
@@ -403,6 +469,11 @@ module FieldStruct
       self.class.metadata.each do |field|
         public_send(:"#{field.name}=", field.default)
       end
+    end
+
+    def run_cross_field_validators
+      errors.clear(:base)
+      self.class.validators.each { |validator| validator.call(self) }
     end
 
     def reject_unknown_attributes!(attrs)

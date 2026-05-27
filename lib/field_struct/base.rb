@@ -146,7 +146,10 @@ module FieldStruct
       #   plus type-specific options (e.g. +format:+, +round:+, +of:+,
       #   +values:+, +enum:+, +in:+) — see each type's +coerce+ for the
       #   options it consumes
-      # @return [Field] the field that was added
+      # @return [Metadata] the class-level metadata, so the DSL reads
+      #   cleanly in IRB (each line prints the running set of declared
+      #   fields rather than just the most recently added one). The
+      #   added Field is still available as +metadata[name]+.
       def field(name, type_arg, **options)
         type_class, type_instance = resolve_type_arg(type_arg)
         if type_class <= FieldStruct::Types::Union
@@ -170,7 +173,7 @@ module FieldStruct
         )
         metadata.add(field)
         define_field_accessors(field)
-        field
+        metadata
       end
 
       # Sugar for {#field} with +required: true+.
@@ -178,7 +181,7 @@ module FieldStruct
       # @param name [Symbol, String]
       # @param type_name [Symbol, Class<Types::Base>, Class<FieldStruct::Base>]
       # @param options [Hash{Symbol=>Object}]
-      # @return [Field]
+      # @return [Metadata]
       def required(name, type_name, **options)
         field(name, type_name, **options, required: true)
       end
@@ -188,7 +191,7 @@ module FieldStruct
       # @param name [Symbol, String]
       # @param type_name [Symbol, Class<Types::Base>, Class<FieldStruct::Base>]
       # @param options [Hash{Symbol=>Object}]
-      # @return [Field]
+      # @return [Metadata]
       def optional(name, type_name, **options)
         field(name, type_name, **options, required: false)
       end

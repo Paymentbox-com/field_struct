@@ -45,5 +45,13 @@ module FieldStruct
       @messages.reject { |_, msgs| msgs.empty? }
     end
     alias messages to_h
+
+    # @return [String]
+    def inspect
+      return '#<FieldStruct::Errors empty>' if empty?
+
+      pairs = to_h.map { |field, msgs| "#{field}=#{msgs.inspect}" }.join(' ')
+      "#<FieldStruct::Errors #{pairs}>"
+    end
   end
 end

@@ -114,8 +114,11 @@ module FieldStruct
     # 
     # _@param_ `options` — +required:+ (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol), plus type-specific options (e.g. +format:+, +round:+, +of:+, +values:+, +enum:+, +in:+) — see each type's +coerce+ for the options it consumes
     # 
-    # _@return_ — the field that was added
-    def self.field: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_arg, **::Hash[Symbol, Object] options) -> Field
+    # _@return_ — the class-level metadata, so the DSL reads
+    # cleanly in IRB (each line prints the running set of declared
+    # fields rather than just the most recently added one). The
+    # added Field is still available as +metadata[name]+.
+    def self.field: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_arg, **::Hash[Symbol, Object] options) -> Metadata
 
     # Sugar for {#field} with +required: true+.
     # 
@@ -124,7 +127,7 @@ module FieldStruct
     # _@param_ `type_name`
     # 
     # _@param_ `options`
-    def self.required: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_name, **::Hash[Symbol, Object] options) -> Field
+    def self.required: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_name, **::Hash[Symbol, Object] options) -> Metadata
 
     # Sugar for {#field} with +required: false+ (the default).
     # 
@@ -133,7 +136,7 @@ module FieldStruct
     # _@param_ `type_name`
     # 
     # _@param_ `options`
-    def self.optional: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_name, **::Hash[Symbol, Object] options) -> Field
+    def self.optional: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_name, **::Hash[Symbol, Object] options) -> Metadata
 
     # Declare an external-name mapping for a serialization format.
     # The mapping reads internal-field-name (Symbol) on the left, the
@@ -576,6 +579,8 @@ module FieldStruct
     # _@return_ — snapshot of field → messages,
     # skipping fields with empty message lists
     def to_h: () -> ::Hash[Symbol, ::Array[String]]
+
+    def inspect: () -> String
   end
 
   # The per-class collection of {Field} declarations.
@@ -630,6 +635,17 @@ module FieldStruct
     # _@param_ `parent`
     def merge: (Metadata parent) -> self
 
+    # Concise one-line representation. Lists the declared field names
+    # and, when present, the declared serialization formats — without
+    # dumping the underlying ivar hashes.
+    def inspect: () -> String
+
+    # Multi-line representation suitable for IRB / pp. Renders each
+    # field on its own indented line using {Field#inspect}.
+    # 
+    # _@param_ `pp` — a PP-shaped sink (responds to +#text+)
+    def pretty_print: (Object pp) -> void
+
     # _@return_ — declared
     # external-name mappings keyed by format name. Each inner hash
     # maps an internal field name (Symbol) to its external name
@@ -674,6 +690,11 @@ module FieldStruct
     # 
     # _@param_ `name`
     def key?: ((Symbol | String) name) -> bool
+
+    # _@return_ — one-line summary of the locally-registered names
+    # (does not enumerate the parent chain), with a +parent+ marker
+    # when the registry has one
+    def inspect: () -> String
 
     # _@return_ — the parent registry, or +nil+ for an unparented one
     attr_reader parent: Registry?
@@ -740,6 +761,15 @@ module FieldStruct
       # The native Ruby class a coerced value will be an instance of.
       # Used by the (deferred) RBS generator and for introspection.
       def ruby_type: () -> Class
+
+      # Concise type-instance representation. The default shows just the
+      # type-class name (e.g. +#<FieldStruct::Types::String>+). Subclasses
+      # that carry parameter state (Nested, Union, …) override to surface
+      # what they wrap.
+      def inspect: () -> String
+
+      # _@param_ `pp` — a PP-shaped sink (responds to +#text+)
+      def pretty_print: (Object pp) -> void
     end
 
     # Date type. Returns Date as-is, converts DateTime/Time/anything that
@@ -914,6 +944,8 @@ module FieldStruct
       # removed.
       def ruby_type: () -> ::Array[Class]
 
+      def inspect: () -> String
+
       # _@return_ — the configured member type instances
       attr_reader member_types: ::Array[Types::Base]
     end
@@ -999,6 +1031,8 @@ module FieldStruct
       # _@return_ — the +struct_class+ itself, so introspection sees
       # the actual nested type rather than a generic FieldStruct::Base
       def ruby_type: () -> Class
+
+      def inspect: () -> String
 
       # _@return_ — the FieldStruct::Base subclass this type wraps
       attr_reader struct_class: Class

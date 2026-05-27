@@ -55,6 +55,22 @@ module FieldStruct
       def ruby_type
         raise NotImplementedError, "#{self.class} must implement #ruby_type"
       end
+
+      # Concise type-instance representation. The default shows just the
+      # type-class name (e.g. +#<FieldStruct::Types::String>+). Subclasses
+      # that carry parameter state (Nested, Union, …) override to surface
+      # what they wrap.
+      #
+      # @return [String]
+      def inspect
+        "#<#{self.class.name || "AnonymousType"}>"
+      end
+
+      # @param pp [Object] a PP-shaped sink (responds to +#text+)
+      # @return [void]
+      def pretty_print(pp)
+        pp.text(inspect)
+      end
     end
   end
 end

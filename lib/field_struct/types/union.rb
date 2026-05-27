@@ -63,6 +63,12 @@ module FieldStruct
       def ruby_type
         @member_types.flat_map { |type| Array(type.ruby_type) }.uniq
       end
+
+      # @return [String]
+      def inspect
+        members = @member_types.map { |m| m.class.name.to_s.split('::').last }.join(' | ')
+        "#<FieldStruct::Types::Union of=#{members}>"
+      end
     end
   end
 end

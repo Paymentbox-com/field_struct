@@ -91,5 +91,38 @@ module FieldStruct
       end
       self
     end
+
+    # Concise one-line representation. Lists the declared field names
+    # and, when present, the declared serialization formats — without
+    # dumping the underlying ivar hashes.
+    #
+    # @return [String]
+    def inspect
+      return '#<FieldStruct::Metadata empty>' if @fields.empty?
+
+      parts = ["fields=#{@fields.keys.inspect}"]
+      parts << "serializations=#{@serializations.keys.inspect}" unless @serializations.empty?
+      "#<FieldStruct::Metadata #{parts.join(" ")}>"
+    end
+
+    # Multi-line representation suitable for IRB / pp. Renders each
+    # field on its own indented line using {Field#inspect}.
+    #
+    # @param pp [Object] a PP-shaped sink (responds to +#text+)
+    # @return [void]
+    def pretty_print(pp)
+      if @fields.empty?
+        pp.text(inspect)
+        return
+      end
+
+      pp.text('#<FieldStruct::Metadata')
+      @fields.each_value do |field|
+        pp.text("\n  ")
+        pp.text(field.inspect)
+      end
+      pp.text("\n  serializations=#{@serializations.keys.inspect}") unless @serializations.empty?
+      pp.text('>')
+    end
   end
 end

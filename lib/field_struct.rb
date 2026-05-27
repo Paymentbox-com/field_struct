@@ -8,6 +8,7 @@ require_relative 'field_struct/types/integer'
 require_relative 'field_struct/types/float'
 require_relative 'field_struct/types/big_decimal'
 require_relative 'field_struct/types/boolean'
+require_relative 'field_struct/types/date'
 
 module FieldStruct
   class Error < StandardError; end

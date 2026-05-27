@@ -77,3 +77,26 @@ namespace :sigs do
     sh "bundle exec rbs --no-collection -I #{SIG_FILE} validate"
   end
 end
+
+# --- Documentation (yard) ---------------------------------------------
+
+namespace :docs do
+  desc 'Generate HTML API docs into doc/ from YARD comments'
+  task :generate do
+    # --fail-on-warning surfaces broken YARD references and malformed
+    # tags so a release doesn't go out with a busted doc tree.
+    sh 'bundle exec yard doc --fail-on-warning'
+  end
+
+  desc 'Show YARD coverage stats and list undocumented public methods'
+  task :stats do
+    sh 'bundle exec yard stats --list-undoc'
+  end
+end
+
+# --- Release pre-flight -----------------------------------------------
+
+namespace :release do
+  desc 'Run the full pre-release battery: specs, rubocop, sig check, docs build'
+  task check: %w[spec rubocop sigs:check sigs:validate docs:generate]
+end

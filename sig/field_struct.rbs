@@ -84,7 +84,7 @@ module FieldStruct
     # Instances will be Ruby-frozen at the end of {#initialize} —
     # any subsequent attempt to mutate ivars raises +FrozenError+.
     # 
-    # Independent of {#immutable!}. +immutable!+ blocks our setters
+    # Independent of {.immutable!}. +immutable!+ blocks our setters
     # with a custom error; +frozen!+ engages Ruby's frozen-state
     # mechanism, which also locks the instance against any other
     # ivar mutation. Pick the one that matches the level of
@@ -144,7 +144,7 @@ module FieldStruct
     # added Field is still available as +metadata[name]+.
     def self.field: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_arg, **::Hash[Symbol, Object] options) -> Metadata
 
-    # Sugar for {#field} with +required: true+.
+    # Sugar for {.field} with +required: true+.
     # 
     # _@param_ `name`
     # 
@@ -153,7 +153,7 @@ module FieldStruct
     # _@param_ `options`
     def self.required: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_name, **::Hash[Symbol, Object] options) -> Metadata
 
-    # Sugar for {#field} with +required: false+ (the default).
+    # Sugar for {.field} with +required: false+ (the default).
     # 
     # _@param_ `name`
     # 
@@ -198,7 +198,7 @@ module FieldStruct
     # _@return_ — a Types::Base subclass
     def self.resolve_type: (Symbol type_name) -> Class
 
-    # Resolve the second positional argument of {#field}.
+    # Resolve the second positional argument of {.field}.
     # 
     # _@param_ `type_arg`
     # 

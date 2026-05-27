@@ -562,7 +562,9 @@ module FieldStruct
 
     def apply_defaults
       self.class.metadata.each do |field|
-        public_send(:"#{field.name}=", field.default)
+        value = field.default
+        value = value.call if value.respond_to?(:call)
+        public_send(:"#{field.name}=", value)
       end
     end
 

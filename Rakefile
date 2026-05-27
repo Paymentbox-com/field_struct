@@ -29,15 +29,24 @@ SORD_FIXUPS = [
 def sord_run(target)
   # Temporarily hide the committed sig file — YARD picks up sig/*.rbs as
   # input, and the prior file's entries confuse Sord's parameter-matching
-  # for kwarg-heavy methods. Move it aside, run sord, restore.
+  # for kwarg-heavy methods. Move it aside, run sord, restore on failure
+  # or when generating to a different target (e.g. sigs:check).
   stash = "#{SIG_FILE}.stashed-by-sord-rake"
   stashed = File.exist?(SIG_FILE) && File.rename(SIG_FILE, stash) && true
+  ok = false
   sh "bundle exec sord #{target} --rbs --no-sord-comments --skip-constants --replace-errors-with-untyped"
   contents = File.read(target)
   SORD_FIXUPS.each { |pattern, replacement| contents.gsub!(pattern, replacement) }
   File.write(target, contents)
+  ok = true
 ensure
-  File.rename(stash, SIG_FILE) if stashed && File.exist?(stash)
+  # Only restore the stash if (a) sord failed mid-flight, or (b) the
+  # caller is writing to a tmp target and we want the committed file
+  # back in place. When sord succeeded and target *was* SIG_FILE, the
+  # fresh output already lives at SIG_FILE — restoring would clobber it.
+  restore = stashed && File.exist?(stash) && (!ok || target != SIG_FILE)
+  File.rename(stash, SIG_FILE) if restore
+  File.delete(stash) if stashed && File.exist?(stash) && !restore
 end
 
 namespace :sigs do

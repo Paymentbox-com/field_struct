@@ -18,10 +18,42 @@ module FieldStruct
   # / +attribute_names+, and metadata inheritance via the +inherited+
   # hook. Macros and validation layer on in later slices.
   class Base
+    VALID_COERCION_POLICIES = %i[keep_raw replace raise].freeze
+    UNSET = Object.new.freeze
+    private_constant :UNSET
+
     class << self
       # @return [Metadata] the per-class field collection (memoized)
       def metadata
         @metadata ||= Metadata.new
+      end
+
+      # Class macro: get or set the policy used by the setter pipeline
+      # when a value can't be coerced into a field's declared type.
+      #
+      #   coercion_policy :keep_raw   # default — store raw, add error
+      #   coercion_policy :replace    # store nil,  add error
+      #   coercion_policy :raise      # raise CoercionError
+      #
+      # Inherited by subclasses; descendants can override. Default on
+      # Base itself is +:keep_raw+.
+      #
+      # @param value [Symbol, UNSET]
+      # @return [Symbol]
+      def coercion_policy(value = UNSET)
+        if value.equal?(UNSET)
+          return @coercion_policy if defined?(@coercion_policy)
+          return superclass.coercion_policy if superclass.respond_to?(:coercion_policy)
+
+          :keep_raw
+        else
+          unless VALID_COERCION_POLICIES.include?(value)
+            raise ArgumentError, "unknown coercion policy #{value.inspect} " \
+                                 "(expected one of #{VALID_COERCION_POLICIES.inspect})"
+          end
+
+          @coercion_policy = value
+        end
       end
 
       # @return [Array<Symbol>] declared field names in insertion order
@@ -100,7 +132,12 @@ module FieldStruct
         attr_reader field.name
 
         define_method(:"#{field.name}=") do |value|
-          coerced = field.type_instance.coerce(value, field.options)
+          begin
+            coerced = field.type_instance.coerce(value, field.options)
+          rescue ArgumentError, TypeError => e
+            return apply_coercion_policy(field, value, e)
+          end
+
           instance_variable_set(:"@#{field.name}", coerced)
           validate_field(field, coerced)
           coerced
@@ -152,6 +189,29 @@ module FieldStruct
     def validate_field(field, value)
       errors.clear(field.name)
       errors.add(field.name, 'is required') if field.required? && field.type_instance.missing?(value)
+    end
+
+    def apply_coercion_policy(field, raw_value, error)
+      case self.class.coercion_policy
+      when :keep_raw
+        record_coercion_failure(field, raw_value, error)
+        raw_value
+      when :replace
+        record_coercion_failure(field, nil, error)
+        nil
+      when :raise
+        raise CoercionError.new(
+          "could not coerce #{raw_value.inspect} for #{field.name}: #{error.message}",
+          field_name: field.name,
+          original: error
+        )
+      end
+    end
+
+    def record_coercion_failure(field, stored_value, error)
+      instance_variable_set(:"@#{field.name}", stored_value)
+      errors.clear(field.name)
+      errors.add(field.name, "could not be coerced: #{error.message}")
     end
   end
 end

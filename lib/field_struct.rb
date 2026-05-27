@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'field_struct/version'
+require_relative 'field_struct/error'
 require_relative 'field_struct/types/base'
 require_relative 'field_struct/types/string'
 require_relative 'field_struct/types/immutable_string'
@@ -20,8 +21,6 @@ require_relative 'field_struct/errors'
 require_relative 'field_struct/base'
 
 module FieldStruct
-  class Error < StandardError; end
-
   # The base type registry, seeded with every v1 scalar type and the
   # +:decimal+ alias for +:big_decimal+. Namespace registries should be
   # built with this as their parent (see {Registry}).

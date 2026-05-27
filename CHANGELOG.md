@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **`Field#inspect` / `Field#pretty_print` produce concise, readable output.** The default reflection-based `inspect` dumped every ivar, making `optional :x, :string` in IRB look like a wall of text. The new representation is a one-line summary of the meaningful Field attributes:
+
+  ```
+  #<FieldStruct::Field :level String enum=["beginner", "pro"]>
+  #<FieldStruct::Field :age Integer default=0 description="Age in years">
+  #<FieldStruct::Field :address Nested(Address) required>
+  #<FieldStruct::Field :tags Array of_type=String>
+  #<FieldStruct::Field :payload Union(String | Integer)>
+  ```
+
 ## [0.5.3] - 2026-05-27
 
 Sord-generated RBS signatures.

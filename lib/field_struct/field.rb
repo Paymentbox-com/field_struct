@@ -75,5 +75,60 @@ module FieldStruct
 
     # @return [String, nil] shorter alias of {#description}
     alias desc description
+
+    # Concise one-line representation. Designed to be readable in IRB
+    # without dumping every ivar (the default Object#inspect is the
+    # reason +optional :x, :string+ in a console looks like a wall of
+    # text).
+    #
+    # @return [String]
+    def inspect
+      parts = [@name.inspect, type_repr]
+      parts << 'required' if @required
+      parts << "default=#{@default.inspect}" unless @default.nil?
+      parts << "coercion_policy=#{@coercion_policy.inspect}" if @coercion_policy
+      parts << "description=#{@description.inspect}" if @description
+      @options.each { |key, value| parts << "#{key}=#{option_repr(value)}" }
+      "#<FieldStruct::Field #{parts.join(" ")}>"
+    end
+
+    # Delegates pretty-print to {#inspect} so IRB / pp don't fall back
+    # to the default reflection-based output.
+    #
+    # @param pp [Object] a PP-shaped sink (responds to +#text+)
+    # @return [void]
+    def pretty_print(pp)
+      pp.text(inspect)
+    end
+
+    private
+
+    def type_repr
+      base = @type.name.to_s.split('::').last
+      if @type <= FieldStruct::Types::Nested
+        "Nested(#{@type_instance.struct_class.name || "AnonymousFieldStruct"})"
+      elsif @type <= FieldStruct::Types::Union
+        members = @type_instance.member_types.map { |m| m.class.name.to_s.split('::').last }
+        "Union(#{members.join(" | ")})"
+      else
+        base
+      end
+    end
+
+    # Render an option's value in inspect output. Type-class values
+    # (e.g. +:of_type+ on an Array field) get their basename instead
+    # of the full +FieldStruct::Types::String+ class.inspect.
+    def option_repr(value)
+      case value
+      when ::Class
+        value.name.to_s.split('::').last
+      when FieldStruct::Types::Nested
+        "Nested(#{value.struct_class.name || "AnonymousFieldStruct"})"
+      when FieldStruct::Types::Base
+        value.class.name.to_s.split('::').last
+      else
+        value.inspect
+      end
+    end
   end
 end

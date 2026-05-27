@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-27
+
 Serialization-formats redesign. Aliases are no longer a per-field
 attribute; they're a class-level mapping declared via the new
 `serialize` macro and consulted only by JSON I/O.

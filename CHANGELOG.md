@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-27
+
+Phase 2 wave two: union types, the `:binary` extended type, and the
+`frozen!` class macro. All five Phase 2+ backlog items that belong
+in-gem are now landed; RBS gen / format converters / docs generator
+remain deferred to separate downstream gems.
+
 ### Added
 
 - **`:binary` extended type** — Types::Binary subclasses Types::String and forces ASCII-8BIT encoding on the coerced value. `missing?` is nil-or-empty only (whitespace bytes are meaningful). Designed for raw bytes / BLOBs.

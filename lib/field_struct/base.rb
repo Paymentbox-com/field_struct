@@ -40,6 +40,7 @@ module FieldStruct
       # @return [Field] the field that was added
       def field(name, type_name, **options)
         type_class = resolve_type(type_name)
+        resolve_array_options!(type_class, options)
         required = options.delete(:required) { false }
         default = options.delete(:default)
         field = Field.new(name: name, type: type_class, required: required, default: default, **options)
@@ -86,6 +87,13 @@ module FieldStruct
         end
 
         nil
+      end
+
+      def resolve_array_options!(type_class, options)
+        return unless type_class <= FieldStruct::Types::Array
+        raise ArgumentError, 'array field requires an `of:` option naming the element type' unless options.key?(:of)
+
+        options[:of_type] = resolve_type(options.delete(:of))
       end
 
       def define_field_accessors(field)

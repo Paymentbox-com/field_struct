@@ -612,6 +612,34 @@ optional :id,      :union, of: %i[integer string]
 
 **U5. Declaration-time guards.** `of:` is required, must be an `Array`, must have at least two members.
 
+### Serialization formats — Phase A (in flight)
+
+Aliases are an import/export concern, not part of the native FS. A class declares format-specific mappings via the `serialize` macro; the mapping lives on `Metadata` alongside the fields. Native FS values stay canonical; only the serializers consult the mapping.
+
+```ruby
+class User < FieldStruct::Base
+  required :email,      :string
+  required :first_name, :string
+  required :last_name,  :string
+
+  serialize :json,
+            first_name: 'firstName',
+            last_name:  'lastName'
+end
+```
+
+**S1. Mapping shape.** `serialize(name, **mapping)` reads internal-field-name (Symbol) on the left, external-name (String) on the right. The same mapping applies to both directions: import reverse-maps; export forward-maps. Symbol values are normalized to Strings.
+
+**S2. Storage on Metadata.** `Metadata#serializations` is a `Hash{Symbol => Hash{Symbol => String}}` keyed by format name. `Metadata#serialization(name)` returns the mapping (frozen) or an empty hash for an undeclared format (the implicit identity). Inherited via `Metadata#merge` along with fields.
+
+**S3. Validation at class load.** Each mapping key must be a declared field at the moment `serialize` is called. Otherwise raises `ArgumentError` with the offending key(s) named. Convention: declare fields first, then serializations.
+
+**S4. Multi-format allowed.** A class may declare multiple formats (`:json`, `:csv`, `:xml`, etc.) — they coexist. Only `:json` is wired in-gem (Phase B); downstream gems read `Klass.metadata.serializations[:their_name]` for their own I/O.
+
+**S5. No multiple JSON formats.** Repeating `serialize :json, ...` on the same class replaces the prior mapping (last-write-wins). One class, one `:json` shape.
+
+**S6. Phase A scope.** Declaration plumbing only. `to_json` / `from_json` / `as_json` continue to emit canonical names. Phase B wires the JSON serializer through `metadata.serialization(:json)`. Phase C removes the current per-field `aliases:` feature.
+
 ### Pattern matching (P1–P6)
 
 Ruby 3.0+ pattern matching is wired in via the two standard protocols on `Base`.

@@ -22,6 +22,7 @@ require_relative 'field_struct/types/uuid'
 require_relative 'field_struct/types/url'
 require_relative 'field_struct/types/email'
 require_relative 'field_struct/types/union'
+require_relative 'field_struct/types/binary'
 require_relative 'field_struct/registry'
 require_relative 'field_struct/field'
 require_relative 'field_struct/metadata'
@@ -53,6 +54,7 @@ module FieldStruct
       r.register :url, Types::URL
       r.register :email, Types::Email
       r.register :union, Types::Union
+      r.register :binary, Types::Binary
     end
   end
 end

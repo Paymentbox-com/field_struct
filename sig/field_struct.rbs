@@ -495,6 +495,25 @@ module FieldStruct
 
     def required?: () -> bool
 
+    # Concise one-line representation. Designed to be readable in IRB
+    # without dumping every ivar (the default Object#inspect is the
+    # reason +optional :x, :string+ in a console looks like a wall of
+    # text).
+    def inspect: () -> String
+
+    # Delegates pretty-print to {#inspect} so IRB / pp don't fall back
+    # to the default reflection-based output.
+    # 
+    # _@param_ `pp` — a PP-shaped sink (responds to +#text+)
+    def pretty_print: (Object pp) -> void
+
+    def type_repr: () -> untyped
+
+    # Render an option's value in inspect output. Type-class values
+    # (e.g. +:of_type+ on an Array field) get their basename instead
+    # of the full +FieldStruct::Types::String+ class.inspect.
+    def option_repr: (untyped value) -> untyped
+
     # _@return_ — canonical field name
     attr_reader name: Symbol
 

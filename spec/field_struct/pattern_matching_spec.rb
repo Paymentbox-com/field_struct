@@ -239,10 +239,11 @@ RSpec.describe FieldStruct::Base, 'pattern matching' do
     end
   end
 
-  describe 'aliases do not participate in pattern matching' do
+  describe 'serialize :json external names do not participate in pattern matching' do
     let(:klass) do
       Class.new(described_class) do
-        required :email, :string, aliases: ['EmailAddress']
+        required :email, :string
+        serialize :json, email: 'EmailAddress'
       end
     end
 
@@ -255,15 +256,13 @@ RSpec.describe FieldStruct::Base, 'pattern matching' do
       expect(result).to eq('a@b.com')
     end
 
-    it 'omits alias keys from deconstruct_keys' do
+    it 'omits external-format keys from deconstruct_keys' do
       instance = klass.new(email: 'a@b.com')
       expect(instance.deconstruct_keys(nil)).to eq(email: 'a@b.com')
       expect(instance.deconstruct_keys(nil)).not_to have_key(:EmailAddress)
     end
 
-    it 'fails to match a pattern keyed on the alias' do
-      # Build the pattern hash explicitly because :EmailAddress with a
-      # capital start can't be used as a hash-pattern key literal.
+    it 'fails to match a pattern keyed on the external name' do
       instance = klass.new(email: 'a@b.com')
       pattern_keys = instance.deconstruct_keys(%i[EmailAddress])
       expect(pattern_keys).to eq({}) # nothing matched

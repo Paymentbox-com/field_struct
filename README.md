@@ -287,38 +287,42 @@ bad.valid?          # => false
 - Validators are inherited by subclasses (the subclass receives a `dup` of the parent's list and can append).
 - Symbol form `validate :name, :other` registers each as its own validator.
 
-## Aliases — bridging external naming conventions
+## Serialization — bridging external naming conventions
 
-When a payload arrives with names that don't match your Ruby conventions — `EmailAddress` from a vendor API, `email_address` from a legacy table — declare `aliases:` and the import side routes it for you. Export with `aliased: true` re-serializes back to the original convention for round-tripping.
+When a payload arrives with names that don't match your Ruby conventions — `firstName` from a vendor API, `EMAIL_ADDR` from a legacy DB — declare a `serialize` block on the class. The mapping is internal-symbol → external-string and applies to both directions (import reverse-maps, export forward-maps).
 
 ```ruby
 class User < FieldStruct::Base
-  required :email,      :string, aliases: ['EmailAddress', 'email_address']
-  required :first_name, :string, aliases: ['FirstName']
+  required :email,      :string
+  required :first_name, :string
+  required :last_name,  :string
+
+  serialize :json,
+            first_name: 'firstName',
+            last_name:  'lastName'
 end
 
-# Import: any alias is accepted, routed to the canonical field.
-User.new('EmailAddress' => 'a@b.com', 'FirstName' => 'Alice')
-# => #<User email: "a@b.com", first_name: "Alice">
+# Import — JSON keys are reverse-mapped to canonical fields.
+user = User.from_json('{"email":"a@b.com","firstName":"Alice","lastName":"Smith"}')
+user.first_name  # => "Alice"
 
-# Conflict: if both canonical and alias are in the input, canonical wins.
-User.new(email: 'a@b.com', EmailAddress: 'never@y.com').email
-# => "a@b.com"
+# Export — to_json applies the mapping forward.
+user.to_json
+# => '{"email":"a@b.com","firstName":"Alice","lastName":"Smith"}'
 
-# Export: opt in via aliased: true. Uses each field's first alias.
-user.as_json(aliased: true)
-# => { EmailAddress: 'a@b.com', FirstName: 'Alice' }
-user.to_json(aliased: true)
-# => '{"EmailAddress":"a@b.com","FirstName":"Alice"}'
+# Round-trip: User.from_json(user.to_json) == user.
 ```
 
-- Aliases are import-and-export only — they do **not** define Ruby methods. `user.email` works; `user.EmailAddress` doesn't.
-- `unknown_attributes :raise` treats aliases as known; only truly unknown keys raise.
-- Aliases propagate through nested FieldStructs and arrays of nested when you serialize with `aliased: true`.
+- Fields not listed in the mapping (here `:email`) use their canonical name unchanged.
+- `to_h` and `attributes` always return canonical names — only `to_json` / `as_json` / `from_json` consult the mapping.
+- Each mapping key must be a declared field; an unknown key raises `ArgumentError` at class load. Declare fields first, then `serialize`.
+- The mapping is inherited by subclasses; redeclaring on a subclass replaces it (last-write-wins).
+- Multiple formats can coexist on the same class (`serialize :json, ...` + `serialize :csv, ...`). Only `:json` is wired in-gem; CSV / XML / Avro support is left for downstream gems that read `Klass.metadata.serializations[:their_name]`.
+- Nested FieldStructs and arrays of nested propagate naturally — each level uses its own serialize mapping.
 
 ## Parsing JSON
 
-`Klass.from_json(string)` parses with Oj and feeds the resulting hash through `.new` — so coercion, nested construction, `unknown_attributes`, and `coercion_policy` all engage the same way they do for direct calls.
+`Klass.from_json(string)` parses with Oj and feeds the resulting hash through `.new` — so coercion, nested construction, `unknown_attributes`, and `coercion_policy` all engage the same way they do for direct calls. When the class has a `serialize :json` mapping, external keys are reverse-mapped to canonical names before construction.
 
 ```ruby
 person = Person.from_json('{"name":"Alice","address":{"street":"1","city":"NYC"}}')

@@ -6,6 +6,59 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Serialization-formats redesign. Aliases are no longer a per-field
+attribute; they're a class-level mapping declared via the new
+`serialize` macro and consulted only by JSON I/O.
+
+### Added
+
+- **`serialize` class macro.** Declares an import/export mapping for a named
+  format, stored on `Metadata#serializations`:
+
+  ```ruby
+  class User < FieldStruct::Base
+    required :first_name, :string
+    serialize :json, first_name: 'firstName'
+  end
+  ```
+
+  Internal-symbol on the left, external-string on the right; the same
+  mapping applies to both directions. Fields not listed use their
+  canonical name. Multi-format coexistence is allowed (`:json`, `:csv`,
+  …); only `:json` is wired in-gem (downstream gems can read
+  `Klass.metadata.serializations[:their_name]` for their own I/O).
+  Mapping keys must be declared fields — undeclared keys raise
+  `ArgumentError` at class load.
+
+### Changed
+
+- **`as_json` / `to_json`** apply the `:json` mapping when one is declared
+  (identity otherwise). Round-trip via `Klass.from_json(instance.to_json)`
+  preserves structural equality.
+- **`from_json`** reverse-maps the parsed hash recursively (through nested
+  FieldStructs and arrays of nested) before calling `.new`.
+
+### Removed (breaking)
+
+- **`aliases:` field option** — per-field alias declarations are gone.
+  Lift them up to a `serialize :json, ...` block on the class.
+
+  ```ruby
+  # Before:
+  required :first_name, :string, aliases: ['firstName']
+
+  # After:
+  required :first_name, :string
+  serialize :json, first_name: 'firstName'
+  ```
+
+- **`aliased: true` kwarg** on `attributes` / `to_h` / `as_json` /
+  `to_json` — no longer accepted. `to_json` already applies the
+  declared mapping; `to_h` / `attributes` stay canonical.
+- **`Field#aliases`**, **`Field#export_name`**, and **`Metadata#field_for`**
+  removed from the public surface. `Metadata#[name]` is the canonical
+  lookup; lookup by external name is the serializer's concern.
+
 ## [0.3.2] - 2026-05-27
 
 Ruby pattern matching support.

@@ -24,11 +24,6 @@ module FieldStruct
     #   the setter pipeline so we don't allocate a fresh type per coercion
     attr_reader :type_instance
 
-    # @return [Array<Symbol>] frozen list of import aliases for this field.
-    #   The first alias (if any) is also used as the export key under
-    #   +aliased: true+ on {Base#as_json} / {Base#to_h} / etc.
-    attr_reader :aliases
-
     # @return [Symbol, nil] this field's coercion-failure policy, or
     #   +nil+ to defer to the class-level setting on {Base.coercion_policy}.
     attr_reader :coercion_policy
@@ -43,21 +38,18 @@ module FieldStruct
     # @param default [Object, #call, nil] literal default value, or a
     #   parameterless callable (Proc/Lambda/Method) that returns one.
     #   Callables are invoked once per instance during apply_defaults.
-    # @param aliases [Array<Symbol,String>] alternate import-time names; the
-    #   first one doubles as the export key when +aliased: true+ is requested
     # @param coercion_policy [Symbol, nil] override the class-level
     #   coercion policy for this one field; +nil+ means "use whatever the
     #   class says"
     # @param options [Hash] extra type/field options (e.g. +format:+, +of:+)
     def initialize(name:, type:, type_instance: nil, required: false, default: nil,
-                   aliases: [], coercion_policy: nil, **options)
+                   coercion_policy: nil, **options)
       @name = name.to_sym
       @type = type
       @required = required
       @default = default
       @options = options.freeze
       @type_instance = type_instance || type.new
-      @aliases = aliases.map(&:to_sym).freeze
       @coercion_policy = coercion_policy
       freeze
     end
@@ -65,12 +57,6 @@ module FieldStruct
     # @return [Boolean]
     def required?
       @required
-    end
-
-    # @return [Symbol] the first alias if present, otherwise the canonical
-    #   name. Used as the output key for +aliased: true+ exports.
-    def export_name
-      @aliases.first || @name
     end
   end
 end

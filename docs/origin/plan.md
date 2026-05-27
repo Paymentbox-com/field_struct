@@ -612,7 +612,7 @@ optional :id,      :union, of: %i[integer string]
 
 **U5. Declaration-time guards.** `of:` is required, must be an `Array`, must have at least two members.
 
-### Serialization formats — Phase B (in flight)
+### Serialization formats (S1–S7)
 
 Aliases are an import/export concern, not part of the native FS. A class declares format-specific mappings via the `serialize` macro; the mapping lives on `Metadata` alongside the fields. Native FS values stay canonical; only the serializers consult the mapping.
 
@@ -638,13 +638,20 @@ end
 
 **S5. No multiple JSON formats.** Repeating `serialize :json, ...` on the same class replaces the prior mapping (last-write-wins). One class, one `:json` shape.
 
-**S6. Phase scoping.**
+**S6. Round-trip property.** For every class, `Klass.from_json(instance.to_json)` is structurally equal to `instance`, regardless of whether `serialize :json` is declared. Identity mapping (no declaration) keeps the property; declared mappings preserve it across the external naming change.
 
-- *Phase A:* declaration plumbing on Metadata + validation at class load. No behavior change.
-- *Phase B:* `as_json` / `to_json` apply the `:json` mapping forward; `from_json` walks the parsed hash and reverse-maps recursively (through nested + arrays-of-nested) before calling `.new`. `to_h` / `attributes` stay canonical (per S1 above). The legacy `aliased: true` kwarg keeps its prior behavior during the transition.
-- *Phase C:* remove the per-field `aliases:` feature and the `aliased: true` kwargs.
+**S7. Replaces per-field `aliases:` — breaking change in v0.4.0.** The pre-0.4 per-field `aliases: [...]` option and the corresponding `aliased: true` export kwarg are removed. Migration: lift each alias declaration up to a `serialize :json` block on the class.
 
-**S7. Round-trip property.** For every class, `Klass.from_json(instance.to_json)` is structurally equal to `instance`, regardless of whether `serialize :json` is declared. Identity mapping (no declaration) keeps the property; declared mappings preserve it across the external naming change.
+```ruby
+# Before (v0.3.x):
+required :first_name, :string, aliases: ['firstName']
+user.to_json(aliased: true)
+
+# After (v0.4.0):
+required :first_name, :string
+serialize :json, first_name: 'firstName'
+user.to_json
+```
 
 ### Pattern matching (P1–P6)
 

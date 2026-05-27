@@ -194,59 +194,6 @@ RSpec.describe FieldStruct::Base, 'serialize :json wiring' do
     end
   end
 
-  describe 'legacy aliased: true still works during the transition' do
-    let(:klass) do
-      Class.new(described_class) do
-        required :first_name, :string, aliases: ['FirstName']
-      end
-    end
-
-    it 'as_json(aliased: true) uses Field#export_name' do
-      instance = klass.new(first_name: 'Alice')
-      expect(instance.as_json(aliased: true)).to eq(FirstName: 'Alice')
-    end
-
-    it 'to_json(aliased: true) emits the alias key' do
-      instance = klass.new(first_name: 'Alice')
-      parsed = Oj.load(instance.to_json(aliased: true), mode: :compat)
-      expect(parsed.keys).to eq(['FirstName'])
-    end
-
-    it 'from_json still accepts alias keys via legacy field_for path' do
-      instance = klass.from_json('{"FirstName":"Alice"}')
-      expect(instance.first_name).to eq('Alice')
-    end
-  end
-
-  describe 'when a class declares BOTH legacy aliases and a serialize :json mapping' do
-    let(:klass) do
-      Class.new(described_class) do
-        required :first_name, :string, aliases: ['OldName']
-        serialize :json, first_name: 'firstName'
-      end
-    end
-
-    it 'as_json uses the serialize mapping (new path wins for default)' do
-      instance = klass.new(first_name: 'Alice')
-      expect(instance.as_json).to eq(firstName: 'Alice')
-    end
-
-    it 'from_json prefers the serialize mapping for incoming keys' do
-      instance = klass.from_json('{"firstName":"Alice"}')
-      expect(instance.first_name).to eq('Alice')
-    end
-
-    it 'from_json still accepts the legacy alias because field_for handles it after pass-through' do
-      instance = klass.from_json('{"OldName":"Alice"}')
-      expect(instance.first_name).to eq('Alice')
-    end
-
-    it 'as_json(aliased: true) still uses the legacy export_name' do
-      instance = klass.new(first_name: 'Alice')
-      expect(instance.as_json(aliased: true)).to eq(OldName: 'Alice')
-    end
-  end
-
   describe 'to_h and attributes stay canonical regardless of serialize :json' do
     let(:klass) do
       Class.new(described_class) do

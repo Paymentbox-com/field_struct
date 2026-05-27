@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-27
+
+Two small ergonomics improvements on top of v0.3.0.
+
 ### Added
 
 - **Callable defaults** — `default:` now accepts a literal OR a parameterless callable (Proc, Lambda, Method, anything that responds to `#call`). Callables are invoked once per instance during apply_defaults; the return value flows through the setter pipeline like any other default. Safe for per-instance values like timestamps or generated IDs.

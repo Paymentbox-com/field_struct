@@ -17,6 +17,7 @@ require_relative 'field_struct/types/datetime'
 require_relative 'field_struct/types/value'
 require_relative 'field_struct/types/array'
 require_relative 'field_struct/types/nested'
+require_relative 'field_struct/types/symbol'
 require_relative 'field_struct/registry'
 require_relative 'field_struct/field'
 require_relative 'field_struct/metadata'
@@ -43,6 +44,7 @@ module FieldStruct
       r.register :datetime, Types::DateTime
       r.register :value, Types::Value
       r.register :array, Types::Array
+      r.register :symbol, Types::Symbol
     end
   end
 end

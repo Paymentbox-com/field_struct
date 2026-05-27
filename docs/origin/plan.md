@@ -459,15 +459,158 @@ Commits: `docs: add usage examples to README`, `chore: fill gemspec metadata`, `
 
 ---
 
-## Phase 2 — :binary and frozen! (in flight)
+## Phase 2 — Locked decisions
 
-### `:binary` extended type
+Each subsection below records the locked decisions for one Phase 2 slice. Order matches the shipping order on `develop`. Section labels (N#, J#, A#, V#, U#) double as commit-message anchors so future diffs can reference a specific decision.
+
+### Nested FieldStructs (N1–N6)
+
+**N1. Declaration accepts both class and symbol form.**
+```ruby
+required :address, Address       # class form (no registry involved)
+required :address, :address      # symbol form (registry lookup); the
+                                 # registered value may be a FieldStruct
+                                 # subclass — DSL wraps it in Types::Nested
+```
+The class form is the documented path. No auto-registration.
+
+**N2. Coercion inputs.** `nil` → `nil`; an instance of the target struct (or subclass) passes through; a `Hash` constructs via `struct_class.new(hash)`; anything else raises `TypeError`, handled by the parent's `coercion_policy`.
+
+**N3. Validity propagation — eager, single-message.** When the setter sees an invalid nested struct at assignment time, it stamps `errors[:field] << "is invalid"` on the parent — matching Phase 1's "setter owns its field's errors" contract. Drill into `parent.field.errors` for the per-field breakdown. Nested mutations after assignment do **not** refresh the parent's view; callers must reassign or read the nested struct's own errors.
+
+**N4. Inner construction errors propagate.** `FieldStruct::UnknownAttributeError`, `FieldStruct::CoercionError`, etc. raised inside `struct_class.new(hash)` are *not* caught by the parent's `coercion_policy`. They surface to the caller as-is — they're structural rejections of the nested record, not parent-shape coercion failures. Only `TypeError` (the "you passed something other than nil/instance/Hash" case) flows through the parent's policy.
+
+**N5. Arrays of nested.** `required :addresses, :array, of: Address` works — each Hash element coerces into an `Address`, and a single invalid element marks the array `'is invalid'` on the parent (eager). Symbol form `of: :address` also works when the symbol resolves to a FieldStruct subclass.
+
+**N6. Implementation: wrapping type, not Base-as-type.** `FieldStruct::Types::Nested.new(struct_class)` is a `Types::Base` subclass parameterized at construction. The DSL builds one per nested Field (cached as `Field#type_instance`). `Field` accepts an optional pre-built `type_instance:` so parameterized types flow through the same plumbing as stock scalar types.
+
+### JSON import — `Klass.from_json` (J1–J4)
+
+**J1. Surface.** A single class method on `Base`. No `from_hash` companion — `.new(hash)` already covers that case.
+
+**J2. Pipeline.** `Oj.load(string, mode: :compat)` → guard against non-object roots → `Klass.new(parsed_hash)`. The existing setter pipeline handles everything from there: scalar coercion (strings re-coerce to Date/Time/BigDecimal), nested-hash → `Types::Nested` instantiation, arrays-of-nested, `unknown_attributes` policy, `coercion_policy`.
+
+**J3. Errors.**
+- Invalid JSON → underlying parser error propagates (Oj raises `EncodingError` / `Oj::ParseError`).
+- JSON root that isn't an object (`[...]`, `"hi"`, `42`, `null`) → `ArgumentError` with a clear message naming the actual class.
+- `unknown_attributes :raise` → `FieldStruct::UnknownAttributeError` (from `initialize`).
+- `coercion_policy :raise` → `FieldStruct::CoercionError` (from the setter pipeline).
+
+**J4. Round-trip.** `Klass.from_json(instance.to_json)` is structurally equal to `instance` for every base type except `:value` (which carries no type info beyond what JSON exposes natively — Symbols, for example, come back as Strings).
+
+### Field-name aliases (A1–A6)
+
+Bridge external naming conventions to internal FieldStruct conventions.
+
+**A1. Declaration.**
+```ruby
+required :email, :string, aliases: ['EmailAddress', 'email_address']
+```
+Single keyword option `aliases:` taking `Array<String|Symbol>`. Always an array — a single alias is `['Name']`. Empty array (`[]`) is the default. Aliases are normalized to symbols and stored on `Field#aliases` as a frozen array. Aliases are *not* present in `Field#options`.
+
+**A2. Import — conflict resolution.** When the same input hash carries both the canonical key and an alias key for the same field, **canonical wins**. The alias entry is silently ignored, independent of Hash iteration order.
+
+**A3. Export — opt-in via `aliased: true`.**
+```ruby
+person.as_json                    # canonical
+person.as_json(aliased: true)     # uses each field's first alias
+person.to_h(aliased: true)
+person.to_json(aliased: true)
+person.attributes(aliased: true)
+```
+The kwarg propagates through nested `FieldStruct::Base` values and through arrays of nested structs via `json_value`. For a field without aliases, the canonical name is used in aliased output too — no awkward gaps. Only the **first** alias from the declared array is used for export; the rest are import-only.
+
+**A4. Ruby-side accessors.** **No** Ruby methods are auto-defined for alias names. Aliases participate only in `Klass.new`/`from_json` (import) and `as_json(aliased: true)` etc. (export). Ruby code always uses the canonical name. Keeps the public surface clean of capitalized / camelCase method names that look out of place in idiomatic Ruby.
+
+**A5. Unknown-attributes interaction.** `unknown_attributes :raise` treats aliases as known. An input hash with `{'EmailAddress' => '...'}` does not raise for a field declared `aliases: ['EmailAddress']`. The check uses `Metadata#field_for(name)` which consults canonical names *and* aliases.
+
+**A6. Storage.** `Field#aliases` is a first-class attribute — not stashed inside `options`. `Field#export_name` returns the first alias if present, otherwise the canonical name. `Metadata#field_for(name)` looks up by canonical or alias.
+
+### Cross-field validation (V1–V5)
+
+**V1. Declaration.**
+```ruby
+validate :check_a, :check_b           # one or more instance methods
+validate { |record| ... }              # block
+
+# Multiple declarations stack — all run, in declaration order:
+validate :check_x
+validate { |record| ... }
+```
+Each `validate` call appends to the class's `validators` list. The symbol form is sugar for `->(record) { record.public_send(name) }`.
+
+**V2. Timing.** Validators run on `valid?` AND at the end of `initialize`, so a fresh instance has cross-field errors populated for inspection without requiring an explicit `valid?` call. For classes that declare no `validate` blocks, `valid?` stays the cheap `errors.empty?` read from Phase 1.
+
+**V3. Errors target — `:base` convention.** Validators add errors via `record.errors.add(:base, "...")`. `errors[:base]` is cleared at the start of each cross-field run, so stale entries don't pile up. Field-specific writes (`errors.add(:end_date, "...")` from a validator) work but are *not* auto-cleared by `valid?` — the user has opted out of the `:base` convention and is responsible for managing those entries.
+
+**V4. Inheritance.** `validators` is a list. At inheritance time the subclass receives a `dup` of the parent's list and accumulates from there. The child can add new validators without affecting the parent.
+
+**V5. No remove mechanism.** No way to remove an inherited validator from a subclass in v1. Surface as its own decision later if needed.
+
+### Field-level `coercion_policy:` override
 
 ```ruby
-required :payload, :binary
+class Mixed < FieldStruct::Base
+  coercion_policy :keep_raw                                  # class default
+  required :strict_id, :integer, coercion_policy: :raise     # field override
+  optional :lenient_count, :integer                          # falls back to :keep_raw
+end
 ```
 
-A `Types::String` subclass that forces ASCII-8BIT encoding on the coerced value. Intended for raw bytes (file contents, BLOBs, etc.) where whitespace bytes are meaningful data — so `missing?` is nil-or-empty only, not "nil/empty/whitespace" like `:string`. Returns a fresh ASCII-8BIT-encoded copy so the source string isn't mutated.
+`Field#coercion_policy` is `nil` by default (defer to class) or one of `:keep_raw`/`:replace`/`:raise`. The setter consults the field's policy first, then falls back to the class macro. Same validation values; unknown values raise `ArgumentError` at class load.
+
+Field-level overrides are inherited along with the rest of the Field's metadata; a subclass re-declaring the field with no override removes the parent's override (the new Field replaces the inherited one).
+
+### Extended scalar types + `enum:` / `in:` options
+
+**Extended scalars.**
+
+| Type | Coerces from | Default `format:` |
+|---|---|---|
+| `:symbol` | Symbol or String | — (no format) |
+| `:uuid`   | inherits `:string` | `/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/i` |
+| `:url`    | inherits `:string` | `%r{\Ahttps?://[^\s/$.?#][^\s]*\z}i` |
+| `:email`  | inherits `:string` | `/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/` |
+| `:binary` | inherits `:string` | — (forces ASCII-8BIT encoding; `missing?` is nil-or-empty only) |
+
+`:uuid` / `:url` / `:email` are `Types::String` subclasses that expose a class-level `default_format`. The DSL pre-fills the field's `format:` option from the type when the user didn't provide one — so bad input becomes a `'is invalid'` validation error (not a coercion error). User-provided `format:` always wins over the default.
+
+**`enum:` and `in:` options.**
+
+Two parallel value-membership options:
+
+- `enum: [...]` — Array of allowed values. **String-like types only** (`:string`, `:immutable_string`, `:symbol`, and subclasses like `:uuid` / `:url` / `:email`).
+- `in: [...]` or `in: range` — Array OR Range. **Rangy types only** (`:integer`, `:float`, `:big_decimal` / `:decimal`, `:date`, `:time`, `:datetime`).
+
+```ruby
+required :status,    :string,  enum: %w[on off]
+required :position,  :symbol,  enum: %i[before after]
+required :page_size, :integer, in: [10, 20, 30]
+required :amount,    :float,   in: 1.0..10.0
+required :height,    :integer, in: 10..
+required :start_on,  :date,    in: Date.new(2024, 1, 1)..Date.new(2024, 12, 31)
+```
+
+Validation is post-coercion. Mismatch → `'is invalid'`. Nil values are exempt (matching `format:`). Combining `format:` + `enum:` is allowed — both apply, but the field still records at most one `'is invalid'` message per assignment regardless of how many checks failed. Wrong-family combinations raise `ArgumentError` at class load.
+
+### Union types (U1–U5)
+
+```ruby
+optional :payload, :union, of: [Payload, :boolean]
+optional :id,      :union, of: %i[integer string]
+```
+
+`Types::Union` is a wrapping type parameterized at field-declaration time by an ordered list of member types. Each member can be a Symbol (registered scalar, or a FieldStruct subclass registered under a symbol) or a Class (FieldStruct subclass via the nested-class form).
+
+**U1. Coercion — declared-order, first-success wins.** The setter feeds the input to each member's `coerce` in declared order. The first one that returns without raising is the result. Member-coercion failures are caught broadly (`ArgumentError`, `TypeError`, `FieldStruct::Error`); unrelated bugs (`NoMethodError`, etc.) still propagate. Order matters: `of: [String, Integer]` coerces `"42"` to `"42"`; `of: [Integer, String]` coerces `"42"` to `42`.
+
+**U2. All-fail behavior.** If every member raises, the union raises `TypeError` and the parent's `coercion_policy` handles it like any shape-level coercion failure.
+
+**U3. Missing semantics.** `missing?` is nil-only. The union doesn't try to reason about "missing" across members — that gets confusing fast.
+
+**U4. `ruby_type`.** A flat, deduplicated `Array<Class>`. Members whose own `ruby_type` is an Array (Boolean's `[TrueClass, FalseClass]`) get spliced in.
+
+**U5. Declaration-time guards.** `of:` is required, must be an `Array`, must have at least two members.
 
 ### `frozen!` class macro
 
@@ -486,240 +629,10 @@ A one-way class macro (like `immutable!`) inherited by descendants. The instance
 
 | Macro | Mechanism | Setter raises |
 |---|---|---|
-| `immutable!` | Custom @_initialized check in our setters | `FieldStruct::ImmutableError` |
+| `immutable!` | Custom `@_initialized` check in our setters | `FieldStruct::ImmutableError` |
 | `frozen!` | Ruby's `Object#freeze` after initialize | `FrozenError` |
 
-Both can stack on the same class — `immutable!`'s check fires first because it runs earlier in the setter pipeline.
-
-`as_json` / `to_h` / `to_json` / `valid?` all still work on a frozen instance: they mutate the internal `Errors` object (not the FieldStruct's ivars), which isn't frozen.
-
----
-
-## Phase 2 — Union types (in flight)
-
-```ruby
-optional :payload, :union, of: [Payload, :boolean]
-optional :id, :union, of: %i[integer string]
-```
-
-`Types::Union` is a wrapping type, parameterized at field-declaration time by an ordered list of member types. Each member can be a Symbol (scalar from the registry, or a FieldStruct subclass registered under a symbol) or a Class (FieldStruct subclass via the nested-class form).
-
-### U1. Coercion — declared-order, first-success wins
-
-The setter feeds the input value to each member's `coerce` in declared order. The first one that returns without raising is the result. Member-coercion failures are caught broadly (`ArgumentError`, `TypeError`, `FieldStruct::Error`) so a rejection just lets the next member try; unrelated bugs (`NoMethodError`, etc.) still propagate.
-
-Order matters. `of: [String, Integer]` coerces `"42"` to `"42"` (String wins first); `of: [Integer, String]` coerces `"42"` to `42`.
-
-### U2. All-fail behavior
-
-If every member raises, the union raises a `TypeError`. The parent's `coercion_policy` then handles it the same way it would any other shape-level coercion failure.
-
-### U3. Missing semantics
-
-`missing?` is nil-only. The union doesn't try to collectively reason about "missing" across its members — that gets confusing fast (does an empty string count as missing in a `String|Integer` union?). nil is the clean signal.
-
-### U4. ruby_type
-
-A flat, deduplicated `Array<Class>`. Members whose own `ruby_type` is an Array (Boolean's `[TrueClass, FalseClass]`) get spliced in; the RBS generator (deferred) can collapse that to a `bool` alias.
-
-### U5. Declaration-time guards
-
-- `of:` is required.
-- `of:` must be an `Array`.
-- `of:` must have at least two members — a 1-member union is degenerate.
-
----
-
-## Phase 2 — Extended types + `enum:` / `in:` options (in flight)
-
-### Extended scalar types
-
-| Type | Coerces from | Default `format:` |
-|---|---|---|
-| `:symbol` | Symbol or String | — (no format) |
-| `:uuid`   | inherits :string | `/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/i` |
-| `:url`    | inherits :string | `%r{\Ahttps?://[^\s/$.?#][^\s]*\z}i` |
-| `:email`  | inherits :string | `/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/` |
-
-`:uuid` / `:url` / `:email` are `Types::String` subclasses that expose a class-level `default_format`. The DSL pre-fills the field's `format:` option from the type when the user didn't provide one — so bad input becomes a Phase 1 `'is invalid'` validation error (Option B). User-provided `format:` always wins over the default.
-
-### `enum:` and `in:` field options
-
-Two parallel options for "the coerced value must be in this set":
-
-- `enum: [...]` — Array of allowed values. **String-like types only** (`:string`, `:immutable_string`, `:symbol`, and subclasses like `:uuid` / `:url` / `:email`).
-- `in: [...]` or `in: range` — Array OR Range of allowed values. **Rangy types only** (`:integer`, `:float`, `:big_decimal` / `:decimal`, `:date`, `:time`, `:datetime`).
-
-```ruby
-required :status,    :string,  enum: %w[on off]
-required :position,  :symbol,  enum: %i[before after]
-required :page_size, :integer, in: [10, 20, 30]
-required :amount,    :float,   in: 1.0..10.0
-required :height,    :integer, in: 10..
-required :start_on,  :date,    in: Date.new(2024, 1, 1)..Date.new(2024, 12, 31)
-```
-
-Validation is post-coercion (so `'10'` coerces to `10` then matches `in: [10, 20]`). Mismatch → `'is invalid'`. Nil values are exempt (matching `format:`). Combining `format:` + `enum:` is allowed — both apply, but the field still records at most one `'is invalid'` message regardless of how many checks failed.
-
-Declaration-time guards: passing `enum:` to a rangy field or `in:` to a string-like field raises `ArgumentError` at class load.
-
----
-
-## Phase 2 — Field-level coercion_policy override (in flight)
-
-```ruby
-class Mixed < FieldStruct::Base
-  coercion_policy :keep_raw                   # class default
-  required :strict_id, :integer, coercion_policy: :raise   # this one raises
-  optional :lenient_count, :integer           # falls back to :keep_raw
-end
-```
-
-`Field#coercion_policy` is +nil+ by default (defer to class) or one of `:keep_raw`/`:replace`/`:raise`. The setter consults the field's policy first, then falls back to the class macro. Same validation values; unknown values raise `ArgumentError` at class load.
-
-Field-level overrides are inherited along with the rest of the Field's metadata; a subclass re-declaring the field with no override removes the parent's override (the new Field replaces the inherited one).
-
----
-
-## Phase 2 — Cross-field validation (in flight)
-
-`validate` declared as a class macro. Both block and method-symbol forms supported.
-
-### V1. Declaration
-
-```ruby
-validate :check_a, :check_b           # one or more instance methods
-validate { |record| ... }              # block
-
-# Multiple declarations stack — all run, in declaration order:
-validate :check_x
-validate { |record| ... }
-```
-
-Each `validate` call appends to the class's `validators` list. The symbol form is sugar for `->(record) { record.public_send(name) }`.
-
-### V2. Timing
-
-Validators run on `valid?` (per the backlog wording — "after per-field validation") AND at the end of `initialize`, so a fresh instance has cross-field errors populated for inspection without requiring an explicit `valid?` call. For classes that declare no `validate` blocks, `valid?` stays the cheap `errors.empty?` read from Phase 1.
-
-### V3. Errors target — `:base` convention
-
-By convention, validators add errors via `record.errors.add(:base, "...")`. `errors[:base]` is cleared at the start of each cross-field run, so stale entries don't pile up between calls. Field-specific writes (`errors.add(:end_date, "...")` from a validator) work but are *not* auto-cleared by `valid?` — the user has opted out of the `:base` convention and is responsible for managing those entries.
-
-### V4. Inheritance
-
-`validators` is a list. At inheritance time the subclass receives a `dup` of the parent's list and accumulates from there. The child can add new validators without affecting the parent.
-
-### V5. No remove mechanism
-
-Phase 2 does not provide a way to remove an inherited validator from a subclass. If that becomes a need, surface it as its own decision later.
-
----
-
-## Phase 2 — Field-name aliases (in flight)
-
-Bridge external naming conventions to internal FieldStruct conventions. The original `first_discussion.md` notes call for this; the decisions below were locked during the design walkthrough on the `aliases` branch.
-
-### A1. Declaration
-
-```ruby
-required :email, :string, aliases: ['EmailAddress', 'email_address']
-```
-
-Single keyword option `aliases:` taking an `Array<String|Symbol>`. Always an array — a single alias is `['Name']`. Empty array (`[]`) is the default. Aliases are normalized to symbols and stored on `Field#aliases` as a frozen array. Aliases are *not* present in `Field#options`.
-
-### A2. Import — conflict resolution
-
-When the same input hash carries both the canonical key and an alias key for the same field, **canonical wins**. The alias entry is silently ignored. This holds independent of Hash iteration order.
-
-### A3. Export — opt-in via `aliased: true`
-
-```ruby
-person.as_json                    # canonical
-person.as_json(aliased: true)     # uses each field's first alias
-person.to_h(aliased: true)
-person.to_json(aliased: true)
-person.attributes(aliased: true)
-```
-
-The kwarg propagates through nested `FieldStruct::Base` values and through arrays of nested structs via `json_value`. For a field without aliases, the canonical name is used in aliased output too — no awkward gaps. Only the **first** alias from the declared `aliases:` array is used for export; the rest are import-only.
-
-### A4. Ruby-side accessors
-
-**No** Ruby methods are auto-defined for alias names. Aliases participate only in `Klass.new`/`from_json` (import) and `as_json(aliased: true)` etc. (export). Ruby code always uses the canonical name to read or write a field. This keeps the public surface clean of capitalized or camelCase method names that look out of place in idiomatic Ruby.
-
-### A5. Unknown-attributes interaction
-
-`unknown_attributes :raise` treats aliases as known. An input hash with `{'EmailAddress' => '...'}` does not raise for a field declared `aliases: ['EmailAddress']`. The check uses `Metadata#field_for(name)` which consults canonical names *and* aliases.
-
-### A6. Storage
-
-`Field#aliases` is a first-class attribute (alongside `name`, `type`, `required?`, `default`, `options`) — not stashed inside `options`. `Field#export_name` returns the first alias if present, otherwise the canonical name. `Metadata#field_for(name)` looks up by canonical or alias.
-
----
-
-## Phase 2 — JSON import (in flight)
-
-`Klass.from_json(json_string)` builds an instance.
-
-### J1. Surface
-
-A single class method on `Base`. No `from_hash` companion — `.new(hash)` already covers that case.
-
-### J2. Pipeline
-
-`Oj.load(string, mode: :compat)` → guard against non-object roots → `Klass.new(parsed_hash)`. The existing setter pipeline handles everything from there: scalar coercion (strings re-coerce to Date/Time/BigDecimal), nested-hash → `Types::Nested` instantiation, arrays-of-nested, `unknown_attributes` policy, `coercion_policy`.
-
-### J3. Errors
-
-- Invalid JSON → underlying parser error propagates (Oj raises `EncodingError` / `Oj::ParseError`).
-- JSON root that isn't an object (`[...]`, `"hi"`, `42`, `null`) → `ArgumentError` with a clear message naming the actual class.
-- `unknown_attributes :raise` → `FieldStruct::UnknownAttributeError` (from `initialize`).
-- `coercion_policy :raise` → `FieldStruct::CoercionError` (from the setter pipeline).
-
-### J4. Round-trip
-
-`Klass.from_json(instance.to_json)` is structurally equal to `instance` for every base type except `:value` (which carries no type info beyond what JSON exposes natively — Symbols, for example, come back as Strings).
-
----
-
-## Phase 2 — Nested FieldStructs (in flight)
-
-Locked decisions for the first Phase 2 slice. See the design walkthrough notes in commits on the `nested-field-structs` branch.
-
-### N1. Declaration accepts both class and symbol form
-
-```ruby
-required :address, Address       # class form (no registry involved)
-required :address, :address      # symbol form (registry lookup); the
-                                 # registered value may be a FieldStruct
-                                 # subclass — DSL wraps it in Types::Nested
-```
-
-The class form is the documented path. No auto-registration.
-
-### N2. Coercion inputs
-
-- `nil` → `nil`
-- An instance of the target struct (or subclass) → passthrough
-- A `Hash` → `struct_class.new(hash)`
-- Anything else → `TypeError`, handled by the parent's `coercion_policy`
-
-### N3. Validity propagation — eager, single-message
-
-When the setter sees an invalid nested struct at assignment time, it stamps `errors[:field] << "is invalid"` on the parent — matching Phase 1's "setter owns its field's errors" contract. Drill into `parent.field.errors` for the per-field breakdown. Nested mutations after assignment do **not** refresh the parent's view; callers must reassign or read the nested struct's own errors.
-
-### N4. Inner construction errors propagate
-
-`FieldStruct::UnknownAttributeError`, `FieldStruct::CoercionError`, etc. raised inside `struct_class.new(hash)` are *not* caught by the parent's `coercion_policy`. They surface to the caller as-is — they're structural rejections of the nested record, not parent-shape coercion failures. Only `TypeError` (the "you passed me something other than nil/instance/Hash" case) flows through the parent's policy.
-
-### N5. Arrays of nested
-
-`required :addresses, :array, of: Address` works — each Hash element coerces into an `Address` (and a single invalid element marks the array `'is invalid'` on the parent, eager). Symbol form `of: :address` also works when the symbol resolves to a FieldStruct subclass.
-
-### N6. Implementation: wrapping type, not Base-as-type
-
-`FieldStruct::Types::Nested.new(struct_class)` is a `Types::Base` subclass parameterized at construction. The DSL builds and holds one per nested Field (cached as `Field#type_instance`). `Field` accepts an optional pre-built `type_instance:` so parameterized types can flow through the same plumbing as stock scalar types.
+Both can stack on the same class — `immutable!`'s check fires first because it runs earlier in the setter pipeline. `as_json` / `to_h` / `to_json` / `valid?` all still work on a frozen instance: they mutate the internal `Errors` object (not the FieldStruct's ivars), which isn't frozen.
 
 ---
 

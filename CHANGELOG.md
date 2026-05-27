@@ -9,6 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Nested FieldStructs** — declare `field :address, Address` where `Address < FieldStruct::Base`. Coerce nil / instance / Hash; eager `'is invalid'` stamp on the parent at assignment time; inner construction errors (`UnknownAttributeError`, `CoercionError`) propagate to the caller rather than being caught by the parent's `coercion_policy`. Arrays of nested work via `of:` (class or symbol form). `as_json` deep-walks. `Types::Nested` is the wrapping type; `Field` accepts a pre-built `type_instance:` so parameterized types flow through the same plumbing as stock types.
+- **`Klass.from_json(string)`** — JSON import driven off Metadata. Parses with Oj, feeds through `initialize`, so coercion / nested construction / `unknown_attributes` / `coercion_policy` engage as normal. Non-object JSON roots raise `ArgumentError`; malformed JSON propagates the underlying parse error. Round-trips structurally for every base type except `:value`.
 
 ## [0.1.0] - 2026-05-27
 

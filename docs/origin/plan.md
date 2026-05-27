@@ -459,6 +459,31 @@ Commits: `docs: add usage examples to README`, `chore: fill gemspec metadata`, `
 
 ---
 
+## Phase 2 — JSON import (in flight)
+
+`Klass.from_json(json_string)` builds an instance.
+
+### J1. Surface
+
+A single class method on `Base`. No `from_hash` companion — `.new(hash)` already covers that case.
+
+### J2. Pipeline
+
+`Oj.load(string, mode: :compat)` → guard against non-object roots → `Klass.new(parsed_hash)`. The existing setter pipeline handles everything from there: scalar coercion (strings re-coerce to Date/Time/BigDecimal), nested-hash → `Types::Nested` instantiation, arrays-of-nested, `unknown_attributes` policy, `coercion_policy`.
+
+### J3. Errors
+
+- Invalid JSON → underlying parser error propagates (Oj raises `EncodingError` / `Oj::ParseError`).
+- JSON root that isn't an object (`[...]`, `"hi"`, `42`, `null`) → `ArgumentError` with a clear message naming the actual class.
+- `unknown_attributes :raise` → `FieldStruct::UnknownAttributeError` (from `initialize`).
+- `coercion_policy :raise` → `FieldStruct::CoercionError` (from the setter pipeline).
+
+### J4. Round-trip
+
+`Klass.from_json(instance.to_json)` is structurally equal to `instance` for every base type except `:value` (which carries no type info beyond what JSON exposes natively — Symbols, for example, come back as Strings).
+
+---
+
 ## Phase 2 — Nested FieldStructs (in flight)
 
 Locked decisions for the first Phase 2 slice. See the design walkthrough notes in commits on the `nested-field-structs` branch.
@@ -503,17 +528,16 @@ When the setter sees an invalid nested struct at assignment time, it stamps `err
 
 Surfaced during design but explicitly deferred. Ordered roughly by likely value:
 
-1. **JSON import** — `from_json` driven off Metadata; honors unknown_attributes policy.
-2. **Field-name and type aliases** — accept and emit alternate names. The original discussion has notes on this; design properly when we get there.
-3. **Cross-field validation** — `validate { |record| ... }` blocks that run on `valid?` after per-field validation.
-4. **Field-level coercion-policy override** — `field :x, :integer, coercion_policy: :raise` overrides the class default for one field.
-5. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
-6. **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Reuses `of:` as parameterization.
-7. **Extended types** — `:uuid`, `:url`, `:email`, `:symbol`, `:enum`. Same plumbing, more types.
-8. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
-9. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
-10. **`:binary` type** — if anyone asks.
-11. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
+1. **Field-name and type aliases** — accept and emit alternate names. The original discussion has notes on this; design properly when we get there.
+2. **Cross-field validation** — `validate { |record| ... }` blocks that run on `valid?` after per-field validation.
+3. **Field-level coercion-policy override** — `field :x, :integer, coercion_policy: :raise` overrides the class default for one field.
+4. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
+5. **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Reuses `of:` as parameterization.
+6. **Extended types** — `:uuid`, `:url`, `:email`, `:symbol`, `:enum`. Same plumbing, more types.
+7. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
+8. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
+9. **`:binary` type** — if anyone asks.
+10. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
 
 ---
 

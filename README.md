@@ -182,6 +182,21 @@ end
 
 Lookup walks the class's containing modules from innermost outward, then falls back to `FieldStruct.types`.
 
+## Parsing JSON
+
+`Klass.from_json(string)` parses with Oj and feeds the resulting hash through `.new` — so coercion, nested construction, `unknown_attributes`, and `coercion_policy` all engage the same way they do for direct calls.
+
+```ruby
+person = Person.from_json('{"name":"Alice","address":{"street":"1","city":"NYC"}}')
+person.address.city  # => "NYC"
+
+# Round-trips for every base type except :value (no type info to preserve).
+restored = Person.from_json(person.to_json)
+restored == person   # => true
+```
+
+A non-object root (`[...]`, `"hi"`, `42`, `null`) raises `ArgumentError`; malformed JSON propagates the underlying Oj parse error.
+
 ## ActiveModel-shaped surface
 
 Mirroring AM's call sites so Rails-adjacent code feels at home:

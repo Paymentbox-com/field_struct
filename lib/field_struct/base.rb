@@ -51,7 +51,7 @@ module FieldStruct
       # Instances will be Ruby-frozen at the end of {#initialize} —
       # any subsequent attempt to mutate ivars raises +FrozenError+.
       #
-      # Independent of {#immutable!}. +immutable!+ blocks our setters
+      # Independent of {.immutable!}. +immutable!+ blocks our setters
       # with a custom error; +frozen!+ engages Ruby's frozen-state
       # mechanism, which also locks the instance against any other
       # ivar mutation. Pick the one that matches the level of
@@ -176,7 +176,7 @@ module FieldStruct
         metadata
       end
 
-      # Sugar for {#field} with +required: true+.
+      # Sugar for {.field} with +required: true+.
       #
       # @param name [Symbol, String]
       # @param type_name [Symbol, Class<Types::Base>, Class<FieldStruct::Base>]
@@ -186,7 +186,7 @@ module FieldStruct
         field(name, type_name, **options, required: true)
       end
 
-      # Sugar for {#field} with +required: false+ (the default).
+      # Sugar for {.field} with +required: false+ (the default).
       #
       # @param name [Symbol, String]
       # @param type_name [Symbol, Class<Types::Base>, Class<FieldStruct::Base>]
@@ -241,7 +241,7 @@ module FieldStruct
         registry.lookup(type_name)
       end
 
-      # Resolve the second positional argument of {#field}.
+      # Resolve the second positional argument of {.field}.
       #
       # @param type_arg [Symbol, Class]
       # @return [Array(Class, Types::Base)] +[type_class, type_instance]+ —

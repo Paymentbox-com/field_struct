@@ -133,6 +133,13 @@ A required field is invalid when its **value** is missing after coercion — the
 
 Defaults satisfy required — the value is what's checked, not whether the input hash contained the key.
 
+`default:` accepts a literal or any callable (Proc, Lambda, Method) that takes no arguments. The callable is invoked once per instance, so it's safe to use for per-instance values like timestamps or generated IDs:
+
+```ruby
+optional :created_at, :datetime, default: Time.method(:now)
+optional :token,      :string,   default: -> { "tok-#{SecureRandom.hex(4)}" }
+```
+
 ### Restricting values — `enum:` and `in:`
 
 Two parallel options for "the coerced value must be one of these":
@@ -233,8 +240,8 @@ Each FieldStruct class resolves type names through a registry chain. Define a mo
 ```ruby
 module Acme
   def self.field_types
-    @field_types ||= FieldStruct::Registry.new(FieldStruct.types).tap do |r|
-      r.register :money, Acme::Types::Money
+    @field_types ||= FieldStruct.new_registry do
+      register :money, Acme::Types::Money
     end
   end
 
@@ -243,6 +250,8 @@ module Acme
   end
 end
 ```
+
+`FieldStruct.new_registry` builds a new registry parented to `FieldStruct.types` and evaluates the block in the new registry's instance scope, so `register` works without a receiver. Pass `nil` for an unparented registry, or a different parent for a custom chain.
 
 Lookup walks the class's containing modules from innermost outward, then falls back to `FieldStruct.types`.
 

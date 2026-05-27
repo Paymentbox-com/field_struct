@@ -40,7 +40,9 @@ module FieldStruct
     #   +type.new+ wouldn't be enough to capture the parameterization. When
     #   nil, +type.new+ is called.
     # @param required [Boolean]
-    # @param default [Object, nil]
+    # @param default [Object, #call, nil] literal default value, or a
+    #   parameterless callable (Proc/Lambda/Method) that returns one.
+    #   Callables are invoked once per instance during apply_defaults.
     # @param aliases [Array<Symbol,String>] alternate import-time names; the
     #   first one doubles as the export key when +aliased: true+ is requested
     # @param coercion_policy [Symbol, nil] override the class-level

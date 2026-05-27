@@ -612,6 +612,31 @@ optional :id,      :union, of: %i[integer string]
 
 **U5. Declaration-time guards.** `of:` is required, must be an `Array`, must have at least two members.
 
+### Callable defaults + `new_registry` DSL
+
+Two small ergonomics improvements:
+
+```ruby
+# Callable defaults — invoked once per instance during apply_defaults
+optional :created_at, :datetime, default: Time.method(:now)
+optional :token,      :string,   default: -> { "tok-#{SecureRandom.hex(4)}" }
+```
+
+`default:` accepts a literal or any callable (anything responding to `#call`). The callable's return value flows through the setter pipeline like a literal default would.
+
+```ruby
+# new_registry — shorthand for the namespace-registry pattern
+module Acme
+  def self.field_types
+    @field_types ||= FieldStruct.new_registry do
+      register :money, Acme::Types::Money
+    end
+  end
+end
+```
+
+`FieldStruct.new_registry(parent = FieldStruct.types, &block)` builds a `Registry` parented to `parent` and evaluates the block in the new registry's instance scope. Pass `nil` for an unparented registry.
+
 ### `frozen!` class macro
 
 ```ruby

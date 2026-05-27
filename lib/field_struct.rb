@@ -30,6 +30,37 @@ require_relative 'field_struct/errors'
 require_relative 'field_struct/base'
 
 module FieldStruct
+  # Build a new {Registry}, parented to +parent+ (defaults to
+  # {FieldStruct.types}), and optionally configure it with a block
+  # evaluated in the new registry's instance scope.
+  #
+  #   module Acme
+  #     def self.field_types
+  #       @field_types ||= FieldStruct.new_registry do
+  #         register :money, Acme::Types::Money
+  #       end
+  #     end
+  #   end
+  #
+  # Equivalent to the longhand:
+  #
+  #   FieldStruct::Registry.new(FieldStruct.types).tap do |r|
+  #     r.register :money, Acme::Types::Money
+  #   end
+  #
+  # Pass +parent: nil+ for an unparented registry (no fallback chain).
+  #
+  # @param parent [Registry, nil] the parent registry; defaults to
+  #   {FieldStruct.types}. Pass +nil+ explicitly for no parent.
+  # @yield evaluated in the new registry's instance scope, so methods
+  #   like +register+ / +lookup+ / +key?+ work without an explicit receiver
+  # @return [Registry]
+  def self.new_registry(parent = types, &block)
+    registry = Registry.new(parent)
+    registry.instance_eval(&block) if block
+    registry
+  end
+
   # The base type registry, seeded with every v1 scalar type and the
   # +:decimal+ alias for +:big_decimal+. Namespace registries should be
   # built with this as their parent (see {Registry}).

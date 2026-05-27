@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-27
+
+Phase 2 first wave. Nested struct support, JSON import, field-name
+aliases, cross-field validation, field-level coercion policy override,
+extended scalar types (`:symbol`, `:uuid`, `:url`, `:email`), and
+`enum:` / `in:` value-restriction field options.
+
 ### Added
 
 - **Nested FieldStructs** — declare `field :address, Address` where `Address < FieldStruct::Base`. Coerce nil / instance / Hash; eager `'is invalid'` stamp on the parent at assignment time; inner construction errors (`UnknownAttributeError`, `CoercionError`) propagate to the caller rather than being caught by the parent's `coercion_policy`. Arrays of nested work via `of:` (class or symbol form). `as_json` deep-walks. `Types::Nested` is the wrapping type; `Field` accepts a pre-built `type_instance:` so parameterized types flow through the same plumbing as stock types.

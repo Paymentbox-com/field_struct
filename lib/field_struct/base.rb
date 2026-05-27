@@ -151,12 +151,11 @@ module FieldStruct
         validate_in_option!(type_class, options)
         required = options.delete(:required) { false }
         default = options.delete(:default)
-        aliases = Array(options.delete(:aliases))
         coercion_policy = options.delete(:coercion_policy)
         validate_coercion_policy_override!(coercion_policy) if coercion_policy
         field = Field.new(
           name: name, type: type_class, type_instance: type_instance,
-          required: required, default: default, aliases: aliases,
+          required: required, default: default,
           coercion_policy: coercion_policy, **options
         )
         metadata.add(field)
@@ -505,37 +504,29 @@ module FieldStruct
     # presence checks, and the +coercion_policy+ all run as normal.
     #
     # Respects {.unknown_attributes} on input and {.immutable?} on the
-    # setter side. Honors per-field +aliases:+: an input key matching an
-    # alias routes the value to the canonical field. When both canonical
-    # and alias are present in the same input, the canonical wins and the
-    # alias entry is ignored.
+    # setter side. Keys must match declared field names. For data arriving
+    # in an external naming convention, see {Base.serialize} and
+    # {Base.from_json}.
     #
     # @param attrs [Hash{Symbol,String=>Object}]
     # @return [self]
     def assign_attributes(attrs)
       reject_unknown_attributes!(attrs)
-      attrs_sym = attrs.transform_keys(&:to_sym)
-      attrs_sym.each do |key, value|
-        field = self.class.metadata.field_for(key)
-        next unless field
-        # Canonical-wins: if this is an alias entry AND the canonical key
-        # is also in the input, skip — the canonical entry will set it.
-        next if key != field.name && attrs_sym.key?(field.name)
+      attrs.each do |key, value|
+        sym = key.to_sym
+        next unless self.class.metadata[sym]
 
-        public_send(:"#{field.name}=", value)
+        public_send(:"#{sym}=", value)
       end
       self
     end
 
     # @return [Hash{Symbol=>Object}] a fresh hash of current attribute values
-    # @param aliased [Boolean] when true, each field's key in the output is
-    #   its first declared alias (or the canonical name if no alias)
     # @return [Hash{Symbol=>Object}] a fresh hash of current attribute values
-    def attributes(aliased: false)
-      self.class.metadata.to_h do |field|
-        key = aliased ? field.export_name : field.name
-        [key, public_send(field.name)]
-      end
+    #   keyed by canonical field name. For format-aware export (with the
+    #   declared +:json+ mapping applied), see {#as_json} / {#to_json}.
+    def attributes
+      self.class.metadata.to_h { |field| [field.name, public_send(field.name)] }
     end
 
     # @return [Array<Symbol>]
@@ -586,31 +577,29 @@ module FieldStruct
       [self.class, attributes].hash
     end
 
-    # @param aliased [Boolean] use each field's first alias for the key
     # @return [Hash{Symbol=>Object}] alias of {#attributes}
-    def to_h(aliased: false)
-      attributes(aliased: aliased)
+    def to_h
+      attributes
     end
 
     # @param _options [Object] unused — accepted for ActiveSupport-style symmetry
-    # @param aliased [Boolean] legacy path — when true, uses each field's
-    #   first Field#aliases entry. Default false uses the
-    #   +metadata.serialization(:json)+ mapping (identity when undeclared).
-    # @return [Hash{Symbol=>Object}] a JSON-ready hash. Date/Time/DateTime
-    #   convert to ISO-8601 strings, BigDecimal to its plain-form string,
-    #   Symbol to String. Arrays recurse. Nested FieldStructs walk through
-    #   their own +as_json+ (which consults their own serialize mapping).
-    def as_json(_options = nil, aliased: false)
-      return legacy_aliased_as_json if aliased
-
-      serialize_as_json
+    # @return [Hash{Symbol=>Object}] a JSON-ready hash with the
+    #   +:json+ serialize mapping applied. Date/Time/DateTime convert
+    #   to ISO-8601 strings, BigDecimal to its plain-form string,
+    #   Symbol to String. Arrays recurse. Nested FieldStructs walk
+    #   through their own +as_json+, applying their own mapping.
+    def as_json(_options = nil)
+      mapping = self.class.metadata.serialization(:json)
+      attributes.each_with_object({}) do |(field_name, value), out|
+        key = mapping.key?(field_name) ? mapping[field_name].to_sym : field_name
+        out[key] = json_value(value)
+      end
     end
 
     # @param _options [Object] unused — accepted for ActiveSupport-style symmetry
-    # @param aliased [Boolean] legacy path — see {#as_json}
     # @return [String] JSON representation, via Oj
-    def to_json(_options = nil, aliased: false)
-      Oj.dump(as_json(aliased: aliased), mode: :compat)
+    def to_json(_options = nil)
+      Oj.dump(as_json, mode: :compat)
     end
 
     # @return [String] +#<ClassName field: value, ...>+
@@ -676,27 +665,15 @@ module FieldStruct
 
     private
 
-    def serialize_as_json
-      mapping = self.class.metadata.serialization(:json)
-      attributes.each_with_object({}) do |(field_name, value), out|
-        key = mapping.key?(field_name) ? mapping[field_name].to_sym : field_name
-        out[key] = json_value(value)
-      end
-    end
-
-    def legacy_aliased_as_json
-      attributes(aliased: true).transform_values { |value| json_value(value, aliased: true) }
-    end
-
-    def json_value(value, aliased: false)
+    def json_value(value)
       case value
       when nil, true, false, ::String, ::Integer, ::Float then value
       when ::Symbol then value.to_s
       when ::BigDecimal then value.to_s('F')
       when ::DateTime, ::Date, ::Time then value.iso8601
-      when ::Array then value.map { |element| json_value(element, aliased: aliased) }
-      when ::Hash then value.transform_values { |v| json_value(v, aliased: aliased) }
-      when FieldStruct::Base then value.as_json(aliased: aliased)
+      when ::Array then value.map { |element| json_value(element) }
+      when ::Hash then value.transform_values { |v| json_value(v) }
+      when FieldStruct::Base then value.as_json
       else
         value.respond_to?(:as_json) ? value.as_json : value
       end
@@ -719,7 +696,7 @@ module FieldStruct
       return if self.class.unknown_attributes == :ignore
 
       meta = self.class.metadata
-      unknown = attrs.keys.map(&:to_sym).reject { |k| meta.field_for(k) }
+      unknown = attrs.keys.map(&:to_sym).reject { |k| meta[k] }
       return if unknown.empty?
 
       raise UnknownAttributeError.new(

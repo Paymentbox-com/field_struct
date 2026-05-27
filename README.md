@@ -72,6 +72,8 @@ end
 
 `:string`, `:immutable_string`, `:integer`, `:float`, `:big_decimal` (aliased as `:decimal`), `:boolean`, `:date`, `:time`, `:datetime`, `:value`, and `:array` (parameterized via `of:`).
 
+Extended types: `:symbol`, `:uuid`, `:url`, `:email`. The last three are string-shaped types that pre-fill a sensible `format:` regex; you can still override the format on a per-field basis.
+
 `:value` is a passthrough — useful when you want metadata for a field without committing to a shape.
 
 ### Nested FieldStructs
@@ -113,6 +115,24 @@ A required field is invalid when its **value** is missing after coercion — the
 | `:value` | nil only |
 
 Defaults satisfy required — the value is what's checked, not whether the input hash contained the key.
+
+### Restricting values — `enum:` and `in:`
+
+Two parallel options for "the coerced value must be one of these":
+
+```ruby
+required :status,    :string,  enum: %w[on off]
+required :position,  :symbol,  enum: %i[before after]
+required :page_size, :integer, in: [10, 20, 30]
+required :amount,    :float,   in: 1.0..10.0
+required :height,    :integer, in: 10..
+required :start_on,  :date,    in: Date.new(2024, 1, 1)..Date.new(2024, 12, 31)
+```
+
+- `enum: [...]` — string-like types (`:string`, `:symbol`, `:uuid`, etc.). Array of allowed values.
+- `in:` — rangy types (`:integer`, `:float`, `:decimal`, `:date`, `:time`, `:datetime`). Either an Array or a Range (closed, half-open — anything that responds to `include?`).
+- Both run post-coercion (`'10'` becomes `10` before the check) and emit `'is invalid'` on mismatch.
+- Passing `enum:` to a rangy field — or `in:` to a string-like field — raises `ArgumentError` at class load.
 
 ## Class macros
 

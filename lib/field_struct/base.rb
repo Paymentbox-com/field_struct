@@ -122,6 +122,8 @@ module FieldStruct
         resolve_array_options!(type_class, options)
         apply_default_format!(type_class, options)
         validate_format_option!(type_class, options)
+        validate_enum_option!(type_class, options)
+        validate_in_option!(type_class, options)
         required = options.delete(:required) { false }
         default = options.delete(:default)
         aliases = Array(options.delete(:aliases))
@@ -245,6 +247,41 @@ module FieldStruct
 
         raise ArgumentError,
           "format: option only applies to string-shaped fields (string, immutable_string), not #{type_class}"
+      end
+
+      def validate_enum_option!(type_class, options)
+        return unless options.key?(:enum)
+        unless string_like_type?(type_class)
+          raise ArgumentError,
+            "enum: option only applies to string-like fields (string, symbol, and subclasses), not #{type_class}"
+        end
+        raise ArgumentError, 'enum: must be an Array of allowed values' unless options[:enum].is_a?(::Array)
+      end
+
+      def validate_in_option!(type_class, options)
+        return unless options.key?(:in)
+        unless rangy_type?(type_class)
+          raise ArgumentError,
+            "in: option only applies to rangy fields (integer, float, decimal, date/time), not #{type_class}"
+        end
+        unless options[:in].is_a?(::Array) || options[:in].is_a?(::Range)
+          raise ArgumentError, 'in: must be an Array or Range'
+        end
+      end
+
+      def string_like_type?(type_class)
+        type_class <= FieldStruct::Types::String || type_class <= FieldStruct::Types::Symbol
+      end
+
+      def rangy_type?(type_class)
+        [
+          FieldStruct::Types::Integer,
+          FieldStruct::Types::Float,
+          FieldStruct::Types::BigDecimal,
+          FieldStruct::Types::Date,
+          FieldStruct::Types::Time,
+          FieldStruct::Types::DateTime
+        ].any? { |t| type_class <= t }
       end
 
       def validate_coercion_policy_override!(value)
@@ -511,11 +548,18 @@ module FieldStruct
       errors.clear(field.name)
       if field.type_instance.missing?(value)
         errors.add(field.name, 'is required') if field.required?
-      elsif field.options[:format]
-        errors.add(field.name, 'is invalid') unless field.options[:format].match?(value)
-      elsif nested_invalid?(value)
-        errors.add(field.name, 'is invalid')
+        return
       end
+
+      errors.add(field.name, 'is invalid') if field_value_invalid?(field, value)
+    end
+
+    def field_value_invalid?(field, value)
+      return true if field.options[:format] && !field.options[:format].match?(value)
+      return true if field.options[:enum] && !field.options[:enum].include?(value)
+      return true if field.options[:in] && !field.options[:in].include?(value)
+
+      nested_invalid?(value)
     end
 
     def nested_invalid?(value)

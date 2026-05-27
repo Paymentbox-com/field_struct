@@ -119,6 +119,7 @@ module FieldStruct
       # @return [Field] the field that was added
       def field(name, type_arg, **options)
         type_class, type_instance = resolve_type_arg(type_arg)
+        type_instance ||= build_union_instance!(type_class, options) if type_class <= FieldStruct::Types::Union
         resolve_array_options!(type_class, options)
         apply_default_format!(type_class, options)
         validate_format_option!(type_class, options)
@@ -232,6 +233,20 @@ module FieldStruct
 
         element_class, element_instance = resolve_type_arg(options.delete(:of))
         options[:of_type] = element_instance || element_class
+      end
+
+      def build_union_instance!(type_class, options)
+        raise ArgumentError, 'union field requires an `of: [...]` option naming the member types' unless options.key?(:of)
+
+        members = options.delete(:of)
+        raise ArgumentError, 'union `of:` must be an Array of member types' unless members.is_a?(::Array)
+        raise ArgumentError, 'union `of:` must have at least two members' if members.size < 2
+
+        instances = members.map do |member|
+          member_class, member_instance = resolve_type_arg(member)
+          member_instance || member_class.new
+        end
+        type_class.new(instances)
       end
 
       def apply_default_format!(type_class, options)

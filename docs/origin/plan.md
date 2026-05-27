@@ -459,6 +459,41 @@ Commits: `docs: add usage examples to README`, `chore: fill gemspec metadata`, `
 
 ---
 
+## Phase 2 — Union types (in flight)
+
+```ruby
+optional :payload, :union, of: [Payload, :boolean]
+optional :id, :union, of: %i[integer string]
+```
+
+`Types::Union` is a wrapping type, parameterized at field-declaration time by an ordered list of member types. Each member can be a Symbol (scalar from the registry, or a FieldStruct subclass registered under a symbol) or a Class (FieldStruct subclass via the nested-class form).
+
+### U1. Coercion — declared-order, first-success wins
+
+The setter feeds the input value to each member's `coerce` in declared order. The first one that returns without raising is the result. Member-coercion failures are caught broadly (`ArgumentError`, `TypeError`, `FieldStruct::Error`) so a rejection just lets the next member try; unrelated bugs (`NoMethodError`, etc.) still propagate.
+
+Order matters. `of: [String, Integer]` coerces `"42"` to `"42"` (String wins first); `of: [Integer, String]` coerces `"42"` to `42`.
+
+### U2. All-fail behavior
+
+If every member raises, the union raises a `TypeError`. The parent's `coercion_policy` then handles it the same way it would any other shape-level coercion failure.
+
+### U3. Missing semantics
+
+`missing?` is nil-only. The union doesn't try to collectively reason about "missing" across its members — that gets confusing fast (does an empty string count as missing in a `String|Integer` union?). nil is the clean signal.
+
+### U4. ruby_type
+
+A flat, deduplicated `Array<Class>`. Members whose own `ruby_type` is an Array (Boolean's `[TrueClass, FalseClass]`) get spliced in; the RBS generator (deferred) can collapse that to a `bool` alias.
+
+### U5. Declaration-time guards
+
+- `of:` is required.
+- `of:` must be an `Array`.
+- `of:` must have at least two members — a 1-member union is degenerate.
+
+---
+
 ## Phase 2 — Extended types + `enum:` / `in:` options (in flight)
 
 ### Extended scalar types
@@ -657,11 +692,10 @@ When the setter sees an invalid nested struct at assignment time, it stamps `err
 Surfaced during design but explicitly deferred. Ordered roughly by likely value:
 
 1. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
-2. **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Reuses `of:` as parameterization.
-3. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
-4. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
-5. **`:binary` type** — if anyone asks.
-6. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
+2. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
+3. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
+4. **`:binary` type** — if anyone asks.
+5. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
 
 ---
 

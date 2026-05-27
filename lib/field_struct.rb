@@ -11,6 +11,7 @@ require_relative 'field_struct/types/boolean'
 require_relative 'field_struct/types/date'
 require_relative 'field_struct/types/time'
 require_relative 'field_struct/types/datetime'
+require_relative 'field_struct/types/value'
 
 module FieldStruct
   class Error < StandardError; end

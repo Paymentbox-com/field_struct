@@ -16,11 +16,11 @@ module FieldStruct
       end
 
       # @param value [Object] raw input
-      # @param options [Hash] supports +:round+ (Integer) to round the
-      #   coerced value to that many decimal places
+      # @param round [Integer, nil] decimal places; +nil+ leaves the
+      #   value unrounded
       # @return [BigDecimal, nil]
       # @raise [ArgumentError] when a string cannot be parsed
-      def coerce(value, options = {})
+      def coerce(value, round: self.class.default_round, **)
         return nil if value.nil?
 
         result = if value.is_a?(::BigDecimal)
@@ -31,7 +31,6 @@ module FieldStruct
                    ::Kernel.BigDecimal(value.to_s)
                  end
 
-        round = options.fetch(:round) { self.class.default_round }
         round ? result.round(round) : result
       end
 

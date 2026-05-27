@@ -22,11 +22,17 @@ module FieldStruct
 
       # Coerce an input value into the type's domain.
       #
+      # The contract here is intentionally loose — subclasses override with
+      # explicit kwargs for the options they consume (e.g. +format:+ for
+      # Date, +round:+ for Float, +of_type:+ for Array), plus a trailing
+      # +**+ catch-all so a call site that splats +field.options+ can pass
+      # keys that some types ignore. See each subclass's +coerce+ for the
+      # exact accepted options.
+      #
       # @param value [Object] raw input
-      # @param options [Hash] type-specific parameters (e.g. +:of_type+ for arrays)
       # @return [Object] the coerced value
       # @raise [NotImplementedError] always, unless overridden by a subclass
-      def coerce(value, options = {})
+      def coerce(value, **)
         raise NotImplementedError, "#{self.class} must implement #coerce"
       end
 

@@ -13,15 +13,13 @@ module FieldStruct
       end
 
       # @param value [Object] raw input
-      # @param options [Hash] supports +:round+ (Integer) to round to that
-      #   many decimal places
+      # @param round [Integer, nil] decimal places; +nil+ leaves the value unrounded
       # @return [Float, nil] +nil+ for +nil+ input, otherwise the parsed float
       # @raise [ArgumentError, TypeError] when the value cannot be coerced
-      def coerce(value, options = {})
+      def coerce(value, round: self.class.default_round, **)
         return nil if value.nil?
 
         result = value.is_a?(::Float) ? value : ::Kernel.Float(value)
-        round = options.fetch(:round) { self.class.default_round }
         round ? result.round(round) : result
       end
 

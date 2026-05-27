@@ -62,10 +62,11 @@ module FieldStruct
       end
 
       # @param value [Object] raw input
-      # @param options [Hash] supports +:values+ → +{truthy: [...], falsy: [...]}+
+      # @param values [Hash{Symbol=>Array<String>}, nil] +{truthy: [...], falsy: [...]}+
+      #   custom vocabulary; +nil+ uses {.default_truthy} / {.default_falsy}
       # @return [Boolean, nil]
       # @raise [ArgumentError] when the value can't be mapped to true/false
-      def coerce(value, options = {})
+      def coerce(value, values: nil, **)
         return nil if value.nil?
         return value if value == true || value == false # rubocop:disable Style/MultipleComparison
         return true if value == 1
@@ -73,7 +74,7 @@ module FieldStruct
 
         if value.is_a?(::String)
           downcased = value.downcase
-          truthy, falsy = truthy_and_falsy_for(options)
+          truthy, falsy = truthy_and_falsy_for(values)
           return true if truthy.include?(downcased)
           return false if falsy.include?(downcased)
         end
@@ -88,8 +89,7 @@ module FieldStruct
 
       private
 
-      def truthy_and_falsy_for(options)
-        values = options[:values]
+      def truthy_and_falsy_for(values)
         return [self.class.default_truthy, self.class.default_falsy] unless values
 
         [

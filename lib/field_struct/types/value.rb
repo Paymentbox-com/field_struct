@@ -10,9 +10,8 @@ module FieldStruct
     # specific shape.
     class Value < Base
       # @param value [Object] raw input
-      # @param _options [Hash] unused
       # @return [Object] the value, unchanged
-      def coerce(value, _options = {})
+      def coerce(value, **)
         value
       end
 

@@ -11,16 +11,20 @@ module FieldStruct
     # Missing: +nil+ or empty array. ruby_type: +::Array+.
     class Array < Base
       # @param value [Object] raw input
-      # @param options [Hash] must include +:of_type+ (a Types::Base subclass)
+      # @param of_type [Class, Types::Base] the element type (a Types::Base
+      #   subclass for stock types, or an already-built instance for
+      #   parameterized types like {Types::Nested}). The DSL stashes this
+      #   when the user writes +of: :string+ / +of: SomeStruct+.
       # @return [Array, nil]
       # @raise [TypeError] when input is non-nil and not an Array
-      # @raise [KeyError] when +:of_type+ is missing
+      # @raise [ArgumentError] when +of_type+ is missing
       # @raise [StandardError] whatever the element type raises on a bad element
-      def coerce(value, options = {})
+      def coerce(value, of_type: nil, **)
         return nil if value.nil?
         raise ::TypeError, "expected Array, got #{value.class}" unless value.is_a?(::Array)
+        raise ArgumentError, 'array coerce requires of_type:' if of_type.nil?
 
-        element_type = element_type_for(options.fetch(:of_type))
+        element_type = element_type_for(of_type)
         value.map { |element| element_type.coerce(element) }
       end
 

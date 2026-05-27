@@ -8,9 +8,8 @@ module FieldStruct
     # and whitespace-only strings as missing.
     class String < Base
       # @param value [Object] raw input
-      # @param _options [Hash] unused for strings
       # @return [String, nil] +nil+ when input is +nil+, otherwise +value.to_s+
-      def coerce(value, _options = {})
+      def coerce(value, **)
         return nil if value.nil?
 
         value.to_s

@@ -10,10 +10,9 @@ module FieldStruct
     # matches +Kernel#Integer+'s own behavior on numeric input.
     class Integer < Base
       # @param value [Object] raw input
-      # @param _options [Hash] unused
       # @return [Integer, nil] +nil+ for +nil+ input, otherwise the parsed integer
       # @raise [ArgumentError, TypeError] when the value cannot be coerced
-      def coerce(value, _options = {})
+      def coerce(value, **)
         return nil if value.nil?
         return value if value.is_a?(::Integer)
 

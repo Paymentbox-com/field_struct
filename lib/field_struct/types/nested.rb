@@ -44,10 +44,9 @@ module FieldStruct
       # shape coercion failures.
       #
       # @param value [Object]
-      # @param _options [Hash]
       # @return [FieldStruct::Base, nil]
       # @raise [TypeError]
-      def coerce(value, _options = {})
+      def coerce(value, **)
         return nil if value.nil?
         return value if value.is_a?(@struct_class)
         return @struct_class.new(value) if value.is_a?(::Hash)

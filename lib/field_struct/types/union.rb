@@ -32,10 +32,9 @@ module FieldStruct
       end
 
       # @param value [Object]
-      # @param _options [Hash]
       # @return [Object, nil]
       # @raise [TypeError] when no member can coerce
-      def coerce(value, _options = {})
+      def coerce(value, **)
         return nil if value.nil?
 
         @member_types.each do |type|

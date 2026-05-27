@@ -459,22 +459,61 @@ Commits: `docs: add usage examples to README`, `chore: fill gemspec metadata`, `
 
 ---
 
+## Phase 2 — Nested FieldStructs (in flight)
+
+Locked decisions for the first Phase 2 slice. See the design walkthrough notes in commits on the `nested-field-structs` branch.
+
+### N1. Declaration accepts both class and symbol form
+
+```ruby
+required :address, Address       # class form (no registry involved)
+required :address, :address      # symbol form (registry lookup); the
+                                 # registered value may be a FieldStruct
+                                 # subclass — DSL wraps it in Types::Nested
+```
+
+The class form is the documented path. No auto-registration.
+
+### N2. Coercion inputs
+
+- `nil` → `nil`
+- An instance of the target struct (or subclass) → passthrough
+- A `Hash` → `struct_class.new(hash)`
+- Anything else → `TypeError`, handled by the parent's `coercion_policy`
+
+### N3. Validity propagation — eager, single-message
+
+When the setter sees an invalid nested struct at assignment time, it stamps `errors[:field] << "is invalid"` on the parent — matching Phase 1's "setter owns its field's errors" contract. Drill into `parent.field.errors` for the per-field breakdown. Nested mutations after assignment do **not** refresh the parent's view; callers must reassign or read the nested struct's own errors.
+
+### N4. Inner construction errors propagate
+
+`FieldStruct::UnknownAttributeError`, `FieldStruct::CoercionError`, etc. raised inside `struct_class.new(hash)` are *not* caught by the parent's `coercion_policy`. They surface to the caller as-is — they're structural rejections of the nested record, not parent-shape coercion failures. Only `TypeError` (the "you passed me something other than nil/instance/Hash" case) flows through the parent's policy.
+
+### N5. Arrays of nested
+
+`required :addresses, :array, of: Address` works — each Hash element coerces into an `Address` (and a single invalid element marks the array `'is invalid'` on the parent, eager). Symbol form `of: :address` also works when the symbol resolves to a FieldStruct subclass.
+
+### N6. Implementation: wrapping type, not Base-as-type
+
+`FieldStruct::Types::Nested.new(struct_class)` is a `Types::Base` subclass parameterized at construction. The DSL builds and holds one per nested Field (cached as `Field#type_instance`). `Field` accepts an optional pre-built `type_instance:` so parameterized types can flow through the same plumbing as stock scalar types.
+
+---
+
 ## Phase 2+ backlog
 
 Surfaced during design but explicitly deferred. Ordered roughly by likely value:
 
-1. **Nested FieldStructs** — `field :address, Address` where `Address < FieldStruct::Base`. Includes equality, validation propagation, `as_json` deep walk.
-2. **JSON import** — `from_json` driven off Metadata; honors unknown_attributes policy.
-3. **Field-name and type aliases** — accept and emit alternate names. The original discussion has notes on this; design properly when we get there.
-4. **Cross-field validation** — `validate { |record| ... }` blocks that run on `valid?` after per-field validation.
-5. **Field-level coercion-policy override** — `field :x, :integer, coercion_policy: :raise` overrides the class default for one field.
-6. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
-7. **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Reuses `of:` as parameterization.
-8. **Extended types** — `:uuid`, `:url`, `:email`, `:symbol`, `:enum`. Same plumbing, more types.
-9. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
-10. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
-11. **`:binary` type** — if anyone asks.
-12. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
+1. **JSON import** — `from_json` driven off Metadata; honors unknown_attributes policy.
+2. **Field-name and type aliases** — accept and emit alternate names. The original discussion has notes on this; design properly when we get there.
+3. **Cross-field validation** — `validate { |record| ... }` blocks that run on `valid?` after per-field validation.
+4. **Field-level coercion-policy override** — `field :x, :integer, coercion_policy: :raise` overrides the class default for one field.
+5. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
+6. **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Reuses `of:` as parameterization.
+7. **Extended types** — `:uuid`, `:url`, `:email`, `:symbol`, `:enum`. Same plumbing, more types.
+8. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
+9. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
+10. **`:binary` type** — if anyone asks.
+11. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
 
 ---
 

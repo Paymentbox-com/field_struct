@@ -26,16 +26,20 @@ module FieldStruct
 
     # @param name [Symbol, String]
     # @param type [Class] a Types::Base subclass (already resolved from a symbol)
+    # @param type_instance [Types::Base, nil] optional pre-built instance —
+    #   used by the DSL for parameterized types (e.g. {Types::Nested}) where
+    #   +type.new+ wouldn't be enough to capture the parameterization. When
+    #   nil, +type.new+ is called.
     # @param required [Boolean]
     # @param default [Object, nil]
     # @param options [Hash] extra type/field options (e.g. +format:+, +of:+)
-    def initialize(name:, type:, required: false, default: nil, **options)
+    def initialize(name:, type:, type_instance: nil, required: false, default: nil, **options)
       @name = name.to_sym
       @type = type
       @required = required
       @default = default
       @options = options.freeze
-      @type_instance = type.new
+      @type_instance = type_instance || type.new
       freeze
     end
 

@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-05-27
+
+Field-level documentation metadata.
+
 ### Added
 
 - **Field-level `description:` (aliased as `desc:`).** Attach a human-readable description to any field for downstream documentation generators.

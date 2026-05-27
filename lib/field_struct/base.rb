@@ -120,6 +120,7 @@ module FieldStruct
       def field(name, type_arg, **options)
         type_class, type_instance = resolve_type_arg(type_arg)
         resolve_array_options!(type_class, options)
+        apply_default_format!(type_class, options)
         validate_format_option!(type_class, options)
         required = options.delete(:required) { false }
         default = options.delete(:default)
@@ -229,6 +230,13 @@ module FieldStruct
 
         element_class, element_instance = resolve_type_arg(options.delete(:of))
         options[:of_type] = element_instance || element_class
+      end
+
+      def apply_default_format!(type_class, options)
+        return if options.key?(:format)
+        return unless type_class.respond_to?(:default_format)
+
+        options[:format] = type_class.default_format
       end
 
       def validate_format_option!(type_class, options)

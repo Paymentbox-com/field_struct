@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-27
+
+Two internal refactors that set the gem up for an eventual RBS generator
+and improve IDE / Sord / Solargraph readings of the public surface. No
+behavior change.
+
 ### Changed
 
 - **`Type#coerce` signatures are now typed kwargs.** Each type's `coerce` method declares the options it consumes as named keyword arguments with a trailing `**` catch-all. The Hash-as-positional pattern is gone from the type contract; the loose base contract is `def coerce(value, **) = raise NotImplementedError` and each subclass narrows. Sets the gem up for an eventual RBS generator that emits useful per-type signatures.
@@ -25,6 +31,8 @@ adheres to [Semantic Versioning](https://semver.org/).
   The setter pipeline splats `field.options` at the call site (`coerce(value, **field.options)`), so the Hash storage on `Field` is unchanged. Existing call sites that pass options as kwargs are unaffected; the rare positional Hash needs explicit braces (`type.coerce({key: 'val'})`) to be the value, not options.
 
 - **Internal DSL helpers are now functional**, returning new Hashes instead of mutating in place. `apply_default_format!`, `resolve_array_options!`, `build_union_instance!` → `apply_default_format`, `resolve_array_options`, `build_union_instance`. Callers update via reassignment in `Base.field`.
+
+- **YARD `@param` types tightened library-wide.** Type coerce methods, value-object attrs (Field/Metadata), DSL macros (`field`, `coercion_policy`, `unknown_attributes`, `validate`), and the Errors family all now declare the actual accepted union types instead of generic `[Object]` / `[Hash]`. Duck-typed inputs use `#to_x` interface notation (`[Date, #to_date, String, nil]`). Strictly-bounded types name the exact set (`Symbol#coerce` is `[Symbol, String, nil]`). Documentation-only — zero behavior change.
 
 ## [0.5.0] - 2026-05-27
 

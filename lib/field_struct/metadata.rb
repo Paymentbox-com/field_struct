@@ -28,6 +28,15 @@ module FieldStruct
       @fields[name.to_sym]
     end
 
+    # Look up a field by its canonical name OR by any of its aliases.
+    #
+    # @param name [Symbol, String]
+    # @return [Field, nil]
+    def field_for(name)
+      sym = name.to_sym
+      @fields[sym] || @fields.each_value.find { |field| field.aliases.include?(sym) }
+    end
+
     # @return [Array<Symbol>] field names in insertion order
     def names
       @fields.keys

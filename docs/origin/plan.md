@@ -459,6 +459,48 @@ Commits: `docs: add usage examples to README`, `chore: fill gemspec metadata`, `
 
 ---
 
+## Phase 2 — Field-name aliases (in flight)
+
+Bridge external naming conventions to internal FieldStruct conventions. The original `first_discussion.md` notes call for this; the decisions below were locked during the design walkthrough on the `aliases` branch.
+
+### A1. Declaration
+
+```ruby
+required :email, :string, aliases: ['EmailAddress', 'email_address']
+```
+
+Single keyword option `aliases:` taking an `Array<String|Symbol>`. Always an array — a single alias is `['Name']`. Empty array (`[]`) is the default. Aliases are normalized to symbols and stored on `Field#aliases` as a frozen array. Aliases are *not* present in `Field#options`.
+
+### A2. Import — conflict resolution
+
+When the same input hash carries both the canonical key and an alias key for the same field, **canonical wins**. The alias entry is silently ignored. This holds independent of Hash iteration order.
+
+### A3. Export — opt-in via `aliased: true`
+
+```ruby
+person.as_json                    # canonical
+person.as_json(aliased: true)     # uses each field's first alias
+person.to_h(aliased: true)
+person.to_json(aliased: true)
+person.attributes(aliased: true)
+```
+
+The kwarg propagates through nested `FieldStruct::Base` values and through arrays of nested structs via `json_value`. For a field without aliases, the canonical name is used in aliased output too — no awkward gaps. Only the **first** alias from the declared `aliases:` array is used for export; the rest are import-only.
+
+### A4. Ruby-side accessors
+
+**No** Ruby methods are auto-defined for alias names. Aliases participate only in `Klass.new`/`from_json` (import) and `as_json(aliased: true)` etc. (export). Ruby code always uses the canonical name to read or write a field. This keeps the public surface clean of capitalized or camelCase method names that look out of place in idiomatic Ruby.
+
+### A5. Unknown-attributes interaction
+
+`unknown_attributes :raise` treats aliases as known. An input hash with `{'EmailAddress' => '...'}` does not raise for a field declared `aliases: ['EmailAddress']`. The check uses `Metadata#field_for(name)` which consults canonical names *and* aliases.
+
+### A6. Storage
+
+`Field#aliases` is a first-class attribute (alongside `name`, `type`, `required?`, `default`, `options`) — not stashed inside `options`. `Field#export_name` returns the first alias if present, otherwise the canonical name. `Metadata#field_for(name)` looks up by canonical or alias.
+
+---
+
 ## Phase 2 — JSON import (in flight)
 
 `Klass.from_json(json_string)` builds an instance.
@@ -528,16 +570,15 @@ When the setter sees an invalid nested struct at assignment time, it stamps `err
 
 Surfaced during design but explicitly deferred. Ordered roughly by likely value:
 
-1. **Field-name and type aliases** — accept and emit alternate names. The original discussion has notes on this; design properly when we get there.
-2. **Cross-field validation** — `validate { |record| ... }` blocks that run on `valid?` after per-field validation.
-3. **Field-level coercion-policy override** — `field :x, :integer, coercion_policy: :raise` overrides the class default for one field.
-4. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
-5. **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Reuses `of:` as parameterization.
-6. **Extended types** — `:uuid`, `:url`, `:email`, `:symbol`, `:enum`. Same plumbing, more types.
-7. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
-8. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
-9. **`:binary` type** — if anyone asks.
-10. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
+1. **Cross-field validation** — `validate { |record| ... }` blocks that run on `valid?` after per-field validation.
+2. **Field-level coercion-policy override** — `field :x, :integer, coercion_policy: :raise` overrides the class default for one field.
+3. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
+4. **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Reuses `of:` as parameterization.
+5. **Extended types** — `:uuid`, `:url`, `:email`, `:symbol`, `:enum`. Same plumbing, more types.
+6. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
+7. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
+8. **`:binary` type** — if anyone asks.
+9. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
 
 ---
 

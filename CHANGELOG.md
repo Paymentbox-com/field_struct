@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-05-27
+
+Documentation tooling: a `rake docs:generate` task that builds the YARD HTML, plus a `release:check` umbrella that runs the full pre-flight battery before every release.
+
+### Added
+
+- **`rake docs:generate`** — builds YARD HTML to `doc/` with `--fail-on-warning`, so broken `{#method}` links and malformed tags fail the build instead of slipping into a release.
+- **`rake docs:stats`** — `yard stats --list-undoc`; quick view of remaining coverage gaps.
+- **`rake release:check`** — umbrella task that runs `spec`, `rubocop`, `sigs:check`, `sigs:validate`, and `docs:generate`. The pre-flight ritual before each release commit.
+- **`.yardopts`** pinning the source list (`lib/**/*.rb`) and including `CHANGELOG.md` as an extra doc.
+- `yard` added to the Gemfile as a direct dev dependency (it was already present transitively via `sord`).
+
+### Fixed
+
+- A few YARD `{#field}` / `{#immutable!}` links inside `class << self` were unresolvable because the targets are class methods, not instance methods. Switched to the `{.field}` / `{.immutable!}` (class-method) link syntax so the strict YARD build is warning-free.
+
 ## [0.5.4] - 2026-05-27
 
 IRB-friendly inspect across every public object, plus an opt-in `FS` alias.

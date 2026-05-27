@@ -262,7 +262,47 @@ module FieldStruct
             "from_json expects a JSON object root, got #{parsed.class}: #{parsed.inspect}"
         end
 
-        new(parsed)
+        new(canonicalize_serialized_hash(parsed))
+      end
+
+      # Walk a parsed JSON hash (string-keyed, possibly with external
+      # names) and reverse-map every key to its canonical Symbol via
+      # +metadata.serialization(:json)+. Recurses into nested
+      # FieldStruct values and arrays of nested. Unmapped keys are
+      # converted to Symbols and passed through — they'll be handled
+      # by +new+'s +unknown_attributes+ check.
+      #
+      # @api private
+      # @param hash [Hash] parsed JSON object
+      # @return [Hash{Symbol=>Object}] canonical-keyed input ready for +.new+
+      def canonicalize_serialized_hash(hash)
+        mapping = metadata.serialization(:json)
+        reverse = mapping.each_with_object({}) { |(internal, external), out| out[external] = internal }
+
+        hash.each_with_object({}) do |(raw_key, value), result|
+          canonical = reverse[raw_key.to_s] || raw_key.to_sym
+          field = metadata[canonical]
+          result[canonical] = canonicalize_serialized_value(value, field)
+        end
+      end
+
+      # @api private
+      def canonicalize_serialized_value(value, field)
+        return value if field.nil?
+
+        if value.is_a?(::Hash) && field.type <= FieldStruct::Types::Nested
+          field.type_instance.struct_class.canonicalize_serialized_hash(value)
+        elsif value.is_a?(::Array) && field.type <= FieldStruct::Types::Array
+          of_type = field.options[:of_type]
+          if of_type.is_a?(FieldStruct::Types::Nested)
+            nested_class = of_type.struct_class
+            value.map { |element| element.is_a?(::Hash) ? nested_class.canonicalize_serialized_hash(element) : element }
+          else
+            value
+          end
+        else
+          value
+        end
       end
 
       private
@@ -553,17 +593,21 @@ module FieldStruct
     end
 
     # @param _options [Object] unused — accepted for ActiveSupport-style symmetry
-    # @param aliased [Boolean] use each field's first alias for the key
+    # @param aliased [Boolean] legacy path — when true, uses each field's
+    #   first Field#aliases entry. Default false uses the
+    #   +metadata.serialization(:json)+ mapping (identity when undeclared).
     # @return [Hash{Symbol=>Object}] a JSON-ready hash. Date/Time/DateTime
     #   convert to ISO-8601 strings, BigDecimal to its plain-form string,
     #   Symbol to String. Arrays recurse. Nested FieldStructs walk through
-    #   their own +as_json+, propagating the same +aliased:+ flag.
+    #   their own +as_json+ (which consults their own serialize mapping).
     def as_json(_options = nil, aliased: false)
-      attributes(aliased: aliased).transform_values { |value| json_value(value, aliased: aliased) }
+      return legacy_aliased_as_json if aliased
+
+      serialize_as_json
     end
 
     # @param _options [Object] unused — accepted for ActiveSupport-style symmetry
-    # @param aliased [Boolean] use each field's first alias for the key
+    # @param aliased [Boolean] legacy path — see {#as_json}
     # @return [String] JSON representation, via Oj
     def to_json(_options = nil, aliased: false)
       Oj.dump(as_json(aliased: aliased), mode: :compat)
@@ -631,6 +675,18 @@ module FieldStruct
     end
 
     private
+
+    def serialize_as_json
+      mapping = self.class.metadata.serialization(:json)
+      attributes.each_with_object({}) do |(field_name, value), out|
+        key = mapping.key?(field_name) ? mapping[field_name].to_sym : field_name
+        out[key] = json_value(value)
+      end
+    end
+
+    def legacy_aliased_as_json
+      attributes(aliased: true).transform_values { |value| json_value(value, aliased: true) }
+    end
 
     def json_value(value, aliased: false)
       case value

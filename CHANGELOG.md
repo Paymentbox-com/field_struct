@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **RBS signatures (`sig/field_struct.rbs`).** Generated from YARD comments via Sord and shipped in the gem. Downstream tools (Solargraph, Steep, RBS-aware editors) get type info for the public surface without configuring anything. Three new rake tasks:
+  - `rake sigs:generate` — regenerate from current YARD
+  - `rake sigs:validate` — parse-check the committed sig file
+  - `rake sigs:check` — fail if the committed sigs are stale (CI guard)
+- **`sord` and `rbs` as Gemfile development dependencies.** Both `require: false`.
+
+The custom Metadata→RBS generator for *user-defined* FieldStruct subclasses (per D13 in the plan) remains deferred — Sord covers the library's hand-written classes; the user-class generator is its own future effort.
+
 ## [0.5.2] - 2026-05-27
 
 Field-level documentation metadata.

@@ -232,9 +232,12 @@ Lookup for a class like `Acme::Order < FieldStruct::Base` walks the **full** nes
 - `key?(name)` — boolean check (walks parent chain)
 - `parent` — the parent registry, or `nil`
 
-### D13. RBS generation strategy (deferred, but informs v1)
+### D13. RBS generation strategy (split: Sord for library, custom generator deferred)
 
-A custom Metadata→RBS generator is the intended approach, written against the in-memory `Metadata` of each subclass. Sord may be used for hand-written internal classes only. To keep the door open, every type exposes `ruby_type` in v1 even though no generator consumes it yet.
+Two-track strategy:
+
+1. **Hand-written library classes** — Sord generates `sig/field_struct.rbs` from YARD comments. Landed in v0.6.0; committed to git. Three rake tasks (`sigs:generate` / `sigs:validate` / `sigs:check`) maintain the file.
+2. **User-defined FieldStruct subclasses** — a custom Metadata→RBS generator that walks each subclass's `metadata` to emit accessor signatures. Still deferred. Every type exposes `ruby_type` to keep this door open.
 
 ### D14. Source layout: standard, explicit requires
 

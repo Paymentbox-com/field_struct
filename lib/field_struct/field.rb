@@ -89,7 +89,7 @@ module FieldStruct
       parts << "coercion_policy=#{@coercion_policy.inspect}" if @coercion_policy
       parts << "description=#{@description.inspect}" if @description
       @options.each { |key, value| parts << "#{key}=#{option_repr(value)}" }
-      "#<FieldStruct::Field #{parts.join(" ")}>"
+      "#<#{FieldStruct.inspect_namespace}::Field #{parts.join(" ")}>"
     end
 
     # Delegates pretty-print to {#inspect} so IRB / pp don't fall back

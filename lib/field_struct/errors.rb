@@ -48,10 +48,11 @@ module FieldStruct
 
     # @return [String]
     def inspect
-      return '#<FieldStruct::Errors empty>' if empty?
+      prefix = "#{FieldStruct.inspect_namespace}::Errors"
+      return "#<#{prefix} empty>" if empty?
 
       pairs = to_h.map { |field, msgs| "#{field}=#{msgs.inspect}" }.join(' ')
-      "#<FieldStruct::Errors #{pairs}>"
+      "#<#{prefix} #{pairs}>"
     end
   end
 end

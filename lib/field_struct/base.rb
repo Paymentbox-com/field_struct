@@ -253,6 +253,22 @@ module FieldStruct
       !valid?
     end
 
+    # Structural equality: same class AND same {#attributes}. Errors are
+    # ignored — equality is about value, not validity.
+    #
+    # @param other [Object]
+    # @return [Boolean]
+    def ==(other)
+      other.instance_of?(self.class) && attributes == other.attributes
+    end
+    alias eql? ==
+
+    # @return [Integer] consistent with {#==} so instances work as Hash
+    #   keys and Set members
+    def hash
+      [self.class, attributes].hash
+    end
+
     private
 
     def apply_defaults

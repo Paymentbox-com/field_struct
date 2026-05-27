@@ -43,9 +43,13 @@ module FieldStruct
       # structural rejections of the nested record's input, not parent-
       # shape coercion failures.
       #
-      # @param value [Object]
+      # @param value [FieldStruct::Base, Hash, nil] +nil+ → +nil+; an
+      #   instance of {#struct_class} (or subclass) → passthrough; a
+      #   +Hash+ → constructs via +struct_class.new(hash)+. Anything
+      #   else raises TypeError.
       # @return [FieldStruct::Base, nil]
-      # @raise [TypeError]
+      # @raise [TypeError] when input is non-nil and neither a
+      #   {#struct_class} instance nor a Hash
       def coerce(value, **)
         return nil if value.nil?
         return value if value.is_a?(@struct_class)

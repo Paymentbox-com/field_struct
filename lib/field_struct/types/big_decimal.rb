@@ -15,7 +15,11 @@ module FieldStruct
         nil
       end
 
-      # @param value [Object] raw input
+      # @param value [BigDecimal, Numeric, String, nil] +nil+ → +nil+;
+      #   a +BigDecimal+ passes through; +Float+ uses +Float::DIG+
+      #   precision; everything else goes through
+      #   +Kernel.BigDecimal(value.to_s)+ — non-numeric strings raise
+      #   ArgumentError.
       # @param round [Integer, nil] decimal places; +nil+ leaves the
       #   value unrounded
       # @return [BigDecimal, nil]

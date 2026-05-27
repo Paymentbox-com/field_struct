@@ -11,15 +11,15 @@ module FieldStruct
   # Carries the field name and the original underlying error for callers
   # that want to inspect what happened.
   class CoercionError < Error
-    # @return [Symbol, nil]
+    # @return [Symbol, nil] the field whose setter triggered the failure
     attr_reader :field_name
 
-    # @return [Exception, nil] the underlying error from the type's coerce
+    # @return [StandardError, nil] the underlying error from the type's coerce
     attr_reader :original
 
     # @param message [String]
     # @param field_name [Symbol, nil]
-    # @param original [Exception, nil]
+    # @param original [StandardError, nil]
     def initialize(message, field_name: nil, original: nil)
       super(message)
       @field_name = field_name

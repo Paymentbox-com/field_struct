@@ -9,7 +9,7 @@ module FieldStruct
     # declaration to participate in metadata without committing to a
     # specific shape.
     class Value < Base
-      # @param value [Object] raw input
+      # @param value [Object] anything — passthrough, no coercion
       # @return [Object] the value, unchanged
       def coerce(value, **)
         value

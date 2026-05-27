@@ -12,7 +12,9 @@ module FieldStruct
         nil
       end
 
-      # @param value [Object] raw input
+      # @param value [Numeric, String, nil] +nil+ → +nil+; everything
+      #   else flows through +Kernel#Float+ — strict on string parsing,
+      #   rejects non-numeric strings, Symbols, Booleans, Arrays.
       # @param round [Integer, nil] decimal places; +nil+ leaves the value unrounded
       # @return [Float, nil] +nil+ for +nil+ input, otherwise the parsed float
       # @raise [ArgumentError, TypeError] when the value cannot be coerced

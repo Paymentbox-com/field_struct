@@ -7,7 +7,8 @@ module FieldStruct
     # String type. Coerces any non-nil value via +to_s+; treats nil, empty,
     # and whitespace-only strings as missing.
     class String < Base
-      # @param value [Object] raw input
+      # @param value [#to_s, nil] anything stringable (everything in
+      #   Ruby responds to +to_s+); +nil+ stays +nil+
       # @return [String, nil] +nil+ when input is +nil+, otherwise +value.to_s+
       def coerce(value, **)
         return nil if value.nil?

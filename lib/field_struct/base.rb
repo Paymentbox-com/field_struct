@@ -81,8 +81,8 @@ module FieldStruct
       # Inherited by subclasses; descendants can override. Default on
       # Base itself is +:keep_raw+.
       #
-      # @param value [Symbol, UNSET]
-      # @return [Symbol]
+      # @param value [:keep_raw, :replace, :raise] policy to set; omit to read
+      # @return [:keep_raw, :replace, :raise] the resolved policy
       def coercion_policy(value = UNSET)
         if value.equal?(UNSET)
           return @coercion_policy if defined?(@coercion_policy)
@@ -107,8 +107,8 @@ module FieldStruct
       #
       # Inherited by subclasses; descendants can override.
       #
-      # @param value [Symbol, UNSET]
-      # @return [Symbol]
+      # @param value [:ignore, :raise] policy to set; omit to read
+      # @return [:ignore, :raise] the resolved policy
       def unknown_attributes(value = UNSET)
         if value.equal?(UNSET)
           return @unknown_attributes if defined?(@unknown_attributes)
@@ -136,10 +136,16 @@ module FieldStruct
       # builds a {Field}, adds it to the class's {Metadata}, and defines
       # the getter/setter pair.
       #
-      # @param name [Symbol, String]
-      # @param type_arg [Symbol, Class] a registered name OR a
-      #   FieldStruct::Base subclass (auto-wrapped in {Types::Nested})
-      # @param options [Hash] +required:+, +default:+, plus type-specific options
+      # @param name [Symbol, String] canonical field name
+      # @param type_arg [Symbol, Class<Types::Base>, Class<FieldStruct::Base>]
+      #   a registered name in the resolving registry, OR a +Types::Base+
+      #   subclass, OR a +FieldStruct::Base+ subclass (auto-wrapped in
+      #   {Types::Nested})
+      # @param options [Hash{Symbol=>Object}] +required:+ (Boolean),
+      #   +default:+ (literal or callable), +coercion_policy:+ (Symbol),
+      #   plus type-specific options (e.g. +format:+, +round:+, +of:+,
+      #   +values:+, +enum:+, +in:+) — see each type's +coerce+ for the
+      #   options it consumes
       # @return [Field] the field that was added
       def field(name, type_arg, **options)
         type_class, type_instance = resolve_type_arg(type_arg)
@@ -167,11 +173,21 @@ module FieldStruct
       end
 
       # Sugar for {#field} with +required: true+.
+      #
+      # @param name [Symbol, String]
+      # @param type_name [Symbol, Class<Types::Base>, Class<FieldStruct::Base>]
+      # @param options [Hash{Symbol=>Object}]
+      # @return [Field]
       def required(name, type_name, **options)
         field(name, type_name, **options, required: true)
       end
 
       # Sugar for {#field} with +required: false+ (the default).
+      #
+      # @param name [Symbol, String]
+      # @param type_name [Symbol, Class<Types::Base>, Class<FieldStruct::Base>]
+      # @param options [Hash{Symbol=>Object}]
+      # @return [Field]
       def optional(name, type_name, **options)
         field(name, type_name, **options, required: false)
       end
@@ -197,8 +213,9 @@ module FieldStruct
       # +from_json+). Future formats (CSV, XML, etc.) will be supported
       # by downstream gems reading the same metadata.
       #
-      # @param name [Symbol, String] the format name
-      # @param mapping [Hash{Symbol=>String,Symbol}] internal → external
+      # @param name [Symbol, String] the format name (e.g. +:json+)
+      # @param mapping [Hash{Symbol=>String,Symbol}] internal field name
+      #   → external key. Symbol values are normalized to Strings.
       # @return [self]
       # @raise [ArgumentError] when a mapping key is not a declared field
       def serialize(name, **mapping)
@@ -485,8 +502,10 @@ module FieldStruct
       # auto-clearing; the user is then responsible for clearing those
       # entries.
       #
-      # @param method_names [Array<Symbol>] instance methods to invoke
+      # @param method_names [Array<Symbol>] zero or more instance method
+      #   names to invoke on each record at +valid?+ time
       # @yield [record] optional block validator
+      # @yieldparam record [Base] the instance being validated
       # @return [self]
       def validate(*method_names, &block)
         method_names.each do |method_name|

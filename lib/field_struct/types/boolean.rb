@@ -61,7 +61,10 @@ module FieldStruct
         resolved
       end
 
-      # @param value [Object] raw input
+      # @param value [Boolean, Integer, String, nil] accepts literal
+      #   +true+/+false+; the integers +1+/+0+; or a String matched
+      #   case-insensitively against the truthy/falsy vocabularies.
+      #   Anything else raises ArgumentError.
       # @param values [Hash{Symbol=>Array<String>}, nil] +{truthy: [...], falsy: [...]}+
       #   custom vocabulary; +nil+ uses {.default_truthy} / {.default_falsy}
       # @return [Boolean, nil]

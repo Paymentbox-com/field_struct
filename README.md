@@ -140,6 +140,24 @@ optional :created_at, :datetime, default: Time.method(:now)
 optional :token,      :string,   default: -> { "tok-#{SecureRandom.hex(4)}" }
 ```
 
+### Documenting fields with `description:` / `desc:`
+
+Attach a human-readable description to each field for downstream documentation generators. Aliased — pick whichever reads better at the call site:
+
+```ruby
+class User < FieldStruct::Base
+  required :email,      :string,  description: 'Primary contact address'
+  required :first_name, :string,  desc: 'Given name'
+  optional :age,        :integer
+end
+
+User.metadata[:email].description  # => 'Primary contact address'
+User.metadata[:email].desc         # => same
+User.metadata[:age].description    # => nil
+```
+
+The description is documentation metadata — it does **not** appear in `attributes` / `as_json` / `to_json` / pattern matches. Downstream gems can walk `Klass.metadata` to emit docs in any format. Passing both `description:` and `desc:` to the same field raises `ArgumentError`.
+
 ### Per-type field options
 
 Each type accepts a small set of customization options at the field level. Values can be literals or Symbol presets (resolved at class-load time against the type's `presets` Hash).

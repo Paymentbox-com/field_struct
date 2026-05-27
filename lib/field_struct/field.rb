@@ -32,6 +32,12 @@ module FieldStruct
     #   setting on {Base.coercion_policy}.
     attr_reader :coercion_policy
 
+    # @return [String, nil] human-readable description of the field;
+    #   intended for downstream documentation generators. Not part of
+    #   the data surface — does not appear in +attributes+ / +as_json+ /
+    #   pattern matches.
+    attr_reader :description
+
     # @param name [Symbol, String] canonical field name
     # @param type [Class<Types::Base>] the resolved type class
     # @param type_instance [Types::Base, nil] optional pre-built instance —
@@ -45,11 +51,13 @@ module FieldStruct
     # @param coercion_policy [:keep_raw, :replace, :raise, nil] override
     #   the class-level coercion policy for this one field; +nil+ means
     #   "use whatever the class says"
+    # @param description [String, nil] human-readable description of the
+    #   field; for documentation purposes only
     # @param options [Hash{Symbol=>Object}] extra type/field options
     #   forwarded to coerce (e.g. +format:+, +of_type:+, +round:+,
     #   +values:+, +enum:+, +in:+)
     def initialize(name:, type:, type_instance: nil, required: false, default: nil,
-                   coercion_policy: nil, **options)
+                   coercion_policy: nil, description: nil, **options)
       @name = name.to_sym
       @type = type
       @required = required
@@ -57,6 +65,7 @@ module FieldStruct
       @options = options.freeze
       @type_instance = type_instance || type.new
       @coercion_policy = coercion_policy
+      @description = description
       freeze
     end
 
@@ -64,5 +73,8 @@ module FieldStruct
     def required?
       @required
     end
+
+    # @return [String, nil] shorter alias of {#description}
+    alias desc description
   end
 end

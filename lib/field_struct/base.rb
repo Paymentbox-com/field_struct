@@ -162,10 +162,11 @@ module FieldStruct
         default = options.delete(:default)
         coercion_policy = options.delete(:coercion_policy)
         validate_coercion_policy_override!(coercion_policy) if coercion_policy
+        description = extract_description!(options)
         field = Field.new(
           name: name, type: type_class, type_instance: type_instance,
           required: required, default: default,
-          coercion_policy: coercion_policy, **options
+          coercion_policy: coercion_policy, description: description, **options
         )
         metadata.add(field)
         define_field_accessors(field)
@@ -372,6 +373,21 @@ module FieldStruct
         return options unless type_class.respond_to?(:default_format)
 
         options.merge(format: type_class.default_format)
+      end
+
+      # Pull +description:+ (canonical) or +desc:+ (alias) out of the
+      # field-declaration options. Raises if both are given — pick one.
+      #
+      # @param options [Hash] mutated in place (keys deleted)
+      # @return [String, nil]
+      def extract_description!(options)
+        description = options.delete(:description)
+        desc = options.delete(:desc)
+        if description && desc
+          raise ArgumentError, 'pass either description: or desc:, not both'
+        end
+
+        description || desc
       end
 
       def validate_format_option!(type_class, options)

@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Field-level `description:` (aliased as `desc:`).** Attach a human-readable description to any field for downstream documentation generators.
+
+  ```ruby
+  required :email, :string, description: 'Primary contact email'
+  required :age,   :integer, desc: 'Age in years'
+  ```
+
+  Stored as a first-class attribute on `Field` (`field.description`, with `field.desc` as a reader alias) — not in `Field#options`. Documentation metadata only: does not appear in `attributes` / `as_json` / pattern matches. Passing both `description:` and `desc:` raises `ArgumentError`. Subclass re-declarations replace the inherited description (including back to `nil` if not provided).
+
 ## [0.5.1] - 2026-05-27
 
 Two internal refactors that set the gem up for an eventual RBS generator

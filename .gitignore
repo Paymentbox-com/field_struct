@@ -22,8 +22,3 @@
 
 # Scrap files
 /scrap
-
-# VitePress docs site (npm + build cache + output)
-/node_modules/
-/site/.vitepress/cache/
-/site/.vitepress/dist/

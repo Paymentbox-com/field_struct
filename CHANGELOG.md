@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **`Type#coerce` signatures are now typed kwargs.** Each type's `coerce` method declares the options it consumes as named keyword arguments with a trailing `**` catch-all. The Hash-as-positional pattern is gone from the type contract; the loose base contract is `def coerce(value, **) = raise NotImplementedError` and each subclass narrows. Sets the gem up for an eventual RBS generator that emits useful per-type signatures.
+
+  ```ruby
+  # Before
+  def coerce(value, options = {})
+    fmt = options[:format] || self.class.default_format
+  end
+
+  # After
+  def coerce(value, format: self.class.default_format, **)
+    # fmt is bound directly
+  end
+  ```
+
+  The setter pipeline splats `field.options` at the call site (`coerce(value, **field.options)`), so the Hash storage on `Field` is unchanged. Existing call sites that pass options as kwargs are unaffected; the rare positional Hash needs explicit braces (`type.coerce({key: 'val'})`) to be the value, not options.
+
+- **Internal DSL helpers are now functional**, returning new Hashes instead of mutating in place. `apply_default_format!`, `resolve_array_options!`, `build_union_instance!` → `apply_default_format`, `resolve_array_options`, `build_union_instance`. Callers update via reassignment in `Base.field`.
+
 ## [0.5.0] - 2026-05-27
 
 Per-type field options + presets.

@@ -143,9 +143,11 @@ module FieldStruct
       # @return [Field] the field that was added
       def field(name, type_arg, **options)
         type_class, type_instance = resolve_type_arg(type_arg)
-        type_instance ||= build_union_instance!(type_class, options) if type_class <= FieldStruct::Types::Union
-        resolve_array_options!(type_class, options)
-        apply_default_format!(type_class, options)
+        if type_class <= FieldStruct::Types::Union
+          type_instance, options = build_union_instance(type_class, options)
+        end
+        options = resolve_array_options(type_class, options)
+        options = apply_default_format(type_class, options)
         options = type_class.resolve_options(options)
         validate_format_option!(type_class, options)
         validate_enum_option!(type_class, options)
@@ -323,18 +325,21 @@ module FieldStruct
         nil
       end
 
-      def resolve_array_options!(type_class, options)
-        return unless type_class <= FieldStruct::Types::Array
+      def resolve_array_options(type_class, options)
+        return options unless type_class <= FieldStruct::Types::Array
         raise ArgumentError, 'array field requires an `of:` option naming the element type' unless options.key?(:of)
 
-        element_class, element_instance = resolve_type_arg(options.delete(:of))
-        options[:of_type] = element_instance || element_class
+        rest = options.dup
+        element_class, element_instance = resolve_type_arg(rest.delete(:of))
+        rest[:of_type] = element_instance || element_class
+        rest
       end
 
-      def build_union_instance!(type_class, options)
+      def build_union_instance(type_class, options)
         raise ArgumentError, 'union field requires an `of: [...]` option naming the member types' unless options.key?(:of)
 
-        members = options.delete(:of)
+        rest = options.dup
+        members = rest.delete(:of)
         raise ArgumentError, 'union `of:` must be an Array of member types' unless members.is_a?(::Array)
         raise ArgumentError, 'union `of:` must have at least two members' if members.size < 2
 
@@ -342,14 +347,14 @@ module FieldStruct
           member_class, member_instance = resolve_type_arg(member)
           member_instance || member_class.new
         end
-        type_class.new(instances)
+        [type_class.new(instances), rest]
       end
 
-      def apply_default_format!(type_class, options)
-        return if options.key?(:format)
-        return unless type_class.respond_to?(:default_format)
+      def apply_default_format(type_class, options)
+        return options if options.key?(:format)
+        return options unless type_class.respond_to?(:default_format)
 
-        options[:format] = type_class.default_format
+        options.merge(format: type_class.default_format)
       end
 
       def validate_format_option!(type_class, options)
@@ -428,7 +433,7 @@ module FieldStruct
           end
 
           begin
-            coerced = field.type_instance.coerce(value, field.options)
+            coerced = field.type_instance.coerce(value, **field.options)
           rescue ArgumentError, TypeError => e
             return apply_coercion_policy(field, value, e)
           end

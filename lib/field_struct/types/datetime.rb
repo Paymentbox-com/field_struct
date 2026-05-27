@@ -33,16 +33,13 @@ module FieldStruct
       end
 
       # @param value [Object] raw input
-      # @param options [Hash] supports +:format+ (strptime string)
+      # @param format [String, nil] strptime/strftime format; +nil+ uses
+      #   {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
       # @return [DateTime, nil]
       # @raise [ArgumentError] when a string cannot be parsed
-      def coerce(value, options = {})
+      def coerce(value, format: self.class.default_format, **)
         return nil if value.nil?
-
-        fmt = options[:format] || self.class.default_format
-        if value.is_a?(::String) && fmt
-          return ::DateTime.strptime(value, fmt)
-        end
+        return ::DateTime.strptime(value, format) if value.is_a?(::String) && format
         return value.to_datetime if value.respond_to?(:to_datetime)
 
         ::DateTime.parse(value.to_s)

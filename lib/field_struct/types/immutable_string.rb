@@ -8,9 +8,8 @@ module FieldStruct
     # downstream code must not mutate a stored string.
     class ImmutableString < FieldStruct::Types::String
       # @param value [Object] raw input
-      # @param _options [Hash] unused
       # @return [String, nil] frozen string, or +nil+ if input is +nil+
-      def coerce(value, _options = {})
+      def coerce(value, **)
         result = super
         result.nil? ? nil : result.dup.freeze
       end

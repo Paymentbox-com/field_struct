@@ -27,7 +27,7 @@ RSpec.describe FieldStruct::Types::Nested do
 
     context 'with a Hash' do
       it 'constructs the struct from the hash' do
-        result = type.coerce(street: '1 Main', city: 'NYC')
+        result = type.coerce({street: '1 Main', city: 'NYC'})
         expect(result).to be_a(address_class)
         expect(result.street).to eq('1 Main')
         expect(result.city).to eq('NYC')

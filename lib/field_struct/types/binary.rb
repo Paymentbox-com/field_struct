@@ -13,10 +13,9 @@ module FieldStruct
     # {Types::String} which treats whitespace-only as missing.
     class Binary < FieldStruct::Types::String
       # @param value [Object] raw input
-      # @param _options [Hash] unused
       # @return [String, nil] +nil+ when input is +nil+, otherwise a
       #   fresh ASCII-8BIT-encoded copy of +value.to_s+
-      def coerce(value, _options = {})
+      def coerce(value, **)
         result = super
         return nil if result.nil?
 

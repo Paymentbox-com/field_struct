@@ -124,9 +124,12 @@ module FieldStruct
         required = options.delete(:required) { false }
         default = options.delete(:default)
         aliases = Array(options.delete(:aliases))
+        coercion_policy = options.delete(:coercion_policy)
+        validate_coercion_policy_override!(coercion_policy) if coercion_policy
         field = Field.new(
           name: name, type: type_class, type_instance: type_instance,
-          required: required, default: default, aliases: aliases, **options
+          required: required, default: default, aliases: aliases,
+          coercion_policy: coercion_policy, **options
         )
         metadata.add(field)
         define_field_accessors(field)
@@ -234,6 +237,13 @@ module FieldStruct
 
         raise ArgumentError,
           "format: option only applies to string-shaped fields (string, immutable_string), not #{type_class}"
+      end
+
+      def validate_coercion_policy_override!(value)
+        return if VALID_COERCION_POLICIES.include?(value)
+
+        raise ArgumentError, "unknown coercion policy #{value.inspect} " \
+                             "(expected one of #{VALID_COERCION_POLICIES.inspect})"
       end
 
       def define_field_accessors(field)
@@ -508,7 +518,7 @@ module FieldStruct
     end
 
     def apply_coercion_policy(field, raw_value, error)
-      case self.class.coercion_policy
+      case field.coercion_policy || self.class.coercion_policy
       when :keep_raw
         record_coercion_failure(field, raw_value, error)
         raw_value

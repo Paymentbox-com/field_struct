@@ -24,6 +24,11 @@ module FieldStruct
     #   the setter pipeline so we don't allocate a fresh type per coercion
     attr_reader :type_instance
 
+    # @return [Array<Symbol>] frozen list of import aliases for this field.
+    #   The first alias (if any) is also used as the export key under
+    #   +aliased: true+ on {Base#as_json} / {Base#to_h} / etc.
+    attr_reader :aliases
+
     # @param name [Symbol, String]
     # @param type [Class] a Types::Base subclass (already resolved from a symbol)
     # @param type_instance [Types::Base, nil] optional pre-built instance —
@@ -32,20 +37,29 @@ module FieldStruct
     #   nil, +type.new+ is called.
     # @param required [Boolean]
     # @param default [Object, nil]
+    # @param aliases [Array<Symbol,String>] alternate import-time names; the
+    #   first one doubles as the export key when +aliased: true+ is requested
     # @param options [Hash] extra type/field options (e.g. +format:+, +of:+)
-    def initialize(name:, type:, type_instance: nil, required: false, default: nil, **options)
+    def initialize(name:, type:, type_instance: nil, required: false, default: nil, aliases: [], **options)
       @name = name.to_sym
       @type = type
       @required = required
       @default = default
       @options = options.freeze
       @type_instance = type_instance || type.new
+      @aliases = aliases.map(&:to_sym).freeze
       freeze
     end
 
     # @return [Boolean]
     def required?
       @required
+    end
+
+    # @return [Symbol] the first alias if present, otherwise the canonical
+    #   name. Used as the output key for +aliased: true+ exports.
+    def export_name
+      @aliases.first || @name
     end
   end
 end

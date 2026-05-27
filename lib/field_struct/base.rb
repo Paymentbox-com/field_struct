@@ -123,9 +123,10 @@ module FieldStruct
         validate_format_option!(type_class, options)
         required = options.delete(:required) { false }
         default = options.delete(:default)
+        aliases = Array(options.delete(:aliases))
         field = Field.new(
           name: name, type: type_class, type_instance: type_instance,
-          required: required, default: default, **options
+          required: required, default: default, aliases: aliases, **options
         )
         metadata.add(field)
         define_field_accessors(field)
@@ -274,25 +275,37 @@ module FieldStruct
     # presence checks, and the +coercion_policy+ all run as normal.
     #
     # Respects {.unknown_attributes} on input and {.immutable?} on the
-    # setter side. The same method that powers {#initialize} is exposed
-    # here for callers that want to update many attributes at once.
+    # setter side. Honors per-field +aliases:+: an input key matching an
+    # alias routes the value to the canonical field. When both canonical
+    # and alias are present in the same input, the canonical wins and the
+    # alias entry is ignored.
     #
     # @param attrs [Hash{Symbol,String=>Object}]
     # @return [self]
     def assign_attributes(attrs)
       reject_unknown_attributes!(attrs)
-      attrs.each do |key, value|
-        sym = key.to_sym
-        next unless self.class.metadata[sym]
+      attrs_sym = attrs.transform_keys(&:to_sym)
+      attrs_sym.each do |key, value|
+        field = self.class.metadata.field_for(key)
+        next unless field
+        # Canonical-wins: if this is an alias entry AND the canonical key
+        # is also in the input, skip — the canonical entry will set it.
+        next if key != field.name && attrs_sym.key?(field.name)
 
-        public_send(:"#{sym}=", value)
+        public_send(:"#{field.name}=", value)
       end
       self
     end
 
     # @return [Hash{Symbol=>Object}] a fresh hash of current attribute values
-    def attributes
-      self.class.metadata.to_h { |field| [field.name, public_send(field.name)] }
+    # @param aliased [Boolean] when true, each field's key in the output is
+    #   its first declared alias (or the canonical name if no alias)
+    # @return [Hash{Symbol=>Object}] a fresh hash of current attribute values
+    def attributes(aliased: false)
+      self.class.metadata.to_h do |field|
+        key = aliased ? field.export_name : field.name
+        [key, public_send(field.name)]
+      end
     end
 
     # @return [Array<Symbol>]
@@ -331,22 +344,27 @@ module FieldStruct
       [self.class, attributes].hash
     end
 
+    # @param aliased [Boolean] use each field's first alias for the key
     # @return [Hash{Symbol=>Object}] alias of {#attributes}
-    def to_h
-      attributes
+    def to_h(aliased: false)
+      attributes(aliased: aliased)
     end
 
     # @param _options [Object] unused — accepted for ActiveSupport-style symmetry
+    # @param aliased [Boolean] use each field's first alias for the key
     # @return [Hash{Symbol=>Object}] a JSON-ready hash. Date/Time/DateTime
     #   convert to ISO-8601 strings, BigDecimal to its plain-form string,
-    #   Symbol to String. Arrays recurse.
-    def as_json(_options = nil)
-      attributes.transform_values { |value| json_value(value) }
+    #   Symbol to String. Arrays recurse. Nested FieldStructs walk through
+    #   their own +as_json+, propagating the same +aliased:+ flag.
+    def as_json(_options = nil, aliased: false)
+      attributes(aliased: aliased).transform_values { |value| json_value(value, aliased: aliased) }
     end
 
+    # @param _options [Object] unused — accepted for ActiveSupport-style symmetry
+    # @param aliased [Boolean] use each field's first alias for the key
     # @return [String] JSON representation, via Oj
-    def to_json(_options = nil)
-      Oj.dump(as_json, mode: :compat)
+    def to_json(_options = nil, aliased: false)
+      Oj.dump(as_json(aliased: aliased), mode: :compat)
     end
 
     # @return [String] +#<ClassName field: value, ...>+
@@ -367,14 +385,15 @@ module FieldStruct
 
     private
 
-    def json_value(value)
+    def json_value(value, aliased: false)
       case value
       when nil, true, false, ::String, ::Integer, ::Float then value
       when ::Symbol then value.to_s
       when ::BigDecimal then value.to_s('F')
       when ::DateTime, ::Date, ::Time then value.iso8601
-      when ::Array then value.map { |element| json_value(element) }
-      when ::Hash then value.transform_values { |v| json_value(v) }
+      when ::Array then value.map { |element| json_value(element, aliased: aliased) }
+      when ::Hash then value.transform_values { |v| json_value(v, aliased: aliased) }
+      when FieldStruct::Base then value.as_json(aliased: aliased)
       else
         value.respond_to?(:as_json) ? value.as_json : value
       end
@@ -389,8 +408,8 @@ module FieldStruct
     def reject_unknown_attributes!(attrs)
       return if self.class.unknown_attributes == :ignore
 
-      known = self.class.metadata.names
-      unknown = attrs.keys.map(&:to_sym).reject { |k| known.include?(k) }
+      meta = self.class.metadata
+      unknown = attrs.keys.map(&:to_sym).reject { |k| meta.field_for(k) }
       return if unknown.empty?
 
       raise UnknownAttributeError.new(

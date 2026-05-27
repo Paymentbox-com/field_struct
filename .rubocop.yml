@@ -91,6 +91,7 @@ Metrics/ModuleLength:
 
 Metrics/ParameterLists:
   Max: 6
+  CountKeywordArgs: false
 
 Metrics/PerceivedComplexity:
   Enabled: false

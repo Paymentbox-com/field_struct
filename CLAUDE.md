@@ -61,7 +61,17 @@ bin/rspec spec/path/file_spec.rb    # Run specific file
 bin/rspec spec/path/file_spec.rb:42 # Run specific line
 bundle exec rake                    # Full suite + linters
 COVERAGE=1 bin/rspec                # With coverage
+
+# Sig / docs / release prep
+bundle exec rake sigs:generate      # Regenerate sig/field_struct.rbs from YARD
+bundle exec rake sigs:check         # Fail if committed sigs are stale (CI guard)
+bundle exec rake sigs:validate      # rbs validate the committed sig file
+bundle exec rake docs:generate      # YARD HTML to doc/  (--fail-on-warning)
+bundle exec rake docs:stats         # List undocumented public methods
+bundle exec rake release:check      # Full pre-flight (spec + rubocop + sigs + docs)
 ```
+
+**Run `rake release:check` before every release commit.** It bundles specs, rubocop, the sigs staleness/validity guards, and a strict YARD build — broken doc links fail the build.
 
 ---
 

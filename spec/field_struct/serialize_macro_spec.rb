@@ -186,7 +186,7 @@ RSpec.describe FieldStruct::Base, '.serialize macro' do
     end
   end
 
-  describe 'no behavior change yet (Phase A only declares; Phase B wires JSON I/O)' do
+  describe 'declaration alone leaves to_h / attributes canonical' do
     let(:klass) do
       Class.new(described_class) do
         required :first_name, :string
@@ -194,14 +194,13 @@ RSpec.describe FieldStruct::Base, '.serialize macro' do
       end
     end
 
-    it 'to_json still emits canonical names (until Phase B)' do
-      instance = klass.new(first_name: 'Alice')
-      expect(Oj.load(instance.to_json, mode: :compat).keys).to eq(['first_name'])
-    end
-
-    it 'attributes/to_h are unaffected' do
+    it 'attributes is canonical regardless of the :json mapping' do
       instance = klass.new(first_name: 'Alice')
       expect(instance.attributes).to eq(first_name: 'Alice')
+    end
+
+    it 'to_h is canonical regardless of the :json mapping' do
+      instance = klass.new(first_name: 'Alice')
       expect(instance.to_h).to eq(first_name: 'Alice')
     end
   end

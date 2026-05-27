@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Each member type is tried in declared order; the first that doesn't raise wins. Member-coercion errors are caught broadly (ArgumentError, TypeError, FieldStruct::Error); unrelated bugs still propagate. If every member rejects, the union raises `TypeError` and the parent's `coercion_policy` engages. `ruby_type` returns a flat, deduplicated `Array<Class>` across all members. Declaration-time guards require `of:` to be an Array with at least two members.
+
 ## [0.2.0] - 2026-05-27
 
 Phase 2 first wave. Nested struct support, JSON import, field-name

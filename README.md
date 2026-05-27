@@ -76,6 +76,23 @@ Extended types: `:symbol`, `:uuid`, `:url`, `:email`. The last three are string-
 
 `:value` is a passthrough — useful when you want metadata for a field without committing to a shape.
 
+### Union types
+
+A field that may hold any of several types — each tried in declared order, first success wins:
+
+```ruby
+class Event < FieldStruct::Base
+  optional :payload, :union, of: [Payload, :boolean]
+  optional :id,      :union, of: %i[integer string]
+end
+
+Event.new(payload: { kind: 'click', value: 1 }).payload  # => #<Payload ...>
+Event.new(payload: true).payload                          # => true
+Event.new(id: '42').id                                    # => "42"   (string first)
+```
+
+Members can be Symbols (registered scalars or FieldStruct subclasses) or Class arguments (FieldStruct subclasses). If every member rejects the value, the union raises and the parent's `coercion_policy` engages. Declared order matters — pick deliberately when types overlap (`Integer` accepts `"42"`, `String` accepts `"42"` — the one listed first wins).
+
 ### Nested FieldStructs
 
 Pass a `FieldStruct::Base` subclass as the type to nest:

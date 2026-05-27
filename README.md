@@ -182,6 +182,35 @@ end
 
 Lookup walks the class's containing modules from innermost outward, then falls back to `FieldStruct.types`.
 
+## Aliases — bridging external naming conventions
+
+When a payload arrives with names that don't match your Ruby conventions — `EmailAddress` from a vendor API, `email_address` from a legacy table — declare `aliases:` and the import side routes it for you. Export with `aliased: true` re-serializes back to the original convention for round-tripping.
+
+```ruby
+class User < FieldStruct::Base
+  required :email,      :string, aliases: ['EmailAddress', 'email_address']
+  required :first_name, :string, aliases: ['FirstName']
+end
+
+# Import: any alias is accepted, routed to the canonical field.
+User.new('EmailAddress' => 'a@b.com', 'FirstName' => 'Alice')
+# => #<User email: "a@b.com", first_name: "Alice">
+
+# Conflict: if both canonical and alias are in the input, canonical wins.
+User.new(email: 'a@b.com', EmailAddress: 'never@y.com').email
+# => "a@b.com"
+
+# Export: opt in via aliased: true. Uses each field's first alias.
+user.as_json(aliased: true)
+# => { EmailAddress: 'a@b.com', FirstName: 'Alice' }
+user.to_json(aliased: true)
+# => '{"EmailAddress":"a@b.com","FirstName":"Alice"}'
+```
+
+- Aliases are import-and-export only — they do **not** define Ruby methods. `user.email` works; `user.EmailAddress` doesn't.
+- `unknown_attributes :raise` treats aliases as known; only truly unknown keys raise.
+- Aliases propagate through nested FieldStructs and arrays of nested when you serialize with `aliased: true`.
+
 ## Parsing JSON
 
 `Klass.from_json(string)` parses with Oj and feeds the resulting hash through `.new` — so coercion, nested construction, `unknown_attributes`, and `coercion_policy` all engage the same way they do for direct calls.

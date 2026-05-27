@@ -74,6 +74,31 @@ end
 
 `:value` is a passthrough — useful when you want metadata for a field without committing to a shape.
 
+### Nested FieldStructs
+
+Pass a `FieldStruct::Base` subclass as the type to nest:
+
+```ruby
+class Address < FieldStruct::Base
+  required :street, :string
+  required :city,   :string
+end
+
+class Person < FieldStruct::Base
+  required :name,      :string
+  required :address,   Address
+  optional :addresses, :array, of: Address     # arrays of nested too
+end
+
+Person.new(name: 'Alice', address: {street: '1', city: 'NYC'}).address
+# => #<Address street: "1", city: "NYC">
+```
+
+- Accepts nil / a struct instance / a Hash (`Address.new(hash)` happens automatically).
+- If the nested struct is invalid at assignment time, the parent gets `errors[:address] = ['is invalid']`. Drill into `parent.address.errors` for the per-field breakdown.
+- Inner construction errors (e.g. `FieldStruct::UnknownAttributeError` from a nested class with `unknown_attributes :raise`) propagate to the caller rather than being caught by the parent's `coercion_policy`.
+- `as_json` / `to_json` deep-walk nested structures.
+
 ### What "required" means
 
 A required field is invalid when its **value** is missing after coercion — the *type* decides what "missing" means:

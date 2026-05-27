@@ -19,6 +19,7 @@ module FieldStruct
   # hook. Macros and validation layer on in later slices.
   class Base
     VALID_COERCION_POLICIES = %i[keep_raw replace raise].freeze
+    VALID_UNKNOWN_POLICIES = %i[ignore raise].freeze
     UNSET = Object.new.freeze
     private_constant :UNSET
 
@@ -71,6 +72,32 @@ module FieldStruct
           end
 
           @coercion_policy = value
+        end
+      end
+
+      # Class macro: get or set how {Base#initialize} responds to input
+      # keys that do not match any declared field.
+      #
+      #   unknown_attributes :ignore   # default — silently drop them
+      #   unknown_attributes :raise    # raise UnknownAttributeError
+      #
+      # Inherited by subclasses; descendants can override.
+      #
+      # @param value [Symbol, UNSET]
+      # @return [Symbol]
+      def unknown_attributes(value = UNSET)
+        if value.equal?(UNSET)
+          return @unknown_attributes if defined?(@unknown_attributes)
+          return superclass.unknown_attributes if superclass.respond_to?(:unknown_attributes)
+
+          :ignore
+        else
+          unless VALID_UNKNOWN_POLICIES.include?(value)
+            raise ArgumentError, "unknown unknown_attributes policy #{value.inspect} " \
+                                 "(expected one of #{VALID_UNKNOWN_POLICIES.inspect})"
+          end
+
+          @unknown_attributes = value
         end
       end
 
@@ -175,6 +202,7 @@ module FieldStruct
     # @param attrs [Hash{Symbol,String=>Object}] input values, by symbol or string key
     def initialize(attrs = {})
       @errors = Errors.new
+      reject_unknown_attributes!(attrs)
       self.class.metadata.each do |field|
         value = attrs.fetch(field.name) { attrs.fetch(field.name.to_s) { field.default } }
         public_send(:"#{field.name}=", value)
@@ -208,6 +236,19 @@ module FieldStruct
     end
 
     private
+
+    def reject_unknown_attributes!(attrs)
+      return if self.class.unknown_attributes == :ignore
+
+      known = self.class.metadata.names
+      unknown = attrs.keys.map(&:to_sym).reject { |k| known.include?(k) }
+      return if unknown.empty?
+
+      raise UnknownAttributeError.new(
+        "unknown attribute(s) for #{self.class}: #{unknown.map(&:inspect).join(", ")}",
+        keys: unknown
+      )
+    end
 
     def validate_field(field, value)
       errors.clear(field.name)

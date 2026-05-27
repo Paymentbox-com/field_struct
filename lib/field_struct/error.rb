@@ -30,4 +30,19 @@ module FieldStruct
   # Raised when a field setter on a class marked +immutable!+ is called
   # after construction.
   class ImmutableError < Error; end
+
+  # Raised by {Base#initialize} / {Base#assign_attributes} when the input
+  # hash includes a key that is not a declared field on the class and
+  # the +unknown_attributes+ policy is +:raise+.
+  class UnknownAttributeError < Error
+    # @return [Array<Symbol>] the offending keys
+    attr_reader :keys
+
+    # @param message [String]
+    # @param keys [Array<Symbol>]
+    def initialize(message, keys: [])
+      super(message)
+      @keys = keys
+    end
+  end
 end

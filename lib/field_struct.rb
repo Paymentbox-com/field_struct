@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 require_relative 'field_struct/version'
+require_relative 'field_struct/types/base'
+require_relative 'field_struct/types/string'
 
 module FieldStruct
   class Error < StandardError; end
-  # Your code goes here...
 end

@@ -12,7 +12,29 @@ require_relative 'field_struct/types/date'
 require_relative 'field_struct/types/time'
 require_relative 'field_struct/types/datetime'
 require_relative 'field_struct/types/value'
+require_relative 'field_struct/registry'
 
 module FieldStruct
   class Error < StandardError; end
+
+  # The base type registry, seeded with every v1 scalar type and the
+  # +:decimal+ alias for +:big_decimal+. Namespace registries should be
+  # built with this as their parent (see {Registry}).
+  #
+  # @return [Registry]
+  def self.types
+    @types ||= Registry.new.tap do |r|
+      r.register :string, Types::String
+      r.register :immutable_string, Types::ImmutableString
+      r.register :integer, Types::Integer
+      r.register :float, Types::Float
+      r.register :big_decimal, Types::BigDecimal
+      r.register :decimal, :big_decimal
+      r.register :boolean, Types::Boolean
+      r.register :date, Types::Date
+      r.register :time, Types::Time
+      r.register :datetime, Types::DateTime
+      r.register :value, Types::Value
+    end
+  end
 end

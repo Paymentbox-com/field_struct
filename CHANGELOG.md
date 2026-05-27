@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Callable defaults** — `default:` now accepts a literal OR a parameterless callable (Proc, Lambda, Method, anything that responds to `#call`). Callables are invoked once per instance during apply_defaults; the return value flows through the setter pipeline like any other default. Safe for per-instance values like timestamps or generated IDs.
+- **`FieldStruct.new_registry`** — shorthand for building a namespace registry. Defaults the parent to `FieldStruct.types`; an explicit `nil` parent gives an unparented registry. The block (optional) is evaluated in the new registry's instance scope, so `register :money, Acme::Money` works without a receiver.
+
 ## [0.3.0] - 2026-05-27
 
 Phase 2 wave two: union types, the `:binary` extended type, and the

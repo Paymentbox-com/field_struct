@@ -28,6 +28,24 @@ module FieldStruct
         @metadata ||= Metadata.new
       end
 
+      # Mark this class (and its descendants) immutable. Setters called
+      # after {#initialize} completes raise {ImmutableError}. One-way
+      # switch: there is no companion +mutable!+ macro in Phase 1.
+      #
+      # @return [true]
+      def immutable!
+        @immutable = true
+      end
+
+      # @return [Boolean] whether this class is marked immutable
+      #   (locally or via an ancestor)
+      def immutable?
+        return @immutable if defined?(@immutable)
+        return superclass.immutable? if superclass.respond_to?(:immutable?)
+
+        false
+      end
+
       # Class macro: get or set the policy used by the setter pipeline
       # when a value can't be coerced into a field's declared type.
       #
@@ -132,6 +150,10 @@ module FieldStruct
         attr_reader field.name
 
         define_method(:"#{field.name}=") do |value|
+          if @_initialized && self.class.immutable?
+            raise ImmutableError, "#{self.class} is immutable; cannot reassign #{field.name}"
+          end
+
           begin
             coerced = field.type_instance.coerce(value, field.options)
           rescue ArgumentError, TypeError => e
@@ -157,6 +179,7 @@ module FieldStruct
         value = attrs.fetch(field.name) { attrs.fetch(field.name.to_s) { field.default } }
         public_send(:"#{field.name}=", value)
       end
+      @_initialized = true
     end
 
     # @return [Hash{Symbol=>Object}] a fresh hash of current attribute values

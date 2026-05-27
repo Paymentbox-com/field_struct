@@ -26,4 +26,8 @@ module FieldStruct
       @original = original
     end
   end
+
+  # Raised when a field setter on a class marked +immutable!+ is called
+  # after construction.
+  class ImmutableError < Error; end
 end

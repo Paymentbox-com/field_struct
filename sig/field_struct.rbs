@@ -100,7 +100,7 @@ module FieldStruct
     def self.unknown_attributes: (?Symbol value) -> Symbol
 
     # _@return_ — declared field names in insertion order
-    def self.attribute_names: () -> Symbol
+    def self.attribute_names: () -> ::Array[Symbol]
 
     # Declare a field. Resolves +type_arg+ — a registered symbol or a
     # {FieldStruct::Base} subclass — into a type class (and, for
@@ -115,7 +115,7 @@ module FieldStruct
     # _@param_ `options` — +required:+ (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol), plus type-specific options (e.g. +format:+, +round:+, +of:+, +values:+, +enum:+, +in:+) — see each type's +coerce+ for the options it consumes
     # 
     # _@return_ — the field that was added
-    def self.field: ((Symbol | String) name, (Symbol | untyped) type_arg, **Symbol options) -> Field
+    def self.field: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_arg, **::Hash[Symbol, Object] options) -> Field
 
     # Sugar for {#field} with +required: true+.
     # 
@@ -124,7 +124,7 @@ module FieldStruct
     # _@param_ `type_name`
     # 
     # _@param_ `options`
-    def self.required: ((Symbol | String) name, (Symbol | untyped) type_name, **Symbol options) -> Field
+    def self.required: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_name, **::Hash[Symbol, Object] options) -> Field
 
     # Sugar for {#field} with +required: false+ (the default).
     # 
@@ -133,7 +133,7 @@ module FieldStruct
     # _@param_ `type_name`
     # 
     # _@param_ `options`
-    def self.optional: ((Symbol | String) name, (Symbol | untyped) type_name, **Symbol options) -> Field
+    def self.optional: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_name, **::Hash[Symbol, Object] options) -> Field
 
     # Declare an external-name mapping for a serialization format.
     # The mapping reads internal-field-name (Symbol) on the left, the
@@ -159,7 +159,7 @@ module FieldStruct
     # _@param_ `name` — the format name (e.g. +:json+)
     # 
     # _@param_ `mapping` — internal field name → external key. Symbol values are normalized to Strings.
-    def self.serialize: ((Symbol | String) name, **Symbol mapping) -> self
+    def self.serialize: ((Symbol | String) name, **::Hash[Symbol, (String | Symbol)] mapping) -> self
 
     # Resolve a type name through the registry chain visible to this
     # class. Walks the containing modules of the class's name in
@@ -180,7 +180,7 @@ module FieldStruct
     # call +type_class.new+ itself); for nested-class args (and for
     # symbol args that resolve to a FieldStruct::Base subclass) it's
     # a pre-built {Types::Nested} instance.
-    def self.resolve_type_arg: ((Symbol | Class) type_arg) -> Object
+    def self.resolve_type_arg: ((Symbol | Class) type_arg) -> [Class, Types::Base]
 
     # _@return_ — an ActiveModel::Name-shaped value for this class
     def self.model_name: () -> ModelName
@@ -210,45 +210,45 @@ module FieldStruct
     # _@param_ `hash` — parsed JSON object
     # 
     # _@return_ — canonical-keyed input ready for +.new+
-    def self.canonicalize_serialized_hash: (Symbol hash) -> Symbol
+    def self.canonicalize_serialized_hash: (::Hash[untyped, untyped] hash) -> ::Hash[Symbol, Object]
 
-    def self.canonicalize_serialized_value: (Object value, Object field) -> Object
+    def self.canonicalize_serialized_value: (untyped value, untyped field) -> untyped
 
-    def self.namespace_field_types: () -> Object
+    def self.namespace_field_types: () -> untyped
 
-    def self.resolve_array_options: (Object type_class, Object options) -> Object
+    def self.resolve_array_options: (untyped type_class, untyped options) -> untyped
 
-    def self.build_union_instance: (Object type_class, Object options) -> Object
+    def self.build_union_instance: (untyped type_class, untyped options) -> untyped
 
-    def self.apply_default_format: (Object type_class, Object options) -> Object
+    def self.apply_default_format: (untyped type_class, untyped options) -> untyped
 
     # Pull +description:+ (canonical) or +desc:+ (alias) out of the
     # field-declaration options. Raises if both are given — pick one.
     # 
     # _@param_ `options` — mutated in place (keys deleted)
-    def self.extract_description!: (Symbol options) -> String?
+    def self.extract_description!: (::Hash[untyped, untyped] options) -> String?
 
-    def self.validate_format_option!: (Object type_class, Object options) -> Object
+    def self.validate_format_option!: (untyped type_class, untyped options) -> untyped
 
-    def self.validate_serialize_mapping!: (Object name, Object mapping) -> Object
+    def self.validate_serialize_mapping!: (untyped name, untyped mapping) -> untyped
 
-    def self.validate_enum_option!: (Object type_class, Object options) -> Object
+    def self.validate_enum_option!: (untyped type_class, untyped options) -> untyped
 
-    def self.validate_in_option!: (Object type_class, Object options) -> Object
+    def self.validate_in_option!: (untyped type_class, untyped options) -> untyped
 
-    def self.string_like_type?: (Object type_class) -> bool
+    def self.string_like_type?: (untyped type_class) -> bool
 
-    def self.rangy_type?: (Object type_class) -> bool
+    def self.rangy_type?: (untyped type_class) -> bool
 
-    def self.validate_coercion_policy_override!: (Object value) -> Object
+    def self.validate_coercion_policy_override!: (untyped value) -> untyped
 
-    def self.define_field_accessors: (Object field) -> Object
+    def self.define_field_accessors: (untyped field) -> untyped
 
     # _@return_ — the registered cross-field validators
     # for this class. Each entry is a callable that takes the
     # record. Subclasses start with a +dup+ of the parent's list at
     # inheritance time and accumulate their own.
-    def self.validators: () -> Symbol
+    def self.validators: () -> ::Array[untyped]
 
     # Declare a cross-field validator.
     # 
@@ -282,12 +282,12 @@ module FieldStruct
     # entries.
     # 
     # _@param_ `method_names` — zero or more instance method names to invoke on each record at +valid?+ time
-    def self.validate: (*Symbol method_names) -> void
+    def self.validate: (*::Array[Symbol] method_names) ?{ (Base record) -> void } -> self
 
-    def self.inherited: (Object subclass) -> Object
+    def self.inherited: (untyped subclass) -> untyped
 
     # _@param_ `attrs` — input values, by symbol or string key
-    def initialize: (?Symbol attrs) -> void
+    def initialize: (?::Hash[(Symbol | String), Object] attrs) -> void
 
     # Bulk-update declared attributes from a hash. Routes each value
     # through the same setter pipeline used everywhere else — so coercion,
@@ -299,14 +299,14 @@ module FieldStruct
     # {Base.from_json}.
     # 
     # _@param_ `attrs`
-    def assign_attributes: (Symbol attrs) -> self
+    def assign_attributes: (::Hash[(Symbol | String), Object] attrs) -> self
 
     # _@return_ — a fresh hash of current attribute values
     # 
     # _@return_ — a fresh hash of current attribute values
     # keyed by canonical field name. For format-aware export (with the
     # declared +:json+ mapping applied), see {#as_json} / {#to_json}.
-    def attributes: () -> Symbol
+    def attributes: () -> ::Hash[Symbol, Object]
 
     def attribute_names: () -> ::Array[Symbol]
 
@@ -339,7 +339,7 @@ module FieldStruct
     def hash: () -> Integer
 
     # _@return_ — alias of {#attributes}
-    def to_h: () -> Symbol
+    def to_h: () -> ::Hash[Symbol, Object]
 
     # _@param_ `_options` — unused — accepted for ActiveSupport-style symmetry
     # 
@@ -348,7 +348,7 @@ module FieldStruct
     # to ISO-8601 strings, BigDecimal to its plain-form string,
     # Symbol to String. Arrays recurse. Nested FieldStructs walk
     # through their own +as_json+, applying their own mapping.
-    def as_json: (?Object? _options) -> Symbol
+    def as_json: (?Object? _options) -> ::Hash[Symbol, Object]
 
     # _@param_ `_options` — unused — accepted for ActiveSupport-style symmetry
     # 
@@ -381,7 +381,7 @@ module FieldStruct
     # accessors.
     # 
     # _@param_ `keys` — keys the pattern requested, or +nil+ for the +**rest+ pattern (every declared field)
-    def deconstruct_keys: (Symbol? keys) -> Symbol
+    def deconstruct_keys: (::Array[Symbol]? keys) -> ::Hash[Symbol, Object]
 
     # Ruby pattern-matching array protocol. Returns the declared field
     # values in declaration order — useful for positional unpacking of
@@ -396,25 +396,25 @@ module FieldStruct
     #   in [x, y]
     #     Math.hypot(x, y)
     #   end
-    def deconstruct: () -> Symbol
+    def deconstruct: () -> ::Array[Object]
 
-    def json_value: (Object value, ?Object field_options) -> Object
+    def json_value: (untyped value, ?untyped field_options) -> untyped
 
-    def apply_defaults: () -> Object
+    def apply_defaults: () -> untyped
 
-    def run_cross_field_validators: () -> Object
+    def run_cross_field_validators: () -> untyped
 
-    def reject_unknown_attributes!: (Object attrs) -> Object
+    def reject_unknown_attributes!: (untyped attrs) -> untyped
 
-    def validate_field: (Object field, Object value) -> Object
+    def validate_field: (untyped field, untyped value) -> untyped
 
-    def field_value_invalid?: (Object field, Object value) -> bool
+    def field_value_invalid?: (untyped field, untyped value) -> bool
 
-    def nested_invalid?: (Object value) -> bool
+    def nested_invalid?: (untyped value) -> bool
 
-    def apply_coercion_policy: (Object field, Object raw_value, Object error) -> Object
+    def apply_coercion_policy: (untyped field, untyped raw_value, untyped error) -> untyped
 
-    def record_coercion_failure: (Object field, Object stored_value, Object error) -> Object
+    def record_coercion_failure: (untyped field, untyped stored_value, untyped error) -> untyped
   end
 
   # Base class for every error FieldStruct raises. Catch this to handle
@@ -454,10 +454,10 @@ module FieldStruct
     # _@param_ `message`
     # 
     # _@param_ `keys`
-    def initialize: (String message, ?keys: Symbol) -> void
+    def initialize: (String message, ?keys: ::Array[Symbol]) -> void
 
     # _@return_ — the offending keys
-    attr_reader keys: Symbol
+    attr_reader keys: ::Array[Symbol]
   end
 
   # A single declared attribute on a FieldStruct class.
@@ -483,14 +483,14 @@ module FieldStruct
     # 
     # _@param_ `options` — extra type/field options forwarded to coerce (e.g. +format:+, +of_type:+, +round:+, +values:+, +enum:+, +in:+)
     def initialize: (
-                      name: untyped,
-                      _type: untyped,
-                      ?type_instance: untyped,
-                      ?required: untyped,
-                      ?default: untyped,
-                      ?coercion_policy: untyped,
-                      ?description: untyped,
-                      **untyped options
+                      name: (Symbol | String),
+                      _type: singleton(Types::Base),
+                      ?type_instance: Types::Base?,
+                      ?required: bool,
+                      ?default: (Object | untyped)?,
+                      ?coercion_policy: Symbol?,
+                      ?description: String?,
+                      **::Hash[Symbol, Object] options
                     ) -> void
 
     def required?: () -> bool
@@ -499,7 +499,7 @@ module FieldStruct
     attr_reader name: Symbol
 
     # _@return_ — the resolved type class
-    attr_reader type: Object
+    attr_reader type: singleton(Types::Base)
 
     # _@return_ — the configured default value, or a
     # parameterless callable returning one, or +nil+ if no default
@@ -508,7 +508,7 @@ module FieldStruct
     # _@return_ — frozen, holds the remaining keyword
     # options forwarded to {Types::Base#coerce} (e.g. +:format+,
     # +:round+, +:values+, +:of_type+, +:enum+, +:in+)
-    attr_reader options: Symbol
+    attr_reader options: ::Hash[Symbol, Object]
 
     # _@return_ — an eagerly-built instance of {#type}, reused by
     # the setter pipeline so we don't allocate a fresh type per coercion
@@ -537,14 +537,14 @@ module FieldStruct
     # _@param_ `field_name`
     # 
     # _@return_ — messages for the field, or an empty array
-    def []: ((Symbol | String) field_name) -> Symbol
+    def []: ((Symbol | String) field_name) -> ::Array[String]
 
     # _@param_ `field_name`
     # 
     # _@param_ `message`
     # 
     # _@return_ — the field's updated message list
-    def add: ((Symbol | String) field_name, String message) -> Symbol
+    def add: ((Symbol | String) field_name, String message) -> ::Array[String]
 
     # Drop every message for a field.
     # 
@@ -556,7 +556,7 @@ module FieldStruct
 
     # _@return_ — snapshot of field → messages,
     # skipping fields with empty message lists
-    def to_h: () -> Symbol
+    def to_h: () -> ::Hash[Symbol, ::Array[String]]
   end
 
   # The per-class collection of {Field} declarations.
@@ -567,7 +567,6 @@ module FieldStruct
   # is seeded with the parent's fields, then accumulates its own; child
   # declarations win on conflict.
   class Metadata
-    include Enumerable[Field]
     include ::Enumerable[Field]
 
     def initialize: () -> void
@@ -579,12 +578,12 @@ module FieldStruct
     def []: ((Symbol | String) name) -> Field?
 
     # _@return_ — field names in insertion order
-    def names: () -> Symbol
+    def names: () -> ::Array[Symbol]
 
     # Yields each {Field} in insertion order.
     # 
     # _@return_ — when no block is given
-    def each: () -> void
+    def each: () ?{ (Field field) -> void } -> ::Enumerator[untyped]
 
     # Record a serialization mapping for the named format. Repeats on
     # the same format name replace the prior mapping (last-write-wins).
@@ -593,7 +592,7 @@ module FieldStruct
     # _@param_ `name`
     # 
     # _@param_ `mapping`
-    def add_serialization: ((Symbol | String) name, Symbol mapping) -> self
+    def add_serialization: ((Symbol | String) name, ::Hash[Symbol, String] mapping) -> self
 
     # Look up the mapping for a format. Returns an empty hash when the
     # format hasn't been declared — the implicit identity mapping that
@@ -602,7 +601,7 @@ module FieldStruct
     # _@param_ `name`
     # 
     # _@return_ — frozen mapping (empty hash when undeclared)
-    def serialization: ((Symbol | String) name) -> Symbol
+    def serialization: ((Symbol | String) name) -> ::Hash[Symbol, String]
 
     # Copy fields and serializations from +parent+ into self, leaving
     # already-declared entries untouched (child wins). Order: existing
@@ -617,7 +616,7 @@ module FieldStruct
     # maps an internal field name (Symbol) to its external name
     # (String). Fields not listed in an inner hash serialize under
     # their canonical name.
-    attr_reader serializations: Symbol
+    attr_reader serializations: ::Hash[Symbol, ::Hash[Symbol, String]]
   end
 
   # Name → type-class map with optional parent fallback.
@@ -676,9 +675,9 @@ module FieldStruct
       def self.default_format: () -> Regexp
 
       # _@return_ — named presets for +format:+
-      def self.presets: () -> Symbol
+      def self.presets: () -> ::Hash[Symbol, Regexp]
 
-      def self.resolve_options: (Symbol options) -> Symbol
+      def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
     end
 
     # Abstract base for all FieldStruct type classes.
@@ -696,7 +695,7 @@ module FieldStruct
       # _@param_ `options` — the per-field options hash, as written by the user
       # 
       # _@return_ — possibly-modified options to store on the Field
-      def self.resolve_options: (Symbol options) -> Symbol
+      def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
       # Coerce an input value into the type's domain.
       # 
@@ -738,9 +737,9 @@ module FieldStruct
       def self.default_format: () -> String?
 
       # _@return_ — named presets for the +format:+ option
-      def self.presets: () -> Symbol
+      def self.presets: () -> ::Hash[Symbol, String]
 
-      def self.resolve_options: (Symbol options) -> Symbol
+      def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
       # _@param_ `value` — +nil+ → +nil+; a +Date+ passes through; anything responding to +to_date+ (DateTime, Time, ActiveSupport's TimeWithZone, etc.) is converted; a String is parsed via +strptime+ if a +format:+ is set, otherwise +Date.parse+. Anything else falls through to +Date.parse(value.to_s)+ — which raises ArgumentError.
       # 
@@ -762,9 +761,9 @@ module FieldStruct
       def self.default_format: () -> String?
 
       # _@return_ — named presets for the +format:+ option
-      def self.presets: () -> Symbol
+      def self.presets: () -> ::Hash[Symbol, String]
 
-      def self.resolve_options: (Symbol options) -> Symbol
+      def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
       # _@param_ `value` — +nil+ → +nil+; a +String+ is parsed via +strptime+ when +format:+ is set, otherwise via +Time.parse+; anything responding to +to_time+ (Date, DateTime, etc.) is converted.
       # 
@@ -789,9 +788,9 @@ module FieldStruct
       def self.default_format: () -> Regexp
 
       # _@return_ — named presets for +format:+
-      def self.presets: () -> Symbol
+      def self.presets: () -> ::Hash[Symbol, Regexp]
 
-      def self.resolve_options: (Symbol options) -> Symbol
+      def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
     end
 
     # Array type. Coerces each element through the registered element
@@ -803,7 +802,7 @@ module FieldStruct
       # _@param_ `value` — anything else raises TypeError
       # 
       # _@param_ `of_type` — the element type — a Types::Base subclass for stock types, or an already-built instance for parameterized types like {Types::Nested}. The DSL stashes this when the user writes +of: :string+ / +of: SomeStruct+. Required at the type level; nil here means the type was called directly without DSL help.
-      def coerce: (Symbol? value, ?of_type: (Class | Types::Base)?) -> Symbol?
+      def coerce: (::Array[untyped]? value, ?of_type: (Class | Types::Base)?) -> ::Array[untyped]?
 
       # _@param_ `value`
       # 
@@ -818,7 +817,7 @@ module FieldStruct
       # instance (the DSL form for parameterized types like
       # {Types::Nested}). Both produce a single cached instance per
       # configured element type.
-      def element_type_for: (Object type_or_instance) -> Object
+      def element_type_for: (untyped type_or_instance) -> untyped
     end
 
     # Email type — a {Types::String} that pre-fills the field's +format:+
@@ -838,9 +837,9 @@ module FieldStruct
       def self.default_format: () -> Regexp
 
       # _@return_ — named presets for +format:+
-      def self.presets: () -> Symbol
+      def self.presets: () -> ::Hash[Symbol, Regexp]
 
-      def self.resolve_options: (Symbol options) -> Symbol
+      def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
     end
 
     # Float type. Coerces via +Kernel#Float+, which parses numeric strings
@@ -877,7 +876,7 @@ module FieldStruct
     # (String wins first); +of: [Integer, String]+ coerces "42" to 42.
     class Union < FieldStruct::Types::Base
       # _@param_ `member_types` — member instances, in priority order
-      def initialize: (Symbol member_types) -> void
+      def initialize: (::Array[Types::Base] member_types) -> void
 
       # _@param_ `value` — anything — each member type's coerce is tried in declared order; the first that doesn't raise wins
       # 
@@ -894,10 +893,10 @@ module FieldStruct
       # ruby_type is already an Array (like Boolean's
       # +[TrueClass, FalseClass]+) get spliced in; duplicates are
       # removed.
-      def ruby_type: () -> Symbol
+      def ruby_type: () -> ::Array[Class]
 
       # _@return_ — the configured member type instances
-      attr_reader member_types: Symbol
+      attr_reader member_types: ::Array[Types::Base]
     end
 
     # Value type. A no-coercion passthrough — whatever you give it comes
@@ -969,7 +968,7 @@ module FieldStruct
       # shape coercion failures.
       # 
       # _@param_ `value` — +nil+ → +nil+; an instance of {#struct_class} (or subclass) → passthrough; a +Hash+ → constructs via +struct_class.new(hash)+. Anything else raises TypeError.
-      def coerce: ((FieldStruct::Base | Symbol)? value) -> FieldStruct::Base?
+      def coerce: ((FieldStruct::Base | ::Hash[untyped, untyped])? value) -> FieldStruct::Base?
 
       # _@param_ `value`
       # 
@@ -1034,27 +1033,27 @@ module FieldStruct
     # +[TrueClass, FalseClass]+.
     class Boolean < FieldStruct::Types::Base
       # _@return_ — case-insensitive strings that coerce to true
-      def self.default_truthy: () -> Symbol
+      def self.default_truthy: () -> ::Array[String]
 
       # _@return_ — case-insensitive strings that coerce to false
-      def self.default_falsy: () -> Symbol
+      def self.default_falsy: () -> ::Array[String]
 
       # _@return_ — named presets for the +values:+ option
-      def self.presets: () -> Symbol
+      def self.presets: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
 
       # Resolve a Symbol +values:+ to its preset Hash at field-declaration
       # time. Pass-through for Hash form; raises for unknown preset names.
-      def self.resolve_options: (Symbol options) -> Symbol
+      def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
       # _@param_ `value` — accepts literal +true+/+false+; the integers +1+/+0+; or a String matched case-insensitively against the truthy/falsy vocabularies. Anything else raises ArgumentError.
       # 
       # _@param_ `values` — +{truthy: [...], falsy: [...]}+ custom vocabulary; +nil+ uses {.default_truthy} / {.default_falsy}
-      def coerce: ((bool | Integer | String)? value, ?values: Symbol?) -> bool?
+      def coerce: ((bool | Integer | String)? value, ?values: ::Hash[Symbol, ::Array[String]]?) -> bool?
 
       # _@return_ — +[TrueClass, FalseClass]+
-      def ruby_type: () -> Object
+      def ruby_type: () -> [Class, Class]
 
-      def truthy_and_falsy_for: (Object values) -> Object
+      def truthy_and_falsy_for: (untyped values) -> untyped
     end
 
     # Integer type. Coerces numerics and digit-strings via +Kernel#Integer+,
@@ -1084,9 +1083,9 @@ module FieldStruct
       def self.default_format: () -> String?
 
       # _@return_ — named presets for the +format:+ option
-      def self.presets: () -> Symbol
+      def self.presets: () -> ::Hash[Symbol, String]
 
-      def self.resolve_options: (Symbol options) -> Symbol
+      def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
       # _@param_ `value` — +nil+ → +nil+; a +String+ is parsed via +strptime+ when +format:+ is set, otherwise via +DateTime.parse+; anything responding to +to_datetime+ (Date, Time, etc.) is converted.
       # 
@@ -1147,7 +1146,7 @@ module FieldStruct
     # Symbol +format:+ values are looked up in the type's presets table;
     # String values pass through. Anything else raises ArgumentError.
     module TimeFormatResolver
-      def self.call: (Object options, Object presets) -> Object
+      def self.call: (untyped options, untyped presets) -> untyped
     end
   end
 
@@ -1164,7 +1163,7 @@ module FieldStruct
 
     def to_s: () -> String
 
-    def camel_to_snake: (Object str) -> Object
+    def camel_to_snake: (untyped str) -> untyped
 
     # _@return_ — the fully-qualified class name (or "" for anonymous classes)
     attr_reader name: String

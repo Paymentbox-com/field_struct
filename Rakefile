@@ -27,10 +27,17 @@ SORD_FIXUPS = [
 ].freeze
 
 def sord_run(target)
+  # Temporarily hide the committed sig file — YARD picks up sig/*.rbs as
+  # input, and the prior file's entries confuse Sord's parameter-matching
+  # for kwarg-heavy methods. Move it aside, run sord, restore.
+  stash = "#{SIG_FILE}.stashed-by-sord-rake"
+  stashed = File.exist?(SIG_FILE) && File.rename(SIG_FILE, stash) && true
   sh "bundle exec sord #{target} --rbs --no-sord-comments --skip-constants --replace-errors-with-untyped"
   contents = File.read(target)
   SORD_FIXUPS.each { |pattern, replacement| contents.gsub!(pattern, replacement) }
   File.write(target, contents)
+ensure
+  File.rename(stash, SIG_FILE) if stashed && File.exist?(stash)
 end
 
 namespace :sigs do

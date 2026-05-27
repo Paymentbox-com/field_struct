@@ -56,8 +56,7 @@ module FieldStruct
     # @param options [Hash{Symbol=>Object}] extra type/field options
     #   forwarded to coerce (e.g. +format:+, +of_type:+, +round:+,
     #   +values:+, +enum:+, +in:+)
-    def initialize(name:, type:, type_instance: nil, required: false, default: nil,
-                   coercion_policy: nil, description: nil, **options)
+    def initialize(name:, type:, type_instance: nil, required: false, default: nil, coercion_policy: nil, description: nil, **options)
       @name = name.to_sym
       @type = type
       @required = required

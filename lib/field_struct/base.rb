@@ -202,12 +202,30 @@ module FieldStruct
     # @param attrs [Hash{Symbol,String=>Object}] input values, by symbol or string key
     def initialize(attrs = {})
       @errors = Errors.new
-      reject_unknown_attributes!(attrs)
-      self.class.metadata.each do |field|
-        value = attrs.fetch(field.name) { attrs.fetch(field.name.to_s) { field.default } }
-        public_send(:"#{field.name}=", value)
-      end
+      apply_defaults
+      assign_attributes(attrs)
       @_initialized = true
+    end
+
+    # Bulk-update declared attributes from a hash. Routes each value
+    # through the same setter pipeline used everywhere else — so coercion,
+    # presence checks, and the +coercion_policy+ all run as normal.
+    #
+    # Respects {.unknown_attributes} on input and {.immutable?} on the
+    # setter side. The same method that powers {#initialize} is exposed
+    # here for callers that want to update many attributes at once.
+    #
+    # @param attrs [Hash{Symbol,String=>Object}]
+    # @return [self]
+    def assign_attributes(attrs)
+      reject_unknown_attributes!(attrs)
+      attrs.each do |key, value|
+        sym = key.to_sym
+        next unless self.class.metadata[sym]
+
+        public_send(:"#{sym}=", value)
+      end
+      self
     end
 
     # @return [Hash{Symbol=>Object}] a fresh hash of current attribute values
@@ -236,6 +254,12 @@ module FieldStruct
     end
 
     private
+
+    def apply_defaults
+      self.class.metadata.each do |field|
+        public_send(:"#{field.name}=", field.default)
+      end
+    end
 
     def reject_unknown_attributes!(attrs)
       return if self.class.unknown_attributes == :ignore

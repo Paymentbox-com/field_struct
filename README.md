@@ -135,6 +135,16 @@ Strict.new(age: 'abc')  # raises FieldStruct::CoercionError
 - `:replace`  — store `nil`, record the same error
 - `:raise`    — raise `FieldStruct::CoercionError` from the setter
 
+A single field can override the class-level policy via `coercion_policy:`:
+
+```ruby
+class Mixed < FieldStruct::Base
+  coercion_policy :keep_raw                       # class default
+  required :strict_id, :integer, coercion_policy: :raise
+  optional :lenient_count, :integer               # inherits :keep_raw
+end
+```
+
 ### `immutable!`
 
 Block reassignment after construction. Default mutable.

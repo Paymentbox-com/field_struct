@@ -174,6 +174,38 @@ module FieldStruct
         field(name, type_name, **options, required: false)
       end
 
+      # Declare an external-name mapping for a serialization format.
+      # The mapping reads internal-field-name (Symbol) on the left, the
+      # external name (String) on the right; it applies to both
+      # directions (import reverse-maps, export forward-maps).
+      #
+      #   serialize :json,
+      #             first_name: 'firstName',
+      #             last_name:  'lastName'
+      #
+      # Fields not listed in the mapping serialize under their canonical
+      # name (identity). Repeating +serialize :json, ...+ on the same
+      # class replaces the prior mapping (last-write-wins).
+      #
+      # All mapping keys must be declared fields at the moment +serialize+
+      # is called — declare fields first, then declare serializations.
+      # Mapping values are normalized to Strings.
+      #
+      # The +:json+ format ships in-gem (Phase B wires it into +to_json+ /
+      # +from_json+). Future formats (CSV, XML, etc.) will be supported
+      # by downstream gems reading the same metadata.
+      #
+      # @param name [Symbol, String] the format name
+      # @param mapping [Hash{Symbol=>String,Symbol}] internal → external
+      # @return [self]
+      # @raise [ArgumentError] when a mapping key is not a declared field
+      def serialize(name, **mapping)
+        validate_serialize_mapping!(name, mapping)
+        normalized = mapping.transform_values(&:to_s)
+        metadata.add_serialization(name, normalized)
+        self
+      end
+
       # Resolve a type name through the registry chain visible to this
       # class. Walks the containing modules of the class's name in
       # outermost-first order, looking for the nearest one that responds
@@ -286,6 +318,15 @@ module FieldStruct
 
         raise ArgumentError,
           "format: option only applies to string-shaped fields (string, immutable_string), not #{type_class}"
+      end
+
+      def validate_serialize_mapping!(name, mapping)
+        unknown = mapping.keys.reject { |key| metadata[key] }
+        return if unknown.empty?
+
+        raise ArgumentError,
+          "serialize :#{name} references undeclared field(s): #{unknown.map(&:inspect).join(", ")}. " \
+          'Declare fields before calling serialize.'
       end
 
       def validate_enum_option!(type_class, options)

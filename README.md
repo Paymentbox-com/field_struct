@@ -140,6 +140,51 @@ optional :created_at, :datetime, default: Time.method(:now)
 optional :token,      :string,   default: -> { "tok-#{SecureRandom.hex(4)}" }
 ```
 
+### Per-type field options
+
+Each type accepts a small set of customization options at the field level. Values can be literals or Symbol presets (resolved at class-load time against the type's `presets` Hash).
+
+```ruby
+class Order < FieldStruct::Base
+  required :total,        :decimal,  round: 2                  # round to 2 decimals
+  required :discount,     :float,    round: 4
+  required :paid,         :boolean,  values: :english_yes_no   # symbol preset
+  required :priority,     :boolean,  values: {truthy: %w[high urgent], falsy: %w[low normal]}
+  required :placed_at,    :datetime, format: :db               # '%Y-%m-%d %H:%M:%S'
+  required :ship_by,      :date,     format: '%m/%d/%Y'        # explicit strftime/strptime
+  required :customer_id,  :uuid,     format: :v4               # v4-only regex
+  required :contact,      :email,    format: :strict           # stricter regex preset
+end
+```
+
+What each type supports:
+
+| Type | Option | Form | Built-in presets |
+|---|---|---|---|
+| `:big_decimal` / `:decimal`, `:float` | `round:` | Integer | — |
+| `:boolean` | `values:` | `{truthy:, falsy:}` Hash, or Symbol | `:english_yes_no`, `:english`, `:numeric` |
+| `:date` | `format:` | strftime String, or Symbol | `:iso8601`, `:us`, `:eu` |
+| `:datetime`, `:time` | `format:` | strftime String, or Symbol | `:iso8601`, `:rfc2822`, `:db` |
+| `:email` | `format:` | Regexp, or Symbol | `:permissive`, `:default`, `:strict` |
+| `:uuid` | `format:` | Regexp, or Symbol | `:any_version`, `:v4`, `:v7` |
+| `:url` | `format:` | Regexp, or Symbol | `:http`, `:https_only`, `:any_scheme` |
+
+Time-shaped `format:` applies in **both** directions: input strings parse via `strptime`, output (`as_json` / `to_json`) emits via `strftime`. The round-trip property holds — `Klass.from_json(instance.to_json) == instance` for any format you pick.
+
+You can override the type's defaults class-wide by subclassing and overriding the relevant `default_*` or `presets` method, then registering the subclass:
+
+```ruby
+class USDate < FieldStruct::Types::Date
+  def self.default_format = '%m/%d/%Y'
+end
+
+module Acme
+  def self.field_types
+    @field_types ||= FieldStruct.new_registry { register :us_date, USDate }
+  end
+end
+```
+
 ### Restricting values — `enum:` and `in:`
 
 Two parallel options for "the coerced value must be one of these":

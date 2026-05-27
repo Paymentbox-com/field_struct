@@ -146,6 +146,7 @@ module FieldStruct
         type_instance ||= build_union_instance!(type_class, options) if type_class <= FieldStruct::Types::Union
         resolve_array_options!(type_class, options)
         apply_default_format!(type_class, options)
+        options = type_class.resolve_options(options)
         validate_format_option!(type_class, options)
         validate_enum_option!(type_class, options)
         validate_in_option!(type_class, options)
@@ -354,10 +355,18 @@ module FieldStruct
       def validate_format_option!(type_class, options)
         return unless options.key?(:format)
         return if type_class <= FieldStruct::Types::String
+        return if FORMAT_AWARE_TIME_TYPES.any? { |t| type_class <= t }
 
         raise ArgumentError,
-          "format: option only applies to string-shaped fields (string, immutable_string), not #{type_class}"
+          "format: option only applies to string-shaped fields or time-shaped fields, not #{type_class}"
       end
+
+      FORMAT_AWARE_TIME_TYPES = [
+        FieldStruct::Types::Date,
+        FieldStruct::Types::Time,
+        FieldStruct::Types::DateTime
+      ].freeze
+      private_constant :FORMAT_AWARE_TIME_TYPES
 
       def validate_serialize_mapping!(name, mapping)
         unknown = mapping.keys.reject { |key| metadata[key] }
@@ -592,7 +601,8 @@ module FieldStruct
       mapping = self.class.metadata.serialization(:json)
       attributes.each_with_object({}) do |(field_name, value), out|
         key = mapping.key?(field_name) ? mapping[field_name].to_sym : field_name
-        out[key] = json_value(value)
+        field = self.class.metadata[field_name]
+        out[key] = json_value(value, field&.options || {})
       end
     end
 
@@ -665,14 +675,16 @@ module FieldStruct
 
     private
 
-    def json_value(value)
+    def json_value(value, field_options = {})
       case value
       when nil, true, false, ::String, ::Integer, ::Float then value
       when ::Symbol then value.to_s
       when ::BigDecimal then value.to_s('F')
-      when ::DateTime, ::Date, ::Time then value.iso8601
-      when ::Array then value.map { |element| json_value(element) }
-      when ::Hash then value.transform_values { |v| json_value(v) }
+      when ::DateTime, ::Date, ::Time
+        fmt = field_options[:format]
+        fmt ? value.strftime(fmt) : value.iso8601
+      when ::Array then value.map { |element| json_value(element, field_options) }
+      when ::Hash then value.transform_values { |v| json_value(v, field_options) }
       when FieldStruct::Base then value.as_json
       else
         value.respond_to?(:as_json) ? value.as_json : value
@@ -716,7 +728,8 @@ module FieldStruct
     end
 
     def field_value_invalid?(field, value)
-      return true if field.options[:format] && !field.options[:format].match?(value)
+      fmt = field.options[:format]
+      return true if fmt.is_a?(::Regexp) && !fmt.match?(value)
       return true if field.options[:enum] && !field.options[:enum].include?(value)
       return true if field.options[:in] && !field.options[:in].include?(value)
 

@@ -459,6 +459,42 @@ Commits: `docs: add usage examples to README`, `chore: fill gemspec metadata`, `
 
 ---
 
+## Phase 2 — :binary and frozen! (in flight)
+
+### `:binary` extended type
+
+```ruby
+required :payload, :binary
+```
+
+A `Types::String` subclass that forces ASCII-8BIT encoding on the coerced value. Intended for raw bytes (file contents, BLOBs, etc.) where whitespace bytes are meaningful data — so `missing?` is nil-or-empty only, not "nil/empty/whitespace" like `:string`. Returns a fresh ASCII-8BIT-encoded copy so the source string isn't mutated.
+
+### `frozen!` class macro
+
+```ruby
+class Config < FieldStruct::Base
+  frozen!
+  required :api_key, :string
+end
+
+c = Config.new(api_key: 'sk-...')
+c.frozen?       # => true
+c.api_key = 'x' # => raises FrozenError
+```
+
+A one-way class macro (like `immutable!`) inherited by descendants. The instance is Ruby-frozen at the end of `initialize`; any subsequent ivar mutation raises `FrozenError`. Independent of `immutable!`:
+
+| Macro | Mechanism | Setter raises |
+|---|---|---|
+| `immutable!` | Custom @_initialized check in our setters | `FieldStruct::ImmutableError` |
+| `frozen!` | Ruby's `Object#freeze` after initialize | `FrozenError` |
+
+Both can stack on the same class — `immutable!`'s check fires first because it runs earlier in the setter pipeline.
+
+`as_json` / `to_h` / `to_json` / `valid?` all still work on a frozen instance: they mutate the internal `Errors` object (not the FieldStruct's ivars), which isn't frozen.
+
+---
+
 ## Phase 2 — Union types (in flight)
 
 ```ruby
@@ -694,8 +730,6 @@ Surfaced during design but explicitly deferred. Ordered roughly by likely value:
 1. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
 2. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
 3. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
-4. **`:binary` type** — if anyone asks.
-5. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
 
 ---
 

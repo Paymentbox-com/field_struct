@@ -13,6 +13,8 @@ require_relative 'field_struct/types/time'
 require_relative 'field_struct/types/datetime'
 require_relative 'field_struct/types/value'
 require_relative 'field_struct/registry'
+require_relative 'field_struct/field'
+require_relative 'field_struct/metadata'
 
 module FieldStruct
   class Error < StandardError; end

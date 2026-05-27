@@ -453,6 +453,20 @@ u.to_model         # self
 u == other         # structural equality (class + attributes)
 ```
 
+## Type signatures
+
+The gem ships with RBS signatures at `sig/field_struct.rbs`, generated from YARD comments via [Sord](https://github.com/AaronC81/sord). Downstream code using Solargraph, Steep, or other RBS-aware tools gets type info for the public surface for free.
+
+```bash
+bundle exec rake sigs:generate   # regenerate from current YARD
+bundle exec rake sigs:validate   # parse-check the committed sig file
+bundle exec rake sigs:check      # CI guard: error if sigs are stale
+```
+
+The generated file is committed to git. Improve YARD when you want to improve the sig — don't edit `sig/field_struct.rbs` by hand. Run `rake sigs:check` before pushing if you changed any YARD.
+
+The deferred custom Metadata→RBS generator (per [D13](docs/origin/plan.md)) is for **user-defined** FieldStruct subclasses (walking their `metadata` to emit signatures for declared accessors). Sord covers the **library** classes only.
+
 ## Development
 
 ```bash

@@ -1,4 +1,1181 @@
 module FieldStruct
-  VERSION: String
-  # See the writing guide of rbs: https://github.com/ruby/rbs#guides
+  # Build a new {Registry}, parented to +parent+ (defaults to
+  # {FieldStruct.types}), and optionally configure it with a block
+  # evaluated in the new registry's instance scope.
+  # 
+  #   module Acme
+  #     def self.field_types
+  #       @field_types ||= FieldStruct.new_registry do
+  #         register :money, Acme::Types::Money
+  #       end
+  #     end
+  #   end
+  # 
+  # Equivalent to the longhand:
+  # 
+  #   FieldStruct::Registry.new(FieldStruct.types).tap do |r|
+  #     r.register :money, Acme::Types::Money
+  #   end
+  # 
+  # Pass +parent: nil+ for an unparented registry (no fallback chain).
+  # 
+  # _@param_ `parent` — the parent registry; defaults to {FieldStruct.types}. Pass +nil+ explicitly for no parent.
+  def self.new_registry: (?Registry? parent) -> Registry
+
+  # The base type registry, seeded with every v1 scalar type and the
+  # +:decimal+ alias for +:big_decimal+. Namespace registries should be
+  # built with this as their parent (see {Registry}).
+  def self.types: () -> Registry
+
+  # Superclass for FieldStruct value classes.
+  # 
+  #   class User < FieldStruct::Base
+  #     field :name, :string
+  #     field :age,  :integer
+  #   end
+  # 
+  #   u = User.new(name: 'Alice', age: '30')
+  #   u.name        # => 'Alice'
+  #   u.age         # => 30   (coerced from the string)
+  #   u.attributes  # => { name: 'Alice', age: 30 }
+  # 
+  # Phase 1 wires up the +field+ macro, getter/setter accessors with
+  # coercion via the resolved type, +initialize+ from a hash, +attributes+
+  # / +attribute_names+, and metadata inheritance via the +inherited+
+  # hook. Macros and validation layer on in later slices.
+  class Base
+    # _@return_ — the per-class field collection (memoized)
+    def self.metadata: () -> Metadata
+
+    # Mark this class (and its descendants) immutable. Setters called
+    # after {#initialize} completes raise {ImmutableError}. One-way
+    # switch: there is no companion +mutable!+ macro in Phase 1.
+    def self.immutable!: () -> bool
+
+    # _@return_ — whether this class is marked immutable
+    # (locally or via an ancestor)
+    def self.immutable?: () -> bool
+
+    # Mark this class (and its descendants) frozen-on-construct.
+    # Instances will be Ruby-frozen at the end of {#initialize} —
+    # any subsequent attempt to mutate ivars raises +FrozenError+.
+    # 
+    # Independent of {#immutable!}. +immutable!+ blocks our setters
+    # with a custom error; +frozen!+ engages Ruby's frozen-state
+    # mechanism, which also locks the instance against any other
+    # ivar mutation. Pick the one that matches the level of
+    # strictness you need (or stack both).
+    def self.frozen!: () -> bool
+
+    # _@return_ — whether instances of this class are frozen at
+    # the end of {#initialize} (locally or via an ancestor)
+    def self.frozen_on_construct?: () -> bool
+
+    # Class macro: get or set the policy used by the setter pipeline
+    # when a value can't be coerced into a field's declared type.
+    # 
+    #   coercion_policy :keep_raw   # default — store raw, add error
+    #   coercion_policy :replace    # store nil,  add error
+    #   coercion_policy :raise      # raise CoercionError
+    # 
+    # Inherited by subclasses; descendants can override. Default on
+    # Base itself is +:keep_raw+.
+    # 
+    # _@param_ `value` — policy to set; omit to read
+    # 
+    # _@return_ — the resolved policy
+    def self.coercion_policy: (?Symbol value) -> Symbol
+
+    # Class macro: get or set how {Base#initialize} responds to input
+    # keys that do not match any declared field.
+    # 
+    #   unknown_attributes :ignore   # default — silently drop them
+    #   unknown_attributes :raise    # raise UnknownAttributeError
+    # 
+    # Inherited by subclasses; descendants can override.
+    # 
+    # _@param_ `value` — policy to set; omit to read
+    # 
+    # _@return_ — the resolved policy
+    def self.unknown_attributes: (?Symbol value) -> Symbol
+
+    # _@return_ — declared field names in insertion order
+    def self.attribute_names: () -> Symbol
+
+    # Declare a field. Resolves +type_arg+ — a registered symbol or a
+    # {FieldStruct::Base} subclass — into a type class (and, for
+    # parameterized types like {Types::Nested}, a pre-built instance),
+    # builds a {Field}, adds it to the class's {Metadata}, and defines
+    # the getter/setter pair.
+    # 
+    # _@param_ `name` — canonical field name
+    # 
+    # _@param_ `type_arg` — a registered name in the resolving registry, OR a +Types::Base+ subclass, OR a +FieldStruct::Base+ subclass (auto-wrapped in {Types::Nested})
+    # 
+    # _@param_ `options` — +required:+ (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol), plus type-specific options (e.g. +format:+, +round:+, +of:+, +values:+, +enum:+, +in:+) — see each type's +coerce+ for the options it consumes
+    # 
+    # _@return_ — the field that was added
+    def self.field: ((Symbol | String) name, (Symbol | untyped) type_arg, **Symbol options) -> Field
+
+    # Sugar for {#field} with +required: true+.
+    # 
+    # _@param_ `name`
+    # 
+    # _@param_ `type_name`
+    # 
+    # _@param_ `options`
+    def self.required: ((Symbol | String) name, (Symbol | untyped) type_name, **Symbol options) -> Field
+
+    # Sugar for {#field} with +required: false+ (the default).
+    # 
+    # _@param_ `name`
+    # 
+    # _@param_ `type_name`
+    # 
+    # _@param_ `options`
+    def self.optional: ((Symbol | String) name, (Symbol | untyped) type_name, **Symbol options) -> Field
+
+    # Declare an external-name mapping for a serialization format.
+    # The mapping reads internal-field-name (Symbol) on the left, the
+    # external name (String) on the right; it applies to both
+    # directions (import reverse-maps, export forward-maps).
+    # 
+    #   serialize :json,
+    #             first_name: 'firstName',
+    #             last_name:  'lastName'
+    # 
+    # Fields not listed in the mapping serialize under their canonical
+    # name (identity). Repeating +serialize :json, ...+ on the same
+    # class replaces the prior mapping (last-write-wins).
+    # 
+    # All mapping keys must be declared fields at the moment +serialize+
+    # is called — declare fields first, then declare serializations.
+    # Mapping values are normalized to Strings.
+    # 
+    # The +:json+ format ships in-gem (Phase B wires it into +to_json+ /
+    # +from_json+). Future formats (CSV, XML, etc.) will be supported
+    # by downstream gems reading the same metadata.
+    # 
+    # _@param_ `name` — the format name (e.g. +:json+)
+    # 
+    # _@param_ `mapping` — internal field name → external key. Symbol values are normalized to Strings.
+    def self.serialize: ((Symbol | String) name, **Symbol mapping) -> self
+
+    # Resolve a type name through the registry chain visible to this
+    # class. Walks the containing modules of the class's name in
+    # outermost-first order, looking for the nearest one that responds
+    # to +field_types+. Falls back to {FieldStruct.types}.
+    # 
+    # _@param_ `type_name`
+    # 
+    # _@return_ — a Types::Base subclass
+    def self.resolve_type: (Symbol type_name) -> Class
+
+    # Resolve the second positional argument of {#field}.
+    # 
+    # _@param_ `type_arg`
+    # 
+    # _@return_ — +[type_class, type_instance]+ —
+    # +type_instance+ is +nil+ for stock symbolic types (Field will
+    # call +type_class.new+ itself); for nested-class args (and for
+    # symbol args that resolve to a FieldStruct::Base subclass) it's
+    # a pre-built {Types::Nested} instance.
+    def self.resolve_type_arg: ((Symbol | Class) type_arg) -> Object
+
+    # _@return_ — an ActiveModel::Name-shaped value for this class
+    def self.model_name: () -> ModelName
+
+    # Parse a JSON string and build an instance.
+    # 
+    #   Person.from_json('{"name":"Alice","address":{"street":"1","city":"NYC"}}')
+    #   # => #<Person name: "Alice", address: #<Address ...>>
+    # 
+    # The parsed hash is fed through {#initialize} like any other input,
+    # so the full setter pipeline runs: coercion (strings re-coerce to
+    # Date/Time/BigDecimal), nested Hash → Types::Nested instantiation,
+    # +unknown_attributes+ policy, +coercion_policy+. Invalid JSON
+    # surfaces the underlying Oj parse error; a non-object root
+    # (+[...]+, +"hi"+, +42+) raises +ArgumentError+.
+    # 
+    # _@param_ `json_string`
+    def self.from_json: (String json_string) -> Base
+
+    # Walk a parsed JSON hash (string-keyed, possibly with external
+    # names) and reverse-map every key to its canonical Symbol via
+    # +metadata.serialization(:json)+. Recurses into nested
+    # FieldStruct values and arrays of nested. Unmapped keys are
+    # converted to Symbols and passed through — they'll be handled
+    # by +new+'s +unknown_attributes+ check.
+    # 
+    # _@param_ `hash` — parsed JSON object
+    # 
+    # _@return_ — canonical-keyed input ready for +.new+
+    def self.canonicalize_serialized_hash: (Symbol hash) -> Symbol
+
+    def self.canonicalize_serialized_value: (Object value, Object field) -> Object
+
+    def self.namespace_field_types: () -> Object
+
+    def self.resolve_array_options: (Object type_class, Object options) -> Object
+
+    def self.build_union_instance: (Object type_class, Object options) -> Object
+
+    def self.apply_default_format: (Object type_class, Object options) -> Object
+
+    # Pull +description:+ (canonical) or +desc:+ (alias) out of the
+    # field-declaration options. Raises if both are given — pick one.
+    # 
+    # _@param_ `options` — mutated in place (keys deleted)
+    def self.extract_description!: (Symbol options) -> String?
+
+    def self.validate_format_option!: (Object type_class, Object options) -> Object
+
+    def self.validate_serialize_mapping!: (Object name, Object mapping) -> Object
+
+    def self.validate_enum_option!: (Object type_class, Object options) -> Object
+
+    def self.validate_in_option!: (Object type_class, Object options) -> Object
+
+    def self.string_like_type?: (Object type_class) -> bool
+
+    def self.rangy_type?: (Object type_class) -> bool
+
+    def self.validate_coercion_policy_override!: (Object value) -> Object
+
+    def self.define_field_accessors: (Object field) -> Object
+
+    # _@return_ — the registered cross-field validators
+    # for this class. Each entry is a callable that takes the
+    # record. Subclasses start with a +dup+ of the parent's list at
+    # inheritance time and accumulate their own.
+    def self.validators: () -> Symbol
+
+    # Declare a cross-field validator.
+    # 
+    #   class Schedule < FieldStruct::Base
+    #     required :start_date, :date
+    #     required :end_date,   :date
+    # 
+    #     validate :ensure_chronological
+    #     validate do |record|
+    #       record.errors.add(:base, '...') if record.something_else?
+    #     end
+    # 
+    #     def ensure_chronological
+    #       return unless start_date && end_date
+    # 
+    #       errors.add(:base, 'end_date must not precede start_date') if start_date > end_date
+    #     end
+    #   end
+    # 
+    # Multiple symbols can be passed in a single call. Method-symbol
+    # and block forms are interchangeable — the symbol form is sugar
+    # for +validate { |r| r.send(:name) }+. Validators run on every
+    # call to {#valid?}, in declaration order, after per-field
+    # validation.
+    # 
+    # Per convention, validators add errors via
+    # +record.errors.add(:base, '...')+ — +errors[:base]+ is cleared
+    # at the start of each {#valid?} run, so prior cross-field errors
+    # don't pile up. Adding to a field-specific key bypasses that
+    # auto-clearing; the user is then responsible for clearing those
+    # entries.
+    # 
+    # _@param_ `method_names` — zero or more instance method names to invoke on each record at +valid?+ time
+    def self.validate: (*Symbol method_names) -> void
+
+    def self.inherited: (Object subclass) -> Object
+
+    # _@param_ `attrs` — input values, by symbol or string key
+    def initialize: (?Symbol attrs) -> void
+
+    # Bulk-update declared attributes from a hash. Routes each value
+    # through the same setter pipeline used everywhere else — so coercion,
+    # presence checks, and the +coercion_policy+ all run as normal.
+    # 
+    # Respects {.unknown_attributes} on input and {.immutable?} on the
+    # setter side. Keys must match declared field names. For data arriving
+    # in an external naming convention, see {Base.serialize} and
+    # {Base.from_json}.
+    # 
+    # _@param_ `attrs`
+    def assign_attributes: (Symbol attrs) -> self
+
+    # _@return_ — a fresh hash of current attribute values
+    # 
+    # _@return_ — a fresh hash of current attribute values
+    # keyed by canonical field name. For format-aware export (with the
+    # declared +:json+ mapping applied), see {#as_json} / {#to_json}.
+    def attributes: () -> Symbol
+
+    def attribute_names: () -> ::Array[Symbol]
+
+    # _@return_ — the per-instance error collection
+    def errors: () -> Errors
+
+    # Run the class's cross-field validators (if any), then report
+    # whether the record has any errors.
+    # 
+    # Each call clears +errors[:base]+ before running validators, so
+    # cross-field errors don't accumulate across calls. Field-level
+    # errors written by setters are NOT cleared by +valid?+ — Phase 1's
+    # "setter owns its field's errors" contract is preserved.
+    # 
+    # For classes that declare no +validate+ blocks, +valid?+ stays a
+    # cheap +errors.empty?+ read.
+    def valid?: () -> bool
+
+    # _@return_ — true when {#valid?} is false
+    def invalid?: () -> bool
+
+    # Structural equality: same class AND same {#attributes}. Errors are
+    # ignored — equality is about value, not validity.
+    # 
+    # _@param_ `other`
+    def ==: (Object other) -> bool
+
+    # _@return_ — consistent with {#==} so instances work as Hash
+    # keys and Set members
+    def hash: () -> Integer
+
+    # _@return_ — alias of {#attributes}
+    def to_h: () -> Symbol
+
+    # _@param_ `_options` — unused — accepted for ActiveSupport-style symmetry
+    # 
+    # _@return_ — a JSON-ready hash with the
+    # +:json+ serialize mapping applied. Date/Time/DateTime convert
+    # to ISO-8601 strings, BigDecimal to its plain-form string,
+    # Symbol to String. Arrays recurse. Nested FieldStructs walk
+    # through their own +as_json+, applying their own mapping.
+    def as_json: (?Object? _options) -> Symbol
+
+    # _@param_ `_options` — unused — accepted for ActiveSupport-style symmetry
+    # 
+    # _@return_ — JSON representation, via Oj
+    def to_json: (?Object? _options) -> String
+
+    # _@return_ — +#<ClassName field: value, ...>+
+    def inspect: () -> String
+
+    def model_name: () -> ModelName
+
+    # _@return_ — for ActiveModel-shaped helpers that call .to_model
+    def to_model: () -> self
+
+    # Ruby pattern-matching hash protocol. Returns the declared field
+    # values keyed by canonical name, sliced down to +keys+ if the
+    # pattern asked for specific ones.
+    # 
+    #   case user
+    #   in { name: 'Alice', age: }
+    #     ...
+    #   in { name: String => name }
+    #     ...
+    #   end
+    # 
+    # Nested FieldStruct values respond to the same protocol, so deep
+    # patterns (+{ address: { city: 'NYC' } }+) work without extra code.
+    # Aliases (per the field-name aliases feature) do *not* participate;
+    # pattern matching uses canonical names, the same as Ruby-side
+    # accessors.
+    # 
+    # _@param_ `keys` — keys the pattern requested, or +nil+ for the +**rest+ pattern (every declared field)
+    def deconstruct_keys: (Symbol? keys) -> Symbol
+
+    # Ruby pattern-matching array protocol. Returns the declared field
+    # values in declaration order — useful for positional unpacking of
+    # small POROs whose field order is meaningful.
+    # 
+    #   class Point < FieldStruct::Base
+    #     required :x, :integer
+    #     required :y, :integer
+    #   end
+    # 
+    #   case point
+    #   in [x, y]
+    #     Math.hypot(x, y)
+    #   end
+    def deconstruct: () -> Symbol
+
+    def json_value: (Object value, ?Object field_options) -> Object
+
+    def apply_defaults: () -> Object
+
+    def run_cross_field_validators: () -> Object
+
+    def reject_unknown_attributes!: (Object attrs) -> Object
+
+    def validate_field: (Object field, Object value) -> Object
+
+    def field_value_invalid?: (Object field, Object value) -> bool
+
+    def nested_invalid?: (Object value) -> bool
+
+    def apply_coercion_policy: (Object field, Object raw_value, Object error) -> Object
+
+    def record_coercion_failure: (Object field, Object stored_value, Object error) -> Object
+  end
+
+  # Base class for every error FieldStruct raises. Catch this to handle
+  # any library error generically.
+  class Error < StandardError
+  end
+
+  # Raised by the setter pipeline when a value cannot be coerced into a
+  # field's declared type and the class's +coercion_policy+ is +:raise+.
+  # 
+  # Carries the field name and the original underlying error for callers
+  # that want to inspect what happened.
+  class CoercionError < FieldStruct::Error
+    # _@param_ `message`
+    # 
+    # _@param_ `field_name`
+    # 
+    # _@param_ `original`
+    def initialize: (String message, ?field_name: Symbol?, ?original: StandardError?) -> void
+
+    # _@return_ — the field whose setter triggered the failure
+    attr_reader field_name: Symbol?
+
+    # _@return_ — the underlying error from the type's coerce
+    attr_reader original: StandardError?
+  end
+
+  # Raised when a field setter on a class marked +immutable!+ is called
+  # after construction.
+  class ImmutableError < FieldStruct::Error
+  end
+
+  # Raised by {Base#initialize} / {Base#assign_attributes} when the input
+  # hash includes a key that is not a declared field on the class and
+  # the +unknown_attributes+ policy is +:raise+.
+  class UnknownAttributeError < FieldStruct::Error
+    # _@param_ `message`
+    # 
+    # _@param_ `keys`
+    def initialize: (String message, ?keys: Symbol) -> void
+
+    # _@return_ — the offending keys
+    attr_reader keys: Symbol
+  end
+
+  # A single declared attribute on a FieldStruct class.
+  # 
+  # Holds the field's name, the resolved type class, whether it's
+  # required, an optional default, and any remaining keyword options
+  # (e.g. +format:+). Frozen after construction — the DSL is expected
+  # to build a fresh Field rather than mutate one.
+  class Field
+    # _@param_ `name` — canonical field name
+    # 
+    # _@param_ `type` — the resolved type class
+    # 
+    # _@param_ `type_instance` — optional pre-built instance — used by the DSL for parameterized types (e.g. {Types::Nested}) where +type.new+ wouldn't be enough to capture the parameterization. When nil, +type.new+ is called.
+    # 
+    # _@param_ `required`
+    # 
+    # _@param_ `default` — literal default value, or a parameterless callable (Proc/Lambda/Method) that returns one. Callables are invoked once per instance during apply_defaults.
+    # 
+    # _@param_ `coercion_policy` — override the class-level coercion policy for this one field; +nil+ means "use whatever the class says"
+    # 
+    # _@param_ `description` — human-readable description of the field; for documentation purposes only
+    # 
+    # _@param_ `options` — extra type/field options forwarded to coerce (e.g. +format:+, +of_type:+, +round:+, +values:+, +enum:+, +in:+)
+    def initialize: (
+                      name: untyped,
+                      _type: untyped,
+                      ?type_instance: untyped,
+                      ?required: untyped,
+                      ?default: untyped,
+                      ?coercion_policy: untyped,
+                      ?description: untyped,
+                      **untyped options
+                    ) -> void
+
+    def required?: () -> bool
+
+    # _@return_ — canonical field name
+    attr_reader name: Symbol
+
+    # _@return_ — the resolved type class
+    attr_reader type: Object
+
+    # _@return_ — the configured default value, or a
+    # parameterless callable returning one, or +nil+ if no default
+    attr_reader default: (Object | untyped)?
+
+    # _@return_ — frozen, holds the remaining keyword
+    # options forwarded to {Types::Base#coerce} (e.g. +:format+,
+    # +:round+, +:values+, +:of_type+, +:enum+, +:in+)
+    attr_reader options: Symbol
+
+    # _@return_ — an eagerly-built instance of {#type}, reused by
+    # the setter pipeline so we don't allocate a fresh type per coercion
+    attr_reader type_instance: Types::Base
+
+    # _@return_ — this field's coercion-
+    # failure policy override, or +nil+ to defer to the class-level
+    # setting on {Base.coercion_policy}.
+    attr_reader coercion_policy: Symbol?
+
+    # _@return_ — human-readable description of the field;
+    # intended for downstream documentation generators. Not part of
+    # the data surface — does not appear in +attributes+ / +as_json+ /
+    # pattern matches.
+    attr_reader description: String?
+  end
+
+  # Per-instance collection of validation messages, keyed by field name.
+  # 
+  # Shaped after ActiveModel::Errors but reuses none of its code. Each
+  # FieldStruct instance gets its own Errors object; the setter pipeline
+  # clears and rewrites a field's entry on every assignment.
+  class Errors
+    def initialize: () -> void
+
+    # _@param_ `field_name`
+    # 
+    # _@return_ — messages for the field, or an empty array
+    def []: ((Symbol | String) field_name) -> Symbol
+
+    # _@param_ `field_name`
+    # 
+    # _@param_ `message`
+    # 
+    # _@return_ — the field's updated message list
+    def add: ((Symbol | String) field_name, String message) -> Symbol
+
+    # Drop every message for a field.
+    # 
+    # _@param_ `field_name`
+    def clear: ((Symbol | String) field_name) -> void
+
+    # _@return_ — true when no field has any messages
+    def empty?: () -> bool
+
+    # _@return_ — snapshot of field → messages,
+    # skipping fields with empty message lists
+    def to_h: () -> Symbol
+  end
+
+  # The per-class collection of {Field} declarations.
+  # 
+  # Mutable while a class is being defined — the DSL adds fields as it
+  # encounters them — and queried thereafter by name or via iteration.
+  # Subclass inheritance is handled by {#merge}: a fresh child Metadata
+  # is seeded with the parent's fields, then accumulates its own; child
+  # declarations win on conflict.
+  class Metadata
+    include Enumerable[Field]
+    include ::Enumerable[Field]
+
+    def initialize: () -> void
+
+    # _@param_ `field`
+    def add: (Field field) -> self
+
+    # _@param_ `name`
+    def []: ((Symbol | String) name) -> Field?
+
+    # _@return_ — field names in insertion order
+    def names: () -> Symbol
+
+    # Yields each {Field} in insertion order.
+    # 
+    # _@return_ — when no block is given
+    def each: () -> void
+
+    # Record a serialization mapping for the named format. Repeats on
+    # the same format name replace the prior mapping (last-write-wins).
+    # The mapping is frozen on its way in.
+    # 
+    # _@param_ `name`
+    # 
+    # _@param_ `mapping`
+    def add_serialization: ((Symbol | String) name, Symbol mapping) -> self
+
+    # Look up the mapping for a format. Returns an empty hash when the
+    # format hasn't been declared — the implicit identity mapping that
+    # serializers fall back to.
+    # 
+    # _@param_ `name`
+    # 
+    # _@return_ — frozen mapping (empty hash when undeclared)
+    def serialization: ((Symbol | String) name) -> Symbol
+
+    # Copy fields and serializations from +parent+ into self, leaving
+    # already-declared entries untouched (child wins). Order: existing
+    # self fields stay where they are; parent fields are appended in
+    # iteration order if not present.
+    # 
+    # _@param_ `parent`
+    def merge: (Metadata parent) -> self
+
+    # _@return_ — declared
+    # external-name mappings keyed by format name. Each inner hash
+    # maps an internal field name (Symbol) to its external name
+    # (String). Fields not listed in an inner hash serialize under
+    # their canonical name.
+    attr_reader serializations: Symbol
+  end
+
+  # Name → type-class map with optional parent fallback.
+  # 
+  # Holds the resolution table that maps symbolic type names (`:string`,
+  # `:integer`, …) to the {Types} classes that implement them. A namespace
+  # can build its own registry parented to the base ({FieldStruct.types})
+  # to extend or override the default set without mutating it.
+  class Registry
+    # _@param_ `parent` — the registry to fall back to when a name isn't found locally
+    def initialize: (?Registry? parent) -> void
+
+    # Register a type class — or an alias to an already-registered name.
+    # 
+    #   registry.register(:integer, MyInteger)        # type class
+    #   registry.register(:decimal, :big_decimal)     # alias (resolved now)
+    # 
+    # Aliases are eagerly resolved through {#lookup}, so the alias target
+    # must already be registered (locally or in a parent). A later
+    # registration of the same name overwrites silently — this is the
+    # mechanism that lets a namespace registry shadow a parent's type.
+    # 
+    # _@param_ `name` — the name to register
+    # 
+    # _@param_ `target` — a type class, or an existing registered name
+    def register: ((Symbol | String) name, (Class | Symbol) target) -> self
+
+    # Resolve a name to its type class, walking the parent chain.
+    # 
+    # _@param_ `name`
+    # 
+    # _@return_ — the type class
+    def lookup: ((Symbol | String) name) -> Class
+
+    # Whether the name resolves to anything (locally or via the parent chain).
+    # 
+    # _@param_ `name`
+    def key?: ((Symbol | String) name) -> bool
+
+    # _@return_ — the parent registry, or +nil+ for an unparented one
+    attr_reader parent: Registry?
+  end
+
+  module Types
+    # URL type — a {Types::String} that pre-fills the field's +format:+
+    # option with a practical http(s) URL pattern. Same shape as
+    # {Types::UUID}: bad-format input is a Phase 1 validation error,
+    # not a coercion failure.
+    # 
+    # The default pattern matches +http://+ and +https://+ URLs with a
+    # non-empty host. It is intentionally pragmatic, not RFC 3986
+    # exhaustive — users can override via +format: /.../+ if they need
+    # different schemes or stricter host rules.
+    class URL < FieldStruct::Types::String
+      # _@return_ — practical http(s) pattern; override per-field via +format:+
+      def self.default_format: () -> Regexp
+
+      # _@return_ — named presets for +format:+
+      def self.presets: () -> Symbol
+
+      def self.resolve_options: (Symbol options) -> Symbol
+    end
+
+    # Abstract base for all FieldStruct type classes.
+    # 
+    # Subclasses must implement {#coerce} and {#ruby_type}. They may override
+    # {#missing?} when their notion of "missing" is broader than nil-only
+    # (e.g. strings consider empty/whitespace missing, arrays consider empty
+    # missing).
+    class Base
+      # Resolve symbolic preset references on the per-field options hash
+      # at field-declaration time. Default implementation passes options
+      # through unchanged; concrete types override to interpret their
+      # own options (e.g. +format: :iso8601+ → strftime string).
+      # 
+      # _@param_ `options` — the per-field options hash, as written by the user
+      # 
+      # _@return_ — possibly-modified options to store on the Field
+      def self.resolve_options: (Symbol options) -> Symbol
+
+      # Coerce an input value into the type's domain.
+      # 
+      # The contract here is intentionally loose — subclasses override with
+      # explicit kwargs for the options they consume (e.g. +format:+ for
+      # Date, +round:+ for Float, +of_type:+ for Array), plus a trailing
+      # +**+ catch-all so a call site that splats +field.options+ can pass
+      # keys that some types ignore. See each subclass's +coerce+ for the
+      # exact accepted options.
+      # 
+      # _@param_ `value` — raw input — each subclass narrows this to the inputs it actually accepts
+      # 
+      # _@return_ — the coerced value
+      def coerce: (Object value) -> Object
+
+      # Whether the given value should be treated as "missing" for the purpose
+      # of presence checks. The default is nil-only; subclasses override for
+      # emptier notions.
+      # 
+      # _@param_ `value`
+      def missing?: (Object value) -> bool
+
+      # The native Ruby class a coerced value will be an instance of.
+      # Used by the (deferred) RBS generator and for introspection.
+      def ruby_type: () -> Class
+    end
+
+    # Date type. Returns Date as-is, converts DateTime/Time/anything that
+    # responds to +to_date+ down to a plain Date, and otherwise parses
+    # +Date.parse(value.to_s)+ — which raises +ArgumentError+ on garbage.
+    # 
+    # Per-field +format:+ option (String or Symbol-preset) controls both
+    # parsing (strptime when input is a String) and serialization
+    # (strftime when emitting via +as_json+ / +to_json+). When no format
+    # is set, the type uses +Date.parse+ for input and ISO-8601 for output.
+    class Date < FieldStruct::Types::Base
+      # _@return_ — field-level strftime/strptime format; +nil+
+      # leaves the type using ISO-8601 in/out
+      def self.default_format: () -> String?
+
+      # _@return_ — named presets for the +format:+ option
+      def self.presets: () -> Symbol
+
+      def self.resolve_options: (Symbol options) -> Symbol
+
+      # _@param_ `value` — +nil+ → +nil+; a +Date+ passes through; anything responding to +to_date+ (DateTime, Time, ActiveSupport's TimeWithZone, etc.) is converted; a String is parsed via +strptime+ if a +format:+ is set, otherwise +Date.parse+. Anything else falls through to +Date.parse(value.to_s)+ — which raises ArgumentError.
+      # 
+      # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
+      def coerce: ((Date | untyped | String)? value, ?format: String?) -> Date?
+
+      # _@return_ — the top-level +::Date+ class
+      def ruby_type: () -> Class
+    end
+
+    # Time type. Returns Time as-is, converts Date/DateTime via +to_time+,
+    # and parses anything stringy via +Time.parse+ — which raises
+    # +ArgumentError+ on garbage.
+    # 
+    # Per-field +format:+ option (String or Symbol-preset) controls both
+    # parsing (strptime when input is a String) and serialization
+    # (strftime via +as_json+).
+    class Time < FieldStruct::Types::Base
+      def self.default_format: () -> String?
+
+      # _@return_ — named presets for the +format:+ option
+      def self.presets: () -> Symbol
+
+      def self.resolve_options: (Symbol options) -> Symbol
+
+      # _@param_ `value` — +nil+ → +nil+; a +String+ is parsed via +strptime+ when +format:+ is set, otherwise via +Time.parse+; anything responding to +to_time+ (Date, DateTime, etc.) is converted.
+      # 
+      # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
+      def coerce: ((Time | untyped | String)? value, ?format: String?) -> Time?
+
+      # _@return_ — the top-level +::Time+ class
+      def ruby_type: () -> Class
+    end
+
+    # UUID type — a {Types::String} that pre-fills the field's +format:+
+    # option with a canonical RFC-4122 pattern. Bad-format input becomes
+    # a Phase 1-style validation error (+"is invalid"+); coercion itself
+    # still just hands back the string.
+    # 
+    # Users can override the pattern by passing +format: /.../+ on the
+    # field declaration.
+    class UUID < FieldStruct::Types::String
+      # Hex-digit-only canonical RFC-4122 form. Permits any version.
+      # 
+      # _@return_ — applied at the field level when no +format:+ is given
+      def self.default_format: () -> Regexp
+
+      # _@return_ — named presets for +format:+
+      def self.presets: () -> Symbol
+
+      def self.resolve_options: (Symbol options) -> Symbol
+    end
+
+    # Array type. Coerces each element through the registered element
+    # type named by the +:of+ DSL option (resolved at field-declaration
+    # time and stashed as +options[:of_type]+ — a class, not a symbol).
+    # 
+    # Missing: +nil+ or empty array. ruby_type: +::Array+.
+    class Array < FieldStruct::Types::Base
+      # _@param_ `value` — anything else raises TypeError
+      # 
+      # _@param_ `of_type` — the element type — a Types::Base subclass for stock types, or an already-built instance for parameterized types like {Types::Nested}. The DSL stashes this when the user writes +of: :string+ / +of: SomeStruct+. Required at the type level; nil here means the type was called directly without DSL help.
+      def coerce: (Symbol? value, ?of_type: (Class | Types::Base)?) -> Symbol?
+
+      # _@param_ `value`
+      # 
+      # _@return_ — +true+ when +nil+ or empty
+      def missing?: (Object value) -> bool
+
+      # _@return_ — the top-level +::Array+ class
+      def ruby_type: () -> Class
+
+      # +of_type+ may be either a Types::Base subclass (the DSL form for
+      # stock types like +:string+) or an already-built Types::Base
+      # instance (the DSL form for parameterized types like
+      # {Types::Nested}). Both produce a single cached instance per
+      # configured element type.
+      def element_type_for: (Object type_or_instance) -> Object
+    end
+
+    # Email type — a {Types::String} that pre-fills the field's +format:+
+    # option with a pragmatic email pattern. Same shape as
+    # {Types::UUID} / {Types::URL}: bad-format input is a validation
+    # error, not a coercion failure.
+    # 
+    # The default pattern is deliberately not RFC 5322 strict — those
+    # regexes are unwieldy and reject real-world addresses. It checks
+    # +local@domain.tld+ shape with no internal whitespace or extra +@+
+    # characters; users can override via +format: /.../+ for stricter
+    # rules.
+    class Email < FieldStruct::Types::String
+      # _@return_ — pragmatic +local@domain.tld+ shape, no internal
+      # whitespace or extra +@+; deliberately not RFC 5322 strict.
+      # Override per-field via +format:+ (Regexp or Symbol preset).
+      def self.default_format: () -> Regexp
+
+      # _@return_ — named presets for +format:+
+      def self.presets: () -> Symbol
+
+      def self.resolve_options: (Symbol options) -> Symbol
+    end
+
+    # Float type. Coerces via +Kernel#Float+, which parses numeric strings
+    # strictly and rejects anything non-numeric.
+    class Float < FieldStruct::Types::Base
+      # _@return_ — field-level rounding precision; +nil+ disables.
+      def self.default_round: () -> Integer?
+
+      # _@param_ `value` — +nil+ → +nil+; everything else flows through +Kernel#Float+ — strict on string parsing, rejects non-numeric strings, Symbols, Booleans, Arrays.
+      # 
+      # _@param_ `round` — decimal places; +nil+ leaves the value unrounded
+      # 
+      # _@return_ — +nil+ for +nil+ input, otherwise the parsed float
+      def coerce: ((Numeric | String)? value, ?round: Integer?) -> Float?
+
+      # _@return_ — the top-level +::Float+ class
+      def ruby_type: () -> Class
+    end
+
+    # Union type — a value that may be any of several types. Each
+    # member is tried in declared order; the first one whose +coerce+
+    # doesn't raise wins. Member-coercion errors are caught broadly
+    # (ArgumentError, TypeError, FieldStruct::Error) so a member's
+    # rejection lets the next member have a try; unrelated bugs (e.g.
+    # +NoMethodError+) still propagate.
+    # 
+    #   optional :payload, :union, of: [Payload, :boolean]
+    # 
+    # If every member rejects the value, the union raises a +TypeError+
+    # which the parent's +coercion_policy+ handles like any
+    # shape-level coercion failure.
+    # 
+    # Order matters: +of: [String, Integer]+ coerces "42" to "42"
+    # (String wins first); +of: [Integer, String]+ coerces "42" to 42.
+    class Union < FieldStruct::Types::Base
+      # _@param_ `member_types` — member instances, in priority order
+      def initialize: (Symbol member_types) -> void
+
+      # _@param_ `value` — anything — each member type's coerce is tried in declared order; the first that doesn't raise wins
+      # 
+      # _@return_ — whatever the first successful member returns
+      def coerce: (Object? value) -> Object?
+
+      # _@param_ `value`
+      # 
+      # _@return_ — true only for nil — union doesn't try to
+      # collectively reason about "missing" across its members
+      def missing?: (Object value) -> bool
+
+      # Flat list of member +ruby_type+ values. Members whose
+      # ruby_type is already an Array (like Boolean's
+      # +[TrueClass, FalseClass]+) get spliced in; duplicates are
+      # removed.
+      def ruby_type: () -> Symbol
+
+      # _@return_ — the configured member type instances
+      attr_reader member_types: Symbol
+    end
+
+    # Value type. A no-coercion passthrough — whatever you give it comes
+    # back unchanged. Useful as an escape hatch when you want a field
+    # declaration to participate in metadata without committing to a
+    # specific shape.
+    class Value < FieldStruct::Types::Base
+      # _@param_ `value` — anything — passthrough, no coercion
+      # 
+      # _@return_ — the value, unchanged
+      def coerce: (Object value) -> Object
+
+      # _@return_ — +Object+ — the broadest sensible class
+      def ruby_type: () -> Class
+    end
+
+    # Binary type — coerces input to a String and forces +ASCII-8BIT+
+    # encoding. Intended for raw bytes (file contents, BLOBs, etc.)
+    # where whitespace bytes (+\x20+, +\n+, etc.) are meaningful data,
+    # not "missing" content.
+    # 
+    # +missing?+ is therefore +nil+-or-empty only — unlike
+    # {Types::String} which treats whitespace-only as missing.
+    class Binary < FieldStruct::Types::String
+      # _@param_ `value` — anything stringable; +nil+ stays +nil+
+      # 
+      # _@return_ — +nil+ when input is +nil+, otherwise a
+      # fresh ASCII-8BIT-encoded copy of +value.to_s+
+      def coerce: (_ToS? value) -> String?
+
+      # Missing if nil or empty. Whitespace bytes are meaningful in
+      # binary data, so they don't count as missing.
+      # 
+      # _@param_ `value`
+      def missing?: (Object value) -> bool
+    end
+
+    # Type wrapper for nested FieldStruct fields.
+    # 
+    #   class Address < FieldStruct::Base
+    #     required :street, :string
+    #     required :city,   :string
+    #   end
+    # 
+    #   class Person < FieldStruct::Base
+    #     required :address, Address
+    #   end
+    # 
+    # Built and held per-Field by the DSL when it sees a class argument
+    # that descends from {FieldStruct::Base}. Each instance is
+    # parameterized by its target +struct_class+; instances are not
+    # interchangeable across different nested classes.
+    class Nested < FieldStruct::Types::Base
+      # _@param_ `struct_class` — a FieldStruct::Base subclass
+      def initialize: (Class struct_class) -> void
+
+      # Coerce input into a {#struct_class} instance.
+      # 
+      # - +nil+ → +nil+
+      # - already a {#struct_class} (or subclass) instance → passthrough
+      # - +Hash+ → +struct_class.new(hash)+
+      # - anything else → +TypeError+ (which the parent's coercion_policy
+      #   handles like any shape-level coercion failure)
+      # 
+      # Errors raised inside +struct_class.new+ (e.g.
+      # {UnknownAttributeError}, {CoercionError}) propagate to the caller
+      # rather than being caught by the parent's policy — those are
+      # structural rejections of the nested record's input, not parent-
+      # shape coercion failures.
+      # 
+      # _@param_ `value` — +nil+ → +nil+; an instance of {#struct_class} (or subclass) → passthrough; a +Hash+ → constructs via +struct_class.new(hash)+. Anything else raises TypeError.
+      def coerce: ((FieldStruct::Base | Symbol)? value) -> FieldStruct::Base?
+
+      # _@param_ `value`
+      # 
+      # _@return_ — true only when value is nil — an instance with
+      # all required fields missing is not "missing" here, it is just
+      # invalid. Invalidity is surfaced by the parent's validate_field.
+      def missing?: (Object value) -> bool
+
+      # _@return_ — the +struct_class+ itself, so introspection sees
+      # the actual nested type rather than a generic FieldStruct::Base
+      def ruby_type: () -> Class
+
+      # _@return_ — the FieldStruct::Base subclass this type wraps
+      attr_reader struct_class: Class
+    end
+
+    # String type. Coerces any non-nil value via +to_s+; treats nil, empty,
+    # and whitespace-only strings as missing.
+    class String < FieldStruct::Types::Base
+      # _@param_ `value` — anything stringable (everything in Ruby responds to +to_s+); +nil+ stays +nil+
+      # 
+      # _@return_ — +nil+ when input is +nil+, otherwise +value.to_s+
+      def coerce: (_ToS? value) -> String?
+
+      # Missing if nil, empty, or whitespace-only.
+      # 
+      # _@param_ `value`
+      def missing?: (Object value) -> bool
+
+      # _@return_ — the top-level +::String+ class
+      def ruby_type: () -> Class
+    end
+
+    # Symbol type. Accepts an existing +Symbol+ or a +String+. Anything else
+    # raises +TypeError+, which the parent's +coercion_policy+ handles.
+    # 
+    # Empty symbols (+:""+) are unusual; like other scalar non-string types,
+    # +missing?+ is nil-only — an empty symbol counts as present.
+    class Symbol < FieldStruct::Types::Base
+      # _@param_ `value` — anything else raises TypeError
+      def coerce: ((Symbol | String)? value) -> Symbol?
+
+      # _@return_ — the top-level +::Symbol+ class
+      def ruby_type: () -> Class
+    end
+
+    # Boolean type. Accepts the literal +true+/+false+, the strings
+    # "true"/"false" (case-insensitive), and the integers/strings 1/0.
+    # Anything else raises +ArgumentError+.
+    # 
+    # Per-field +values:+ option customizes the truthy/falsy vocabulary:
+    # 
+    #   required :active, :boolean, values: {truthy: %w[on yes y],
+    #                                        falsy:  %w[off no n]}
+    #   required :flag,   :boolean, values: :english_yes_no
+    # 
+    # Hash form takes +:truthy+ and +:falsy+ Arrays of strings (matched
+    # case-insensitively). Symbol form names a built-in preset; see
+    # {.presets} for the available names.
+    # 
+    # Ruby has no Boolean class, so {#ruby_type} returns the pair
+    # +[TrueClass, FalseClass]+.
+    class Boolean < FieldStruct::Types::Base
+      # _@return_ — case-insensitive strings that coerce to true
+      def self.default_truthy: () -> Symbol
+
+      # _@return_ — case-insensitive strings that coerce to false
+      def self.default_falsy: () -> Symbol
+
+      # _@return_ — named presets for the +values:+ option
+      def self.presets: () -> Symbol
+
+      # Resolve a Symbol +values:+ to its preset Hash at field-declaration
+      # time. Pass-through for Hash form; raises for unknown preset names.
+      def self.resolve_options: (Symbol options) -> Symbol
+
+      # _@param_ `value` — accepts literal +true+/+false+; the integers +1+/+0+; or a String matched case-insensitively against the truthy/falsy vocabularies. Anything else raises ArgumentError.
+      # 
+      # _@param_ `values` — +{truthy: [...], falsy: [...]}+ custom vocabulary; +nil+ uses {.default_truthy} / {.default_falsy}
+      def coerce: ((bool | Integer | String)? value, ?values: Symbol?) -> bool?
+
+      # _@return_ — +[TrueClass, FalseClass]+
+      def ruby_type: () -> Object
+
+      def truthy_and_falsy_for: (Object values) -> Object
+    end
+
+    # Integer type. Coerces numerics and digit-strings via +Kernel#Integer+,
+    # so float-shaped strings like "3.14" deliberately raise rather than
+    # silently truncate. Float numerics, by contrast, are truncated — that
+    # matches +Kernel#Integer+'s own behavior on numeric input.
+    class Integer < FieldStruct::Types::Base
+      # _@param_ `value` — +nil+ → +nil+; +Integer+ passes through; everything else flows through +Kernel#Integer+ — Floats are truncated, digit-strings parse, float-shaped strings ("3.14") and non-digit strings raise ArgumentError, Symbols/Booleans/Arrays raise TypeError.
+      # 
+      # _@return_ — +nil+ for +nil+ input, otherwise the parsed integer
+      def coerce: ((Integer | Numeric | String)? value) -> Integer?
+
+      # _@return_ — the top-level +::Integer+ class
+      def ruby_type: () -> Class
+    end
+
+    # DateTime type. Uses +to_datetime+ for anything that responds (Date,
+    # Time, DateTime itself), and otherwise parses via +DateTime.parse+,
+    # which raises +ArgumentError+ on garbage.
+    # 
+    # Per-field +format:+ option (String or Symbol-preset) controls both
+    # parsing (strptime when input is a String) and serialization
+    # (strftime via +as_json+).
+    class DateTime < FieldStruct::Types::Base
+      # _@return_ — field-level strftime/strptime format; +nil+
+      # leaves the type using ISO-8601 in/out
+      def self.default_format: () -> String?
+
+      # _@return_ — named presets for the +format:+ option
+      def self.presets: () -> Symbol
+
+      def self.resolve_options: (Symbol options) -> Symbol
+
+      # _@param_ `value` — +nil+ → +nil+; a +String+ is parsed via +strptime+ when +format:+ is set, otherwise via +DateTime.parse+; anything responding to +to_datetime+ (Date, Time, etc.) is converted.
+      # 
+      # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
+      def coerce: ((DateTime | untyped | String)? value, ?format: String?) -> DateTime?
+
+      # _@return_ — the top-level +::DateTime+ class
+      def ruby_type: () -> Class
+    end
+
+    # BigDecimal type. Accepts a {::BigDecimal}, +Integer+, +Float+, or a
+    # numeric string. Float input is converted with +Float::DIG+ precision
+    # to avoid the bare +BigDecimal(Float)+ "can't omit precision" error.
+    class BigDecimal < FieldStruct::Types::Base
+      # _@return_ — the field-level rounding precision, or +nil+
+      # for no rounding. Subclasses override.
+      def self.default_round: () -> Integer?
+
+      # _@param_ `value` — +nil+ → +nil+; a +BigDecimal+ passes through; +Float+ uses +Float::DIG+ precision; everything else goes through +Kernel.BigDecimal(value.to_s)+ — non-numeric strings raise ArgumentError.
+      # 
+      # _@param_ `round` — decimal places; +nil+ leaves the value unrounded
+      def coerce: ((BigDecimal | Numeric | String)? value, ?round: Integer?) -> BigDecimal?
+
+      # _@return_ — the top-level +::BigDecimal+ class
+      def ruby_type: () -> Class
+    end
+
+    # Generic preset resolution for a single named option on a single
+    # type. Symbol values are looked up in the supplied presets hash;
+    # anything else passes through. Unknown preset names raise
+    # +ArgumentError+ at field-declaration time.
+    # 
+    # Used by string-shaped types (Email/UUID/URL) for +format:+ and by
+    # time-shaped types (Date/Time/DateTime) via {TimeFormatResolver}
+    # (which adds a stricter set of allowed value types).
+    module PresetResolver
+      def self.call: (
+                       untyped options,
+                       untyped key,
+                       untyped presets,
+                       label: untyped
+                     ) -> untyped
+    end
+
+    # Like {Types::String}, but the coerced value is frozen. Useful when
+    # downstream code must not mutate a stored string.
+    class ImmutableString < FieldStruct::Types::String
+      # _@param_ `value` — anything stringable; +nil+ stays +nil+
+      # 
+      # _@return_ — frozen string, or +nil+ if input is +nil+
+      def coerce: (_ToS? value) -> String?
+    end
+
+    # Shared +format:+ option resolution for {Date}/{Time}/{DateTime}.
+    # Each of those types calls +TimeFormatResolver.call(options, presets)+
+    # from its +resolve_options+ class method.
+    # 
+    # Symbol +format:+ values are looked up in the type's presets table;
+    # String values pass through. Anything else raises ArgumentError.
+    module TimeFormatResolver
+      def self.call: (Object options, Object presets) -> Object
+    end
+  end
+
+  # Minimal ActiveModel::Name-shaped value for {Base.model_name}.
+  # 
+  # We mirror only what Rails-adjacent callers commonly reach for:
+  # +name+, +singular+, +plural+, +element+, and string coercion.
+  # No ActiveModel code is reused; pluralization is naive +s+-suffix
+  # English. If a richer Name is needed, a downstream gem can build on
+  # this without changing the surface.
+  class ModelName
+    # _@param_ `class_name`
+    def initialize: (String? class_name) -> void
+
+    def to_s: () -> String
+
+    def camel_to_snake: (Object str) -> Object
+
+    # _@return_ — the fully-qualified class name (or "" for anonymous classes)
+    attr_reader name: String
+
+    # _@return_ — last segment, snake_case (e.g. "user_account")
+    attr_reader singular: String
+
+    # _@return_ — naive +s+-suffixed plural of {#singular}
+    attr_reader plural: String
+
+    # _@return_ — same as {#singular} (the AM convention for last segment)
+    attr_reader element: String
+  end
 end

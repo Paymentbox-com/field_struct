@@ -1,0 +1,21 @@
+/.bundle/
+/.yardoc
+/_yardoc/
+/coverage/
+/doc/
+/pkg/
+/spec/reports/
+/tmp/
+
+# rspec failure tracking
+.rspec_status
+
+# Allows local overriding of mise.toml
+# see: https://mise.jdx.dev/configuration.html#mise-toml
+/mise.local.toml
+
+# IDEA
+.idea/
+
+# Scrap files
+/scrap

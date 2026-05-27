@@ -98,15 +98,16 @@ module FieldStruct
     #
     # @return [String]
     def inspect
-      return '#<FieldStruct::Metadata empty>' if @fields.empty?
+      return "#<#{FieldStruct.inspect_namespace}::Metadata empty>" if @fields.empty?
 
       parts = ["fields=#{@fields.keys.inspect}"]
       parts << "serializations=#{@serializations.keys.inspect}" unless @serializations.empty?
-      "#<FieldStruct::Metadata #{parts.join(" ")}>"
+      "#<#{FieldStruct.inspect_namespace}::Metadata #{parts.join(" ")}>"
     end
 
     # Multi-line representation suitable for IRB / pp. Renders each
-    # field on its own indented line using {Field#inspect}.
+    # field on its own indented line using {Field#inspect}, with the
+    # closing +>+ on its own line.
     #
     # @param pp [Object] a PP-shaped sink (responds to +#text+)
     # @return [void]
@@ -116,13 +117,13 @@ module FieldStruct
         return
       end
 
-      pp.text('#<FieldStruct::Metadata')
+      pp.text("#<#{FieldStruct.inspect_namespace}::Metadata")
       @fields.each_value do |field|
         pp.text("\n  ")
         pp.text(field.inspect)
       end
       pp.text("\n  serializations=#{@serializations.keys.inspect}") unless @serializations.empty?
-      pp.text('>')
+      pp.text("\n>")
     end
   end
 end

@@ -68,7 +68,7 @@ module FieldStruct
     def inspect
       parts = ["types=#{@types.keys.inspect}"]
       parts << 'parent' if @parent
-      "#<FieldStruct::Registry #{parts.join(" ")}>"
+      "#<#{FieldStruct.inspect_namespace}::Registry #{parts.join(" ")}>"
     end
   end
 end

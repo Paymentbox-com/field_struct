@@ -27,6 +27,30 @@ module FieldStruct
   # built with this as their parent (see {Registry}).
   def self.types: () -> Registry
 
+  # Opt-in short alias for the +FieldStruct+ module.
+  # 
+  # Defines a top-level constant (default: +FS+) that points back to
+  # +FieldStruct+, *and* swaps the prefix used by every +#inspect+
+  # method in the library so IRB output reads with the short name too:
+  # 
+  #   FieldStruct.use_alias!
+  #   FS::Base                 # => FieldStruct::Base
+  #   User.metadata.inspect    # => "#<FS::Metadata fields=[...]>"
+  # 
+  # Off by default — the user has to ask for it. Idempotent. If the
+  # chosen constant is already defined to something other than
+  # FieldStruct, raises +NameError+ rather than clobbering.
+  # 
+  # _@param_ `name` — the top-level constant to define (default +:FS+)
+  # 
+  # _@return_ — for chaining
+  def self.use_alias!: (?Symbol name) -> self
+
+  # The current prefix that library +#inspect+ methods should render.
+  # Defaults to +"FieldStruct"+; flipped to the alias string (e.g.
+  # +"FS"+) by {.use_alias!}.
+  def self.inspect_namespace: () -> String
+
   # Superclass for FieldStruct value classes.
   # 
   #   class User < FieldStruct::Base
@@ -641,7 +665,8 @@ module FieldStruct
     def inspect: () -> String
 
     # Multi-line representation suitable for IRB / pp. Renders each
-    # field on its own indented line using {Field#inspect}.
+    # field on its own indented line using {Field#inspect}, with the
+    # closing +>+ on its own line.
     # 
     # _@param_ `pp` — a PP-shaped sink (responds to +#text+)
     def pretty_print: (Object pp) -> void

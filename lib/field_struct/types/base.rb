@@ -63,7 +63,9 @@ module FieldStruct
       #
       # @return [String]
       def inspect
-        "#<#{self.class.name || "AnonymousType"}>"
+        full = self.class.name || 'AnonymousType'
+        prefixed = full.sub(/\AFieldStruct\b/, FieldStruct.inspect_namespace)
+        "#<#{prefixed}>"
       end
 
       # @param pp [Object] a PP-shaped sink (responds to +#text+)

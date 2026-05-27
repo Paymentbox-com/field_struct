@@ -67,7 +67,7 @@ module FieldStruct
       # @return [String]
       def inspect
         members = @member_types.map { |m| m.class.name.to_s.split('::').last }.join(' | ')
-        "#<FieldStruct::Types::Union of=#{members}>"
+        "#<#{FieldStruct.inspect_namespace}::Types::Union of=#{members}>"
       end
     end
   end

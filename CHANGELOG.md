@@ -36,6 +36,24 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - **`field` / `required` / `optional` now return the class `Metadata`** instead of the just-added `Field`. The Field is still available as `metadata[name]`. This makes IRB DSL output show the running set of declared fields rather than just the last one, and feeds the new Metadata pretty-print directly. No FieldStruct internals depended on the previous return value.
 
+### Added
+
+- **`FieldStruct.use_alias!`** — opt-in shortcut that defines a top-level constant (default `FS`) pointing back at `FieldStruct`, *and* swaps the prefix used by every `#inspect` method in the library so output reads with the short name too. Off by default. Raises `NameError` if the chosen constant is already taken by something else.
+
+  ```ruby
+  FieldStruct.use_alias!
+  FS::Base              # => FieldStruct::Base
+  User.metadata
+  # => #<FS::Metadata
+  #      #<FS::Field :name String required>
+  #      #<FS::Field :age Integer>
+  #    >
+  ```
+
+### Changed (continued)
+
+- **`Metadata#pretty_print` closes `>` on its own line** so multi-field metadata reads as a tidy block rather than trailing the last field.
+
 ## [0.5.3] - 2026-05-27
 
 Sord-generated RBS signatures.

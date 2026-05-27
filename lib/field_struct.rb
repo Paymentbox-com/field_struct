@@ -90,4 +90,44 @@ module FieldStruct
       r.register :binary, Types::Binary
     end
   end
+
+  # Opt-in short alias for the +FieldStruct+ module.
+  #
+  # Defines a top-level constant (default: +FS+) that points back to
+  # +FieldStruct+, *and* swaps the prefix used by every +#inspect+
+  # method in the library so IRB output reads with the short name too:
+  #
+  #   FieldStruct.use_alias!
+  #   FS::Base                 # => FieldStruct::Base
+  #   User.metadata.inspect    # => "#<FS::Metadata fields=[...]>"
+  #
+  # Off by default — the user has to ask for it. Idempotent. If the
+  # chosen constant is already defined to something other than
+  # FieldStruct, raises +NameError+ rather than clobbering.
+  #
+  # @param name [Symbol] the top-level constant to define (default +:FS+)
+  # @return [self] for chaining
+  # @raise [NameError] when the constant already points at something else
+  def self.use_alias!(name = :FS)
+    sym = name.to_sym
+    if Object.const_defined?(sym, false)
+      existing = Object.const_get(sym)
+      unless existing.equal?(self)
+        raise ::NameError, "::#{sym} is already defined (#{existing.inspect}); not aliasing FieldStruct"
+      end
+    else
+      Object.const_set(sym, self)
+    end
+    @short_alias = sym.to_s
+    self
+  end
+
+  # The current prefix that library +#inspect+ methods should render.
+  # Defaults to +"FieldStruct"+; flipped to the alias string (e.g.
+  # +"FS"+) by {.use_alias!}.
+  #
+  # @return [String]
+  def self.inspect_namespace
+    @short_alias || 'FieldStruct'
+  end
 end

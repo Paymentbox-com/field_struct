@@ -9,6 +9,17 @@ module FieldStruct
     # (e.g. strings consider empty/whitespace missing, arrays consider empty
     # missing).
     class Base
+      # Resolve symbolic preset references on the per-field options hash
+      # at field-declaration time. Default implementation passes options
+      # through unchanged; concrete types override to interpret their
+      # own options (e.g. +format: :iso8601+ → strftime string).
+      #
+      # @param options [Hash] the per-field options hash, as written by the user
+      # @return [Hash] possibly-modified options to store on the Field
+      def self.resolve_options(options)
+        options
+      end
+
       # Coerce an input value into the type's domain.
       #
       # @param value [Object] raw input

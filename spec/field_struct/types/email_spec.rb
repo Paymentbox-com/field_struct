@@ -29,7 +29,7 @@ RSpec.describe FieldStruct::Types::Email do
     end
 
     it 'auto-populates the field options with default_format' do
-      expect(klass.metadata[:contact].options[:format]).to eq(described_class::DEFAULT_FORMAT)
+      expect(klass.metadata[:contact].options[:format]).to eq(described_class.default_format)
     end
 
     it 'accepts a valid email' do

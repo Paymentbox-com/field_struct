@@ -612,6 +612,29 @@ optional :id,      :union, of: %i[integer string]
 
 **U5. Declaration-time guards.** `of:` is required, must be an `Array`, must have at least two members.
 
+### Type-level field options + presets
+
+Each type can expose per-field options that customize its coercion behavior. Sane defaults live in class methods that subclasses can override; option values can be literals (e.g. an Integer round level, a Regexp, a strftime String) or Symbol presets resolved against a per-type presets table.
+
+**T1. Defaults as methods.** Type-level constants (`DEFAULT_FORMAT`, `TRUTHY_STRINGS`, `FALSEY_STRINGS`) are gone. Each type exposes a `default_<option>` class method; subclasses override the method to change behavior — no double source of truth between method and constant.
+
+**T2. `resolve_options` seam.** Types::Base provides `resolve_options(options)` as a no-op. Types that want symbol presets override it; `Base.field` calls it once at declaration time so the stored options on Field are already concrete (no preset symbols leak into Type#coerce).
+
+**T3. `round:` on `:big_decimal` / `:decimal` / `:float`.** Integer that controls `.round(n)` after coercion. `nil` (default) means no rounding.
+
+**T4. `values:` on `:boolean`.** Hash form `{truthy: [...], falsy: [...]}` or Symbol preset. Built-in presets: `:english_yes_no`, `:english`, `:numeric`. Subclasses can override `default_truthy` / `default_falsy` directly for a different class-level default.
+
+**T5. `format:` on `:date` / `:datetime` / `:time`.** String (strftime/strptime) or Symbol preset. Built-in presets: `:iso8601`, `:rfc2822`, `:db`, plus type-specific `:us` / `:eu` for `:date`. Used both for parsing (strptime on String input) and serializing (strftime in `as_json`). When no format is set, falls back to ISO-8601 in/out.
+
+**T6. `format:` presets on `:email` / `:uuid` / `:url`.** The existing Regexp `format:` now also accepts a Symbol preset. Built-ins:
+- `:email` — `:permissive`, `:default`, `:strict`
+- `:uuid` — `:any_version`, `:v4`, `:v7`
+- `:url` — `:http`, `:https_only`, `:any_scheme`
+
+**T7. Reuse of the `format:` key across type families.** String-shaped types (`:string`, `:immutable_string`, `:uuid`, `:url`, `:email`) interpret `format:` as a Regexp validator. Time-shaped types (`:date`, `:time`, `:datetime`) interpret it as a strftime/strptime string. `validate_format_option!` loosened to permit both families; non-format-aware types still raise.
+
+**T8. Per-type presets as a Hash class method.** Each type that supports presets exposes `presets` returning `{name => value}`. Subclasses can override or merge. Two small helpers — `Types::PresetResolver` (generic) and `Types::TimeFormatResolver` (stricter type checks for the time family) — handle the Symbol→value resolution.
+
 ### Serialization formats (S1–S7)
 
 Aliases are an import/export concern, not part of the native FS. A class declares format-specific mappings via the `serialize` macro; the mapping lives on `Metadata` alongside the fields. Native FS values stay canonical; only the serializers consult the mapping.

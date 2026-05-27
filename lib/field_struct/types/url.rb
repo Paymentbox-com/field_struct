@@ -14,11 +14,22 @@ module FieldStruct
     # exhaustive — users can override via +format: /.../+ if they need
     # different schemes or stricter host rules.
     class URL < FieldStruct::Types::String
-      DEFAULT_FORMAT = %r{\Ahttps?://[^\s/$.?#][^\s]*\z}i
-
-      # @return [Regexp]
+      # @return [Regexp] practical http(s) pattern; override per-field via +format:+
       def self.default_format
-        DEFAULT_FORMAT
+        %r{\Ahttps?://[^\s/$.?#][^\s]*\z}i
+      end
+
+      # @return [Hash{Symbol=>Regexp}] named presets for +format:+
+      def self.presets
+        {
+          http: default_format,
+          https_only: %r{\Ahttps://[^\s/$.?#][^\s]*\z}i,
+          any_scheme: %r{\A[a-z][a-z0-9+\-.]*://[^\s/$.?#][^\s]*\z}i
+        }
+      end
+
+      def self.resolve_options(options)
+        PresetResolver.call(options, :format, presets, label: ':url format')
       end
     end
   end

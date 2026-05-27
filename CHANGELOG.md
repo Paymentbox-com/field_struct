@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-27
+
+Per-type field options + presets.
+
+### Added
+
+- **`round:` option on `:big_decimal` / `:decimal` / `:float`** — Integer that controls `.round(n)` after coercion.
+- **`values:` option on `:boolean`** — Hash `{truthy: [...], falsy: [...]}` for explicit vocabularies, or a Symbol preset. Built-in presets: `:english_yes_no`, `:english`, `:numeric`.
+- **`format:` option on `:date` / `:datetime` / `:time`** — strftime/strptime String (or Symbol preset), applied in both directions: input strings parse via `strptime`, output via `strftime`. Built-in presets: `:iso8601`, `:rfc2822`, `:db`, plus `:us` / `:eu` for `:date`.
+- **`format:` Symbol-preset support on `:email` / `:uuid` / `:url`** — the existing Regexp option now also accepts named presets. `:email` → `:permissive`/`:default`/`:strict`; `:uuid` → `:any_version`/`:v4`/`:v7`; `:url` → `:http`/`:https_only`/`:any_scheme`.
+- **`Types::Base.resolve_options(options)` hook** — a per-type seam for resolving Symbol presets at field-declaration time. Pass-through by default; subclasses override to interpret their own options.
+- **`Types::PresetResolver`** and **`Types::TimeFormatResolver`** — small helpers used by the built-in types; downstream type subclasses can reuse them.
+
+### Changed
+
+- **`DEFAULT_FORMAT` / `TRUTHY_STRINGS` / `FALSEY_STRINGS` constants removed.** The defaults live on class methods (`default_format`, `default_truthy`, `default_falsy`) so subclasses can override with a one-line method instead of redeclaring a constant. Existing callers that reach for `Types::UUID::DEFAULT_FORMAT` etc. must call `Types::UUID.default_format` instead.
+- **`format:` validator loosened** — previously restricted to string-shaped types. Time-shaped types (`:date`, `:time`, `:datetime`) are now also format-aware (with strftime/strptime semantics). Non-format-aware types still raise.
+
 ## [0.4.0] - 2026-05-27
 
 Serialization-formats redesign. Aliases are no longer a per-field

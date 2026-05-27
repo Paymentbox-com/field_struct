@@ -15,11 +15,24 @@ module FieldStruct
     # characters; users can override via +format: /.../+ for stricter
     # rules.
     class Email < FieldStruct::Types::String
-      DEFAULT_FORMAT = /\A[^@\s]+@[^@\s]+\.[^@\s]+\z/
-
-      # @return [Regexp]
+      # @return [Regexp] pragmatic +local@domain.tld+ shape, no internal
+      #   whitespace or extra +@+; deliberately not RFC 5322 strict.
+      #   Override per-field via +format:+ (Regexp or Symbol preset).
       def self.default_format
-        DEFAULT_FORMAT
+        /\A[^@\s]+@[^@\s]+\.[^@\s]+\z/
+      end
+
+      # @return [Hash{Symbol=>Regexp}] named presets for +format:+
+      def self.presets
+        {
+          permissive: /\A[^@\s]+@[^@\s]+\z/,
+          default: default_format,
+          strict: /\A[\w.+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+\z/
+        }
+      end
+
+      def self.resolve_options(options)
+        PresetResolver.call(options, :format, presets, label: ':email format')
       end
     end
   end

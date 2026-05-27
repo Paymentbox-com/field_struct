@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
+require 'oj'
 require_relative 'field_struct/version'
 require_relative 'field_struct/error'
+require_relative 'field_struct/model_name'
 require_relative 'field_struct/types/base'
 require_relative 'field_struct/types/string'
 require_relative 'field_struct/types/immutable_string'

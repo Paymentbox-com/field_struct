@@ -148,6 +148,11 @@ module FieldStruct
         registry.lookup(type_name)
       end
 
+      # @return [ModelName] an ActiveModel::Name-shaped value for this class
+      def model_name
+        @model_name ||= ModelName.new(name)
+      end
+
       private
 
       def namespace_field_types
@@ -269,7 +274,54 @@ module FieldStruct
       [self.class, attributes].hash
     end
 
+    # @return [Hash{Symbol=>Object}] alias of {#attributes}
+    def to_h
+      attributes
+    end
+
+    # @param _options [Object] unused — accepted for ActiveSupport-style symmetry
+    # @return [Hash{Symbol=>Object}] a JSON-ready hash. Date/Time/DateTime
+    #   convert to ISO-8601 strings, BigDecimal to its plain-form string,
+    #   Symbol to String. Arrays recurse.
+    def as_json(_options = nil)
+      attributes.transform_values { |value| json_value(value) }
+    end
+
+    # @return [String] JSON representation, via Oj
+    def to_json(_options = nil)
+      Oj.dump(as_json, mode: :compat)
+    end
+
+    # @return [String] +#<ClassName field: value, ...>+
+    def inspect
+      pairs = attributes.map { |name, value| "#{name}: #{value.inspect}" }.join(', ')
+      "#<#{self.class.name || "AnonymousFieldStruct"} #{pairs}>"
+    end
+
+    # @return [ModelName]
+    def model_name
+      self.class.model_name
+    end
+
+    # @return [self] for ActiveModel-shaped helpers that call .to_model
+    def to_model
+      self
+    end
+
     private
+
+    def json_value(value)
+      case value
+      when nil, true, false, ::String, ::Integer, ::Float then value
+      when ::Symbol then value.to_s
+      when ::BigDecimal then value.to_s('F')
+      when ::DateTime, ::Date, ::Time then value.iso8601
+      when ::Array then value.map { |element| json_value(element) }
+      when ::Hash then value.transform_values { |v| json_value(v) }
+      else
+        value.respond_to?(:as_json) ? value.as_json : value
+      end
+    end
 
     def apply_defaults
       self.class.metadata.each do |field|

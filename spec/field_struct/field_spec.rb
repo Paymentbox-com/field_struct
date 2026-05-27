@@ -48,5 +48,10 @@ RSpec.describe FieldStruct::Field do
       field = described_class.new(name: :email, type: type_class, format: /@/)
       expect(field.options).to be_frozen
     end
+
+    it 'eagerly builds a type instance for the setter pipeline' do
+      field = described_class.new(name: :first_name, type: type_class)
+      expect(field.type_instance).to be_a(type_class)
+    end
   end
 end

@@ -20,6 +20,10 @@ module FieldStruct
     # @return [Hash] frozen, holds the remaining keyword options
     attr_reader :options
 
+    # @return [Types::Base] an eagerly-built instance of {#type}, reused by
+    #   the setter pipeline so we don't allocate a fresh type per coercion
+    attr_reader :type_instance
+
     # @param name [Symbol, String]
     # @param type [Class] a Types::Base subclass (already resolved from a symbol)
     # @param required [Boolean]
@@ -31,6 +35,7 @@ module FieldStruct
       @required = required
       @default = default
       @options = options.freeze
+      @type_instance = type.new
       freeze
     end
 

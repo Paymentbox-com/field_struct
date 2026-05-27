@@ -40,9 +40,16 @@ module FieldStruct
 
       private
 
-      def element_type_for(type_class)
+      # +of_type+ may be either a Types::Base subclass (the DSL form for
+      # stock types like +:string+) or an already-built Types::Base
+      # instance (the DSL form for parameterized types like
+      # {Types::Nested}). Both produce a single cached instance per
+      # configured element type.
+      def element_type_for(type_or_instance)
+        return type_or_instance unless type_or_instance.is_a?(::Class)
+
         @element_type_instances ||= {}
-        @element_type_instances[type_class] ||= type_class.new
+        @element_type_instances[type_or_instance] ||= type_or_instance.new
       end
     end
   end

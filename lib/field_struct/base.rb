@@ -106,22 +106,27 @@ module FieldStruct
         metadata.names
       end
 
-      # Declare a field. Resolves +type_name+ via the registry chain (the
-      # nearest containing module that responds to +field_types+, falling
-      # back to {FieldStruct.types}), builds a {Field}, adds it to the
-      # class's {Metadata}, and defines the getter/setter pair.
+      # Declare a field. Resolves +type_arg+ — a registered symbol or a
+      # {FieldStruct::Base} subclass — into a type class (and, for
+      # parameterized types like {Types::Nested}, a pre-built instance),
+      # builds a {Field}, adds it to the class's {Metadata}, and defines
+      # the getter/setter pair.
       #
       # @param name [Symbol, String]
-      # @param type_name [Symbol] a name registered in the resolved registry
+      # @param type_arg [Symbol, Class] a registered name OR a
+      #   FieldStruct::Base subclass (auto-wrapped in {Types::Nested})
       # @param options [Hash] +required:+, +default:+, plus type-specific options
       # @return [Field] the field that was added
-      def field(name, type_name, **options)
-        type_class = resolve_type(type_name)
+      def field(name, type_arg, **options)
+        type_class, type_instance = resolve_type_arg(type_arg)
         resolve_array_options!(type_class, options)
         validate_format_option!(type_class, options)
         required = options.delete(:required) { false }
         default = options.delete(:default)
-        field = Field.new(name: name, type: type_class, required: required, default: default, **options)
+        field = Field.new(
+          name: name, type: type_class, type_instance: type_instance,
+          required: required, default: default, **options
+        )
         metadata.add(field)
         define_field_accessors(field)
         field
@@ -147,6 +152,23 @@ module FieldStruct
       def resolve_type(type_name)
         registry = namespace_field_types || FieldStruct.types
         registry.lookup(type_name)
+      end
+
+      # Resolve the second positional argument of {#field}.
+      #
+      # @param type_arg [Symbol, Class]
+      # @return [Array(Class, Types::Base)] +[type_class, type_instance]+ —
+      #   +type_instance+ is +nil+ for stock symbolic types (Field will
+      #   call +type_class.new+ itself); for nested-class args (and for
+      #   symbol args that resolve to a FieldStruct::Base subclass) it's
+      #   a pre-built {Types::Nested} instance.
+      def resolve_type_arg(type_arg)
+        klass = type_arg.is_a?(::Class) ? type_arg : resolve_type(type_arg)
+        if klass.is_a?(::Class) && klass < FieldStruct::Base
+          [FieldStruct::Types::Nested, FieldStruct::Types::Nested.new(klass)]
+        else
+          [klass, nil]
+        end
       end
 
       # @return [ModelName] an ActiveModel::Name-shaped value for this class
@@ -176,7 +198,8 @@ module FieldStruct
         return unless type_class <= FieldStruct::Types::Array
         raise ArgumentError, 'array field requires an `of:` option naming the element type' unless options.key?(:of)
 
-        options[:of_type] = resolve_type(options.delete(:of))
+        element_class, element_instance = resolve_type_arg(options.delete(:of))
+        options[:of_type] = element_instance || element_class
       end
 
       def validate_format_option!(type_class, options)
@@ -357,7 +380,16 @@ module FieldStruct
         errors.add(field.name, 'is required') if field.required?
       elsif field.options[:format]
         errors.add(field.name, 'is invalid') unless field.options[:format].match?(value)
+      elsif nested_invalid?(value)
+        errors.add(field.name, 'is invalid')
       end
+    end
+
+    def nested_invalid?(value)
+      return value.invalid? if value.is_a?(FieldStruct::Base)
+      return false unless value.is_a?(::Array)
+
+      value.any? { |element| element.is_a?(FieldStruct::Base) && element.invalid? }
     end
 
     def apply_coercion_policy(field, raw_value, error)

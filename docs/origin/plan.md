@@ -459,6 +459,41 @@ Commits: `docs: add usage examples to README`, `chore: fill gemspec metadata`, `
 
 ---
 
+## Phase 2 — Cross-field validation (in flight)
+
+`validate` declared as a class macro. Both block and method-symbol forms supported.
+
+### V1. Declaration
+
+```ruby
+validate :check_a, :check_b           # one or more instance methods
+validate { |record| ... }              # block
+
+# Multiple declarations stack — all run, in declaration order:
+validate :check_x
+validate { |record| ... }
+```
+
+Each `validate` call appends to the class's `validators` list. The symbol form is sugar for `->(record) { record.public_send(name) }`.
+
+### V2. Timing
+
+Validators run on `valid?` (per the backlog wording — "after per-field validation") AND at the end of `initialize`, so a fresh instance has cross-field errors populated for inspection without requiring an explicit `valid?` call. For classes that declare no `validate` blocks, `valid?` stays the cheap `errors.empty?` read from Phase 1.
+
+### V3. Errors target — `:base` convention
+
+By convention, validators add errors via `record.errors.add(:base, "...")`. `errors[:base]` is cleared at the start of each cross-field run, so stale entries don't pile up between calls. Field-specific writes (`errors.add(:end_date, "...")` from a validator) work but are *not* auto-cleared by `valid?` — the user has opted out of the `:base` convention and is responsible for managing those entries.
+
+### V4. Inheritance
+
+`validators` is a list. At inheritance time the subclass receives a `dup` of the parent's list and accumulates from there. The child can add new validators without affecting the parent.
+
+### V5. No remove mechanism
+
+Phase 2 does not provide a way to remove an inherited validator from a subclass. If that becomes a need, surface it as its own decision later.
+
+---
+
 ## Phase 2 — Field-name aliases (in flight)
 
 Bridge external naming conventions to internal FieldStruct conventions. The original `first_discussion.md` notes call for this; the decisions below were locked during the design walkthrough on the `aliases` branch.
@@ -570,15 +605,14 @@ When the setter sees an invalid nested struct at assignment time, it stamps `err
 
 Surfaced during design but explicitly deferred. Ordered roughly by likely value:
 
-1. **Cross-field validation** — `validate { |record| ... }` blocks that run on `valid?` after per-field validation.
-2. **Field-level coercion-policy override** — `field :x, :integer, coercion_policy: :raise` overrides the class default for one field.
-3. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
-4. **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Reuses `of:` as parameterization.
-5. **Extended types** — `:uuid`, `:url`, `:email`, `:symbol`, `:enum`. Same plumbing, more types.
-6. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
-7. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
-8. **`:binary` type** — if anyone asks.
-9. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
+1. **Field-level coercion-policy override** — `field :x, :integer, coercion_policy: :raise` overrides the class default for one field.
+2. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
+3. **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Reuses `of:` as parameterization.
+4. **Extended types** — `:uuid`, `:url`, `:email`, `:symbol`, `:enum`. Same plumbing, more types.
+5. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
+6. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
+7. **`:binary` type** — if anyone asks.
+8. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
 
 ---
 

@@ -182,6 +182,38 @@ end
 
 Lookup walks the class's containing modules from innermost outward, then falls back to `FieldStruct.types`.
 
+## Cross-field validation
+
+For checks that span more than one field, declare a `validate` block or point to an instance method. Both forms can be mixed and stacked.
+
+```ruby
+class Schedule < FieldStruct::Base
+  required :start_date, :date
+  required :end_date,   :date
+
+  validate :ensure_chronological
+  validate do |record|
+    record.errors.add(:base, 'must span at least one day') if record.end_date == record.start_date
+  end
+
+  def ensure_chronological
+    return unless start_date && end_date
+
+    errors.add(:base, 'end_date must not precede start_date') if start_date > end_date
+  end
+end
+
+bad = Schedule.new(start_date: '2024-02-01', end_date: '2024-01-15')
+bad.errors[:base]   # => ['end_date must not precede start_date', 'must span at least one day']
+bad.valid?          # => false
+```
+
+- Validators run on `valid?` (and once at the end of `initialize`, so a fresh instance has `errors[:base]` populated for inspection).
+- `errors[:base]` is cleared at the start of each cross-field run, so stale entries don't pile up.
+- Field-level errors written by setters (Phase 1's "setter owns its field's errors") are **not** cleared by `valid?` — only `:base` is.
+- Validators are inherited by subclasses (the subclass receives a `dup` of the parent's list and can append).
+- Symbol form `validate :name, :other` registers each as its own validator.
+
 ## Aliases — bridging external naming conventions
 
 When a payload arrives with names that don't match your Ruby conventions — `EmailAddress` from a vendor API, `email_address` from a legacy table — declare `aliases:` and the import side routes it for you. Export with `aliased: true` re-serializes back to the original convention for round-tripping.

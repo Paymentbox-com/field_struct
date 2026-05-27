@@ -1,39 +1,484 @@
 # FieldStruct
 
-TODO: Delete this and the text below, and describe your gem
+Typed POROs for Ruby — declare fields with enforced types, presence checks, and per-field validation. Mirrors the ActiveModel interface shape where it helps adoption, but reuses none of its code.
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/field_struct`. To experiment with that code, run `bin/console` for an interactive prompt.
+```ruby
+class User < FieldStruct::Base
+  required :name, :string
+  optional :age,  :integer
+  optional :tags, :array, of: :string
+end
+
+u = User.new(name: 'Alice', age: '30', tags: %w[admin staff])
+
+u.name        # => "Alice"
+u.age         # => 30           (coerced through the integer type)
+u.tags        # => ["admin", "staff"]
+u.valid?      # => true
+u.attributes  # => { name: "Alice", age: 30, tags: ["admin", "staff"] }
+u.to_json     # => '{"name":"Alice","age":30,"tags":["admin","staff"]}'
+
+u.name = ''
+u.valid?            # => false
+u.errors[:name]     # => ["is required"]
+```
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
+Add to your Gemfile:
 
-Install the gem and add to the application's Gemfile by executing:
-
-```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+```ruby
+gem 'field_struct'
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+Or install directly:
 
 ```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+gem install field_struct
 ```
 
-## Usage
+Requires Ruby 3.0+.
 
-TODO: Write usage instructions here
+## What FieldStruct is
+
+- A typed-value-object foundation: declare attributes, get coercion + validation for free.
+- A class-level `Metadata` collection per FieldStruct class, inspectable and introspectable.
+- A pluggable type system, namespaced through a `Registry` that downstream code can extend or replace.
+- ActiveModel-shaped at the public surface (`valid?`, `errors`, `attributes`, `as_json`, `to_json`, `model_name`, `to_model`) so Rails-adjacent code feels at home.
+
+## What FieldStruct is not
+
+- Not a database layer. It doesn't persist, query, or hold connections.
+- Not a form object. It doesn't render or know about HTTP params.
+- Not an ActiveModel replacement. Interface shape only — no AM code reuse.
+- Not a hash-schema validator. Validation is per-field-on-assignment, not "check this hash against a schema."
+
+## Declaring fields
+
+Three macros declare fields; `field` is the primitive, `required` / `optional` are sugar that set the `required:` option.
+
+```ruby
+class Account < FieldStruct::Base
+  field    :id,         :integer                    # neutral; defaults to optional
+  required :email,      :string, format: /@/        # presence-checked + format
+  optional :nickname,   :immutable_string           # coerced, then frozen
+  optional :balance,    :decimal, default: '0'      # :decimal is an alias for :big_decimal
+  optional :created_at, :datetime
+  required :tags,       :array, of: :string         # element type is required
+end
+```
+
+### Base types
+
+`:string`, `:immutable_string`, `:integer`, `:float`, `:big_decimal` (aliased as `:decimal`), `:boolean`, `:date`, `:time`, `:datetime`, `:value`, and `:array` (parameterized via `of:`).
+
+Extended types: `:symbol`, `:uuid`, `:url`, `:email`, `:binary`. The first four serve string-shaped use cases — `:uuid`/`:url`/`:email` pre-fill a sensible `format:` regex (overrideable per-field), `:binary` forces ASCII-8BIT encoding and treats whitespace bytes as meaningful (not "missing").
+
+`:value` is a passthrough — useful when you want metadata for a field without committing to a shape.
+
+### Union types
+
+A field that may hold any of several types — each tried in declared order, first success wins:
+
+```ruby
+class Event < FieldStruct::Base
+  optional :payload, :union, of: [Payload, :boolean]
+  optional :id,      :union, of: %i[integer string]
+end
+
+Event.new(payload: { kind: 'click', value: 1 }).payload  # => #<Payload ...>
+Event.new(payload: true).payload                          # => true
+Event.new(id: '42').id                                    # => "42"   (string first)
+```
+
+Members can be Symbols (registered scalars or FieldStruct subclasses) or Class arguments (FieldStruct subclasses). If every member rejects the value, the union raises and the parent's `coercion_policy` engages. Declared order matters — pick deliberately when types overlap (`Integer` accepts `"42"`, `String` accepts `"42"` — the one listed first wins).
+
+### Nested FieldStructs
+
+Pass a `FieldStruct::Base` subclass as the type to nest:
+
+```ruby
+class Address < FieldStruct::Base
+  required :street, :string
+  required :city,   :string
+end
+
+class Person < FieldStruct::Base
+  required :name,      :string
+  required :address,   Address
+  optional :addresses, :array, of: Address     # arrays of nested too
+end
+
+Person.new(name: 'Alice', address: {street: '1', city: 'NYC'}).address
+# => #<Address street: "1", city: "NYC">
+```
+
+- Accepts nil / a struct instance / a Hash (`Address.new(hash)` happens automatically).
+- If the nested struct is invalid at assignment time, the parent gets `errors[:address] = ['is invalid']`. Drill into `parent.address.errors` for the per-field breakdown.
+- Inner construction errors (e.g. `FieldStruct::UnknownAttributeError` from a nested class with `unknown_attributes :raise`) propagate to the caller rather than being caught by the parent's `coercion_policy`.
+- `as_json` / `to_json` deep-walk nested structures.
+
+### What "required" means
+
+A required field is invalid when its **value** is missing after coercion — the *type* decides what "missing" means:
+
+| Type | Missing if |
+|---|---|
+| `:string`, `:immutable_string` | nil, empty, or whitespace-only |
+| `:integer`, `:float`, `:decimal` | nil only (`0` is valid) |
+| `:boolean` | nil only (`false` is valid) |
+| `:date`, `:time`, `:datetime` | nil only |
+| `:array` | nil or empty |
+| `:value` | nil only |
+
+Defaults satisfy required — the value is what's checked, not whether the input hash contained the key.
+
+`default:` accepts a literal or any callable (Proc, Lambda, Method) that takes no arguments. The callable is invoked once per instance, so it's safe to use for per-instance values like timestamps or generated IDs:
+
+```ruby
+optional :created_at, :datetime, default: Time.method(:now)
+optional :token,      :string,   default: -> { "tok-#{SecureRandom.hex(4)}" }
+```
+
+### Documenting fields with `description:` / `desc:`
+
+Attach a human-readable description to each field for downstream documentation generators. Aliased — pick whichever reads better at the call site:
+
+```ruby
+class User < FieldStruct::Base
+  required :email,      :string,  description: 'Primary contact address'
+  required :first_name, :string,  desc: 'Given name'
+  optional :age,        :integer
+end
+
+User.metadata[:email].description  # => 'Primary contact address'
+User.metadata[:email].desc         # => same
+User.metadata[:age].description    # => nil
+```
+
+The description is documentation metadata — it does **not** appear in `attributes` / `as_json` / `to_json` / pattern matches. Downstream gems can walk `Klass.metadata` to emit docs in any format. Passing both `description:` and `desc:` to the same field raises `ArgumentError`.
+
+### Per-type field options
+
+Each type accepts a small set of customization options at the field level. Values can be literals or Symbol presets (resolved at class-load time against the type's `presets` Hash).
+
+```ruby
+class Order < FieldStruct::Base
+  required :total,        :decimal,  round: 2                  # round to 2 decimals
+  required :discount,     :float,    round: 4
+  required :paid,         :boolean,  values: :english_yes_no   # symbol preset
+  required :priority,     :boolean,  values: {truthy: %w[high urgent], falsy: %w[low normal]}
+  required :placed_at,    :datetime, format: :db               # '%Y-%m-%d %H:%M:%S'
+  required :ship_by,      :date,     format: '%m/%d/%Y'        # explicit strftime/strptime
+  required :customer_id,  :uuid,     format: :v4               # v4-only regex
+  required :contact,      :email,    format: :strict           # stricter regex preset
+end
+```
+
+What each type supports:
+
+| Type | Option | Form | Built-in presets |
+|---|---|---|---|
+| `:big_decimal` / `:decimal`, `:float` | `round:` | Integer | — |
+| `:boolean` | `values:` | `{truthy:, falsy:}` Hash, or Symbol | `:english_yes_no`, `:english`, `:numeric` |
+| `:date` | `format:` | strftime String, or Symbol | `:iso8601`, `:us`, `:eu` |
+| `:datetime`, `:time` | `format:` | strftime String, or Symbol | `:iso8601`, `:rfc2822`, `:db` |
+| `:email` | `format:` | Regexp, or Symbol | `:permissive`, `:default`, `:strict` |
+| `:uuid` | `format:` | Regexp, or Symbol | `:any_version`, `:v4`, `:v7` |
+| `:url` | `format:` | Regexp, or Symbol | `:http`, `:https_only`, `:any_scheme` |
+
+Time-shaped `format:` applies in **both** directions: input strings parse via `strptime`, output (`as_json` / `to_json`) emits via `strftime`. The round-trip property holds — `Klass.from_json(instance.to_json) == instance` for any format you pick.
+
+You can override the type's defaults class-wide by subclassing and overriding the relevant `default_*` or `presets` method, then registering the subclass:
+
+```ruby
+class USDate < FieldStruct::Types::Date
+  def self.default_format = '%m/%d/%Y'
+end
+
+module Acme
+  def self.field_types
+    @field_types ||= FieldStruct.new_registry { register :us_date, USDate }
+  end
+end
+```
+
+### Restricting values — `enum:` and `in:`
+
+Two parallel options for "the coerced value must be one of these":
+
+```ruby
+required :status,    :string,  enum: %w[on off]
+required :position,  :symbol,  enum: %i[before after]
+required :page_size, :integer, in: [10, 20, 30]
+required :amount,    :float,   in: 1.0..10.0
+required :height,    :integer, in: 10..
+required :start_on,  :date,    in: Date.new(2024, 1, 1)..Date.new(2024, 12, 31)
+```
+
+- `enum: [...]` — string-like types (`:string`, `:symbol`, `:uuid`, etc.). Array of allowed values.
+- `in:` — rangy types (`:integer`, `:float`, `:decimal`, `:date`, `:time`, `:datetime`). Either an Array or a Range (closed, half-open — anything that responds to `include?`).
+- Both run post-coercion (`'10'` becomes `10` before the check) and emit `'is invalid'` on mismatch.
+- Passing `enum:` to a rangy field — or `in:` to a string-like field — raises `ArgumentError` at class load.
+
+## Class macros
+
+Every macro is inherited by descendants and overridable.
+
+### `coercion_policy`
+
+What happens when a value can't be coerced into the declared type:
+
+```ruby
+class Strict < FieldStruct::Base
+  coercion_policy :raise      # :keep_raw (default) | :replace | :raise
+  required :age, :integer
+end
+
+Strict.new(age: 'abc')  # raises FieldStruct::CoercionError
+```
+
+- `:keep_raw` — store the raw uncoercible value, record `"could not be coerced: ..."`
+- `:replace`  — store `nil`, record the same error
+- `:raise`    — raise `FieldStruct::CoercionError` from the setter
+
+A single field can override the class-level policy via `coercion_policy:`:
+
+```ruby
+class Mixed < FieldStruct::Base
+  coercion_policy :keep_raw                       # class default
+  required :strict_id, :integer, coercion_policy: :raise
+  optional :lenient_count, :integer               # inherits :keep_raw
+end
+```
+
+### `immutable!`
+
+Block reassignment after construction. Default mutable.
+
+```ruby
+class Config < FieldStruct::Base
+  immutable!
+  required :api_key, :string
+end
+
+c = Config.new(api_key: 'sk-...')
+c.api_key = 'oops'   # raises FieldStruct::ImmutableError
+```
+
+### `frozen!`
+
+Make instances Ruby-frozen at the end of construction. Stricter than `immutable!` — any ivar mutation raises `FrozenError` (Ruby's mechanism, not ours).
+
+```ruby
+class FrozenConfig < FieldStruct::Base
+  frozen!
+  required :api_key, :string
+end
+
+c = FrozenConfig.new(api_key: 'sk-...')
+c.frozen?     # => true
+c.api_key = 'x' # => raises FrozenError
+```
+
+Independent of `immutable!` — pick `immutable!` for our custom error and check, `frozen!` for Ruby's built-in freeze. Both can stack.
+
+### `unknown_attributes`
+
+How `initialize` / `assign_attributes` respond to input keys that don't match any declared field:
+
+```ruby
+class Strict < FieldStruct::Base
+  unknown_attributes :raise   # :ignore (default) | :raise
+  required :name, :string
+end
+
+Strict.new(name: 'Alice', extra: 'x')  # raises FieldStruct::UnknownAttributeError
+```
+
+## Namespace registries
+
+Each FieldStruct class resolves type names through a registry chain. Define a module-level `field_types` method to extend the default set inside a namespace:
+
+```ruby
+module Acme
+  def self.field_types
+    @field_types ||= FieldStruct.new_registry do
+      register :money, Acme::Types::Money
+    end
+  end
+
+  class Order < FieldStruct::Base
+    required :price, :money     # resolved through Acme's registry, with FieldStruct.types as fallback
+  end
+end
+```
+
+`FieldStruct.new_registry` builds a new registry parented to `FieldStruct.types` and evaluates the block in the new registry's instance scope, so `register` works without a receiver. Pass `nil` for an unparented registry, or a different parent for a custom chain.
+
+Lookup walks the class's containing modules from innermost outward, then falls back to `FieldStruct.types`.
+
+## Cross-field validation
+
+For checks that span more than one field, declare a `validate` block or point to an instance method. Both forms can be mixed and stacked.
+
+```ruby
+class Schedule < FieldStruct::Base
+  required :start_date, :date
+  required :end_date,   :date
+
+  validate :ensure_chronological
+  validate do |record|
+    record.errors.add(:base, 'must span at least one day') if record.end_date == record.start_date
+  end
+
+  def ensure_chronological
+    return unless start_date && end_date
+
+    errors.add(:base, 'end_date must not precede start_date') if start_date > end_date
+  end
+end
+
+bad = Schedule.new(start_date: '2024-02-01', end_date: '2024-01-15')
+bad.errors[:base]   # => ['end_date must not precede start_date', 'must span at least one day']
+bad.valid?          # => false
+```
+
+- Validators run on `valid?` (and once at the end of `initialize`, so a fresh instance has `errors[:base]` populated for inspection).
+- `errors[:base]` is cleared at the start of each cross-field run, so stale entries don't pile up.
+- Field-level errors written by setters (Phase 1's "setter owns its field's errors") are **not** cleared by `valid?` — only `:base` is.
+- Validators are inherited by subclasses (the subclass receives a `dup` of the parent's list and can append).
+- Symbol form `validate :name, :other` registers each as its own validator.
+
+## Serialization — bridging external naming conventions
+
+When a payload arrives with names that don't match your Ruby conventions — `firstName` from a vendor API, `EMAIL_ADDR` from a legacy DB — declare a `serialize` block on the class. The mapping is internal-symbol → external-string and applies to both directions (import reverse-maps, export forward-maps).
+
+```ruby
+class User < FieldStruct::Base
+  required :email,      :string
+  required :first_name, :string
+  required :last_name,  :string
+
+  serialize :json,
+            first_name: 'firstName',
+            last_name:  'lastName'
+end
+
+# Import — JSON keys are reverse-mapped to canonical fields.
+user = User.from_json('{"email":"a@b.com","firstName":"Alice","lastName":"Smith"}')
+user.first_name  # => "Alice"
+
+# Export — to_json applies the mapping forward.
+user.to_json
+# => '{"email":"a@b.com","firstName":"Alice","lastName":"Smith"}'
+
+# Round-trip: User.from_json(user.to_json) == user.
+```
+
+- Fields not listed in the mapping (here `:email`) use their canonical name unchanged.
+- `to_h` and `attributes` always return canonical names — only `to_json` / `as_json` / `from_json` consult the mapping.
+- Each mapping key must be a declared field; an unknown key raises `ArgumentError` at class load. Declare fields first, then `serialize`.
+- The mapping is inherited by subclasses; redeclaring on a subclass replaces it (last-write-wins).
+- Multiple formats can coexist on the same class (`serialize :json, ...` + `serialize :csv, ...`). Only `:json` is wired in-gem; CSV / XML / Avro support is left for downstream gems that read `Klass.metadata.serializations[:their_name]`.
+- Nested FieldStructs and arrays of nested propagate naturally — each level uses its own serialize mapping.
+
+## Parsing JSON
+
+`Klass.from_json(string)` parses with Oj and feeds the resulting hash through `.new` — so coercion, nested construction, `unknown_attributes`, and `coercion_policy` all engage the same way they do for direct calls. When the class has a `serialize :json` mapping, external keys are reverse-mapped to canonical names before construction.
+
+```ruby
+person = Person.from_json('{"name":"Alice","address":{"street":"1","city":"NYC"}}')
+person.address.city  # => "NYC"
+
+# Round-trips for every base type except :value (no type info to preserve).
+restored = Person.from_json(person.to_json)
+restored == person   # => true
+```
+
+A non-object root (`[...]`, `"hi"`, `42`, `null`) raises `ArgumentError`; malformed JSON propagates the underlying Oj parse error.
+
+## Pattern matching
+
+Every FieldStruct instance works as a Ruby 3.0+ pattern target out of the box. Hash patterns slice into the declared fields by canonical name; array patterns bind values in declaration order.
+
+```ruby
+case user
+in { name: 'Alice', age: Integer => age }
+  "Alice is #{age}"
+in { age: ..18 }
+  'minor'
+in { name: }
+  "found #{name}"
+end
+
+# Nested FieldStructs recurse naturally
+case order
+in { customer: { email: }, items: [_, *] }
+  "order from #{email} with multiple items"
+end
+
+# Array pattern uses declared field order
+case point   # required :x, :integer; required :y, :integer
+in [x, y]
+  Math.hypot(x, y)
+end
+
+# Find pattern over an array of nested
+case team
+in { members: [*, { role: :admin, name: } => _admin, *] }
+  "admin: #{name}"
+end
+```
+
+Aliases and `errors` do **not** participate in pattern matching — patterns are Ruby-side and use canonical field names. Frozen and immutable instances pattern-match the same way as mutable ones (reads only).
+
+## ActiveModel-shaped surface
+
+Mirroring AM's call sites so Rails-adjacent code feels at home:
+
+```ruby
+u = User.new(name: 'Alice')
+
+u.valid?           # / u.invalid?
+u.errors           # FieldStruct::Errors  ([] / add / clear / empty? / to_h / messages)
+u.attributes       # / u.attribute_names
+u.assign_attributes(name: 'Bob')
+u.to_h             # alias of #attributes
+u.as_json          # JSON-ready hash (Date/Time -> ISO-8601, BigDecimal -> string)
+u.to_json          # via Oj
+u.inspect          # #<User name: "Alice">
+u.model_name       # FieldStruct::ModelName  (name / singular / plural / element)
+u.to_model         # self
+u == other         # structural equality (class + attributes)
+```
+
+## Type signatures
+
+The gem ships with RBS signatures at `sig/field_struct.rbs`, generated from YARD comments via [Sord](https://github.com/AaronC81/sord). Downstream code using Solargraph, Steep, or other RBS-aware tools gets type info for the public surface for free.
+
+```bash
+bundle exec rake sigs:generate   # regenerate from current YARD
+bundle exec rake sigs:validate   # parse-check the committed sig file
+bundle exec rake sigs:check      # CI guard: error if sigs are stale
+```
+
+The generated file is committed to git. Improve YARD when you want to improve the sig — don't edit `sig/field_struct.rbs` by hand. Run `rake sigs:check` before pushing if you changed any YARD.
+
+The deferred custom Metadata→RBS generator (per [D13](docs/origin/plan.md)) is for **user-defined** FieldStruct subclasses (walking their `metadata` to emit signatures for declared accessors). Sord covers the **library** classes only.
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+```bash
+bundle install
+bin/rspec                          # run specs
+COVERAGE=1 bin/rspec               # run specs with SimpleCov
+bundle exec rubocop                # lint
+bundle exec rake                   # all of the above
+```
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+The plan-of-record for Phase 1 lives in [`docs/origin/plan.md`](docs/origin/plan.md).
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/field_struct. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](https://github.com/[USERNAME]/field_struct/blob/main/CODE_OF_CONDUCT.md).
-
-## Code of Conduct
-
-Everyone interacting in the FieldStruct project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/[USERNAME]/field_struct/blob/main/CODE_OF_CONDUCT.md).
+Bug reports and pull requests are welcome at <https://github.com/Paymentbox-com/field_struct>. Contributors are expected to follow the [code of conduct](CODE_OF_CONDUCT.md).

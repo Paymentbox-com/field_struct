@@ -7,6 +7,9 @@
 /spec/reports/
 /tmp/
 
+# Library — bundler resolution belongs to consumers, not the gem
+/Gemfile.lock
+
 # rspec failure tracking
 .rspec_status
 

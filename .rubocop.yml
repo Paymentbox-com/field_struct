@@ -3,6 +3,9 @@ AllCops:
   DisplayStyleGuide: true
   NewCops: enable
   TargetRubyVersion: 3.0
+  Exclude:
+    - 'scrap/**/*'
+    - 'vendor/**/*'
 
 Layout/ArgumentAlignment:
   EnforcedStyle: with_fixed_indentation
@@ -88,6 +91,7 @@ Metrics/ModuleLength:
 
 Metrics/ParameterLists:
   Max: 6
+  CountKeywordArgs: false
 
 Metrics/PerceivedComplexity:
   Enabled: false

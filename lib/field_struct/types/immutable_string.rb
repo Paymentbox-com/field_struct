@@ -7,7 +7,7 @@ module FieldStruct
     # Like {Types::String}, but the coerced value is frozen. Useful when
     # downstream code must not mutate a stored string.
     class ImmutableString < FieldStruct::Types::String
-      # @param value [Object] raw input
+      # @param value [#to_s, nil] anything stringable; +nil+ stays +nil+
       # @return [String, nil] frozen string, or +nil+ if input is +nil+
       def coerce(value, **)
         result = super

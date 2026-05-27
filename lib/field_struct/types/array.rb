@@ -10,11 +10,13 @@ module FieldStruct
     #
     # Missing: +nil+ or empty array. ruby_type: +::Array+.
     class Array < Base
-      # @param value [Object] raw input
-      # @param of_type [Class, Types::Base] the element type (a Types::Base
-      #   subclass for stock types, or an already-built instance for
-      #   parameterized types like {Types::Nested}). The DSL stashes this
-      #   when the user writes +of: :string+ / +of: SomeStruct+.
+      # @param value [Array, nil] anything else raises TypeError
+      # @param of_type [Class, Types::Base, nil] the element type — a
+      #   Types::Base subclass for stock types, or an already-built
+      #   instance for parameterized types like {Types::Nested}. The DSL
+      #   stashes this when the user writes +of: :string+ / +of: SomeStruct+.
+      #   Required at the type level; nil here means the type was called
+      #   directly without DSL help.
       # @return [Array, nil]
       # @raise [TypeError] when input is non-nil and not an Array
       # @raise [ArgumentError] when +of_type+ is missing

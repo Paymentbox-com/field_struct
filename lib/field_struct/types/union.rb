@@ -31,8 +31,9 @@ module FieldStruct
         @member_types = member_types
       end
 
-      # @param value [Object]
-      # @return [Object, nil]
+      # @param value [Object, nil] anything — each member type's coerce
+      #   is tried in declared order; the first that doesn't raise wins
+      # @return [Object, nil] whatever the first successful member returns
       # @raise [TypeError] when no member can coerce
       def coerce(value, **)
         return nil if value.nil?

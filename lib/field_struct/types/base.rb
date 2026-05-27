@@ -29,7 +29,8 @@ module FieldStruct
       # keys that some types ignore. See each subclass's +coerce+ for the
       # exact accepted options.
       #
-      # @param value [Object] raw input
+      # @param value [Object] raw input — each subclass narrows this to
+      #   the inputs it actually accepts
       # @return [Object] the coerced value
       # @raise [NotImplementedError] always, unless overridden by a subclass
       def coerce(value, **)

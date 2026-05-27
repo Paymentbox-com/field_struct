@@ -42,6 +42,10 @@ module FieldStruct
     end
 
     # Yields each {Field} in insertion order.
+    #
+    # @yield [field]
+    # @yieldparam field [Field]
+    # @return [Enumerator] when no block is given
     def each(&block)
       @fields.each_value(&block)
     end

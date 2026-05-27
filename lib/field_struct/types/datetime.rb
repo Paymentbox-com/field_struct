@@ -32,7 +32,10 @@ module FieldStruct
         TimeFormatResolver.call(options, presets)
       end
 
-      # @param value [Object] raw input
+      # @param value [DateTime, #to_datetime, String, nil] +nil+ → +nil+;
+      #   a +String+ is parsed via +strptime+ when +format:+ is set,
+      #   otherwise via +DateTime.parse+; anything responding to
+      #   +to_datetime+ (Date, Time, etc.) is converted.
       # @param format [String, nil] strptime/strftime format; +nil+ uses
       #   {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
       # @return [DateTime, nil]

@@ -10,7 +10,7 @@ module FieldStruct
     # Empty symbols (+:""+) are unusual; like other scalar non-string types,
     # +missing?+ is nil-only — an empty symbol counts as present.
     class Symbol < Base
-      # @param value [Object] raw input
+      # @param value [Symbol, String, nil] anything else raises TypeError
       # @return [Symbol, nil]
       # @raise [TypeError] when input is not nil/Symbol/String
       def coerce(value, **)

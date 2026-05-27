@@ -33,7 +33,12 @@ module FieldStruct
         TimeFormatResolver.call(options, presets)
       end
 
-      # @param value [Object] raw input
+      # @param value [Date, #to_date, String, nil] +nil+ → +nil+; a +Date+
+      #   passes through; anything responding to +to_date+ (DateTime,
+      #   Time, ActiveSupport's TimeWithZone, etc.) is converted; a
+      #   String is parsed via +strptime+ if a +format:+ is set,
+      #   otherwise +Date.parse+. Anything else falls through to
+      #   +Date.parse(value.to_s)+ — which raises ArgumentError.
       # @param format [String, nil] strptime/strftime format; +nil+ uses
       #   {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
       # @return [Date, nil]

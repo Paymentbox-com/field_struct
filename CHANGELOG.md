@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-05-27
+
+IRB-friendly inspect across every public object, plus an opt-in `FS` alias.
+
 ### Changed
 
 - **Custom `#inspect` / `#pretty_print` across every surface object.** The default reflection-based output dumped every ivar, making FieldStruct objects in IRB look like a wall of text. Each library object now renders concisely:

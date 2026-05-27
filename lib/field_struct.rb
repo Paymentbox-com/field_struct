@@ -19,6 +19,7 @@ require_relative 'field_struct/types/array'
 require_relative 'field_struct/types/nested'
 require_relative 'field_struct/types/symbol'
 require_relative 'field_struct/types/uuid'
+require_relative 'field_struct/types/url'
 require_relative 'field_struct/registry'
 require_relative 'field_struct/field'
 require_relative 'field_struct/metadata'
@@ -47,6 +48,7 @@ module FieldStruct
       r.register :array, Types::Array
       r.register :symbol, Types::Symbol
       r.register :uuid, Types::UUID
+      r.register :url, Types::URL
     end
   end
 end

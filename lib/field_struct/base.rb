@@ -544,6 +544,51 @@ module FieldStruct
       self
     end
 
+    # Ruby pattern-matching hash protocol. Returns the declared field
+    # values keyed by canonical name, sliced down to +keys+ if the
+    # pattern asked for specific ones.
+    #
+    #   case user
+    #   in { name: 'Alice', age: }
+    #     ...
+    #   in { name: String => name }
+    #     ...
+    #   end
+    #
+    # Nested FieldStruct values respond to the same protocol, so deep
+    # patterns (+{ address: { city: 'NYC' } }+) work without extra code.
+    # Aliases (per the field-name aliases feature) do *not* participate;
+    # pattern matching uses canonical names, the same as Ruby-side
+    # accessors.
+    #
+    # @param keys [Array<Symbol>, nil] keys the pattern requested, or
+    #   +nil+ for the +**rest+ pattern (every declared field)
+    # @return [Hash{Symbol=>Object}]
+    def deconstruct_keys(keys)
+      return attributes if keys.nil?
+
+      attributes.slice(*keys)
+    end
+
+    # Ruby pattern-matching array protocol. Returns the declared field
+    # values in declaration order — useful for positional unpacking of
+    # small POROs whose field order is meaningful.
+    #
+    #   class Point < FieldStruct::Base
+    #     required :x, :integer
+    #     required :y, :integer
+    #   end
+    #
+    #   case point
+    #   in [x, y]
+    #     Math.hypot(x, y)
+    #   end
+    #
+    # @return [Array<Object>]
+    def deconstruct
+      attributes.values
+    end
+
     private
 
     def json_value(value, aliased: false)

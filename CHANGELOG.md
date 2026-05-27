@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-05-27
+
+Sord-generated RBS signatures.
+
 ### Added
 
 - **RBS signatures (`sig/field_struct.rbs`).** Generated from YARD comments via Sord and shipped in the gem. Downstream tools (Solargraph, Steep, RBS-aware editors) get type info for the public surface without configuring anything. Three new rake tasks:

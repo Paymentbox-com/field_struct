@@ -47,6 +47,30 @@ module FieldStruct
         false
       end
 
+      # Mark this class (and its descendants) frozen-on-construct.
+      # Instances will be Ruby-frozen at the end of {#initialize} —
+      # any subsequent attempt to mutate ivars raises +FrozenError+.
+      #
+      # Independent of {#immutable!}. +immutable!+ blocks our setters
+      # with a custom error; +frozen!+ engages Ruby's frozen-state
+      # mechanism, which also locks the instance against any other
+      # ivar mutation. Pick the one that matches the level of
+      # strictness you need (or stack both).
+      #
+      # @return [true]
+      def frozen!
+        @frozen_on_construct = true
+      end
+
+      # @return [Boolean] whether instances of this class are frozen at
+      #   the end of {#initialize} (locally or via an ancestor)
+      def frozen_on_construct?
+        return @frozen_on_construct if defined?(@frozen_on_construct)
+        return superclass.frozen_on_construct? if superclass.respond_to?(:frozen_on_construct?)
+
+        false
+      end
+
       # Class macro: get or set the policy used by the setter pipeline
       # when a value can't be coerced into a field's declared type.
       #
@@ -392,6 +416,7 @@ module FieldStruct
       assign_attributes(attrs)
       run_cross_field_validators if self.class.validators.any?
       @_initialized = true
+      freeze if self.class.frozen_on_construct?
     end
 
     # Bulk-update declared attributes from a hash. Routes each value

@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`:binary` extended type** — Types::Binary subclasses Types::String and forces ASCII-8BIT encoding on the coerced value. `missing?` is nil-or-empty only (whitespace bytes are meaningful). Designed for raw bytes / BLOBs.
+- **`frozen!` class macro** — instances are Ruby-frozen at the end of `initialize`; subsequent ivar mutations raise `FrozenError`. Inherited by descendants. Independent of `immutable!` (which uses our custom `ImmutableError`). The two can stack.
 - **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Each member type is tried in declared order; the first that doesn't raise wins. Member-coercion errors are caught broadly (ArgumentError, TypeError, FieldStruct::Error); unrelated bugs still propagate. If every member rejects, the union raises `TypeError` and the parent's `coercion_policy` engages. `ruby_type` returns a flat, deduplicated `Array<Class>` across all members. Declaration-time guards require `of:` to be an Array with at least two members.
 
 ## [0.2.0] - 2026-05-27

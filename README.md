@@ -72,7 +72,7 @@ end
 
 `:string`, `:immutable_string`, `:integer`, `:float`, `:big_decimal` (aliased as `:decimal`), `:boolean`, `:date`, `:time`, `:datetime`, `:value`, and `:array` (parameterized via `of:`).
 
-Extended types: `:symbol`, `:uuid`, `:url`, `:email`. The last three are string-shaped types that pre-fill a sensible `format:` regex; you can still override the format on a per-field basis.
+Extended types: `:symbol`, `:uuid`, `:url`, `:email`, `:binary`. The first four serve string-shaped use cases — `:uuid`/`:url`/`:email` pre-fill a sensible `format:` regex (overrideable per-field), `:binary` forces ASCII-8BIT encoding and treats whitespace bytes as meaningful (not "missing").
 
 `:value` is a passthrough — useful when you want metadata for a field without committing to a shape.
 
@@ -195,6 +195,23 @@ end
 c = Config.new(api_key: 'sk-...')
 c.api_key = 'oops'   # raises FieldStruct::ImmutableError
 ```
+
+### `frozen!`
+
+Make instances Ruby-frozen at the end of construction. Stricter than `immutable!` — any ivar mutation raises `FrozenError` (Ruby's mechanism, not ours).
+
+```ruby
+class FrozenConfig < FieldStruct::Base
+  frozen!
+  required :api_key, :string
+end
+
+c = FrozenConfig.new(api_key: 'sk-...')
+c.frozen?     # => true
+c.api_key = 'x' # => raises FrozenError
+```
+
+Independent of `immutable!` — pick `immutable!` for our custom error and check, `frozen!` for Ruby's built-in freeze. Both can stack.
 
 ### `unknown_attributes`
 

@@ -181,9 +181,9 @@ Each type class lives at `FieldStruct::Types::*` and exposes:
 
 - `coerce(value, options = {})`
 - `missing?(value)`
-- `ruby_type` (used later by the RBS generator)
+- `ruby_type` — used later by the RBS generator. Returns either a single `Class` (the typical case: `Types::String#ruby_type == ::String`) **or** an `Array<Class>` for types that span multiple Ruby classes. The only Phase 1 case is `Types::Boolean`, which returns `[TrueClass, FalseClass]` because Ruby has no Boolean class; the RBS generator can collapse that pair to the `bool` alias.
 
-`:value` is a no-coercion passthrough — useful as an escape hatch.
+`:value` is a no-coercion passthrough — useful as an escape hatch. Its `ruby_type` is `Object`.
 
 ### D11. Array type
 

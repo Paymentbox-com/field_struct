@@ -15,6 +15,7 @@ require_relative 'field_struct/types/value'
 require_relative 'field_struct/registry'
 require_relative 'field_struct/field'
 require_relative 'field_struct/metadata'
+require_relative 'field_struct/errors'
 require_relative 'field_struct/base'
 
 module FieldStruct

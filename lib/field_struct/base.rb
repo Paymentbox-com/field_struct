@@ -48,6 +48,16 @@ module FieldStruct
         field
       end
 
+      # Sugar for {#field} with +required: true+.
+      def required(name, type_name, **options)
+        field(name, type_name, **options, required: true)
+      end
+
+      # Sugar for {#field} with +required: false+ (the default).
+      def optional(name, type_name, **options)
+        field(name, type_name, **options, required: false)
+      end
+
       # Resolve a type name through the registry chain visible to this
       # class. Walks the containing modules of the class's name in
       # outermost-first order, looking for the nearest one that responds
@@ -84,6 +94,8 @@ module FieldStruct
         define_method(:"#{field.name}=") do |value|
           coerced = field.type_instance.coerce(value, field.options)
           instance_variable_set(:"@#{field.name}", coerced)
+          validate_field(field, coerced)
+          coerced
         end
       end
 
@@ -95,6 +107,7 @@ module FieldStruct
 
     # @param attrs [Hash{Symbol,String=>Object}] input values, by symbol or string key
     def initialize(attrs = {})
+      @errors = Errors.new
       self.class.metadata.each do |field|
         value = attrs.fetch(field.name) { attrs.fetch(field.name.to_s) { field.default } }
         public_send(:"#{field.name}=", value)
@@ -109,6 +122,28 @@ module FieldStruct
     # @return [Array<Symbol>]
     def attribute_names
       self.class.attribute_names
+    end
+
+    # @return [Errors] the per-instance error collection
+    def errors
+      @errors ||= Errors.new
+    end
+
+    # @return [Boolean] true when {#errors} is empty
+    def valid?
+      errors.empty?
+    end
+
+    # @return [Boolean] true when {#valid?} is false
+    def invalid?
+      !valid?
+    end
+
+    private
+
+    def validate_field(field, value)
+      errors.clear(field.name)
+      errors.add(field.name, 'is required') if field.required? && field.type_instance.missing?(value)
     end
   end
 end

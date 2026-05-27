@@ -331,6 +331,41 @@ restored == person   # => true
 
 A non-object root (`[...]`, `"hi"`, `42`, `null`) raises `ArgumentError`; malformed JSON propagates the underlying Oj parse error.
 
+## Pattern matching
+
+Every FieldStruct instance works as a Ruby 3.0+ pattern target out of the box. Hash patterns slice into the declared fields by canonical name; array patterns bind values in declaration order.
+
+```ruby
+case user
+in { name: 'Alice', age: Integer => age }
+  "Alice is #{age}"
+in { age: ..18 }
+  'minor'
+in { name: }
+  "found #{name}"
+end
+
+# Nested FieldStructs recurse naturally
+case order
+in { customer: { email: }, items: [_, *] }
+  "order from #{email} with multiple items"
+end
+
+# Array pattern uses declared field order
+case point   # required :x, :integer; required :y, :integer
+in [x, y]
+  Math.hypot(x, y)
+end
+
+# Find pattern over an array of nested
+case team
+in { members: [*, { role: :admin, name: } => _admin, *] }
+  "admin: #{name}"
+end
+```
+
+Aliases and `errors` do **not** participate in pattern matching — patterns are Ruby-side and use canonical field names. Frozen and immutable instances pattern-match the same way as mutable ones (reads only).
+
 ## ActiveModel-shaped surface
 
 Mirroring AM's call sites so Rails-adjacent code feels at home:

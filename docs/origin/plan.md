@@ -612,6 +612,43 @@ optional :id,      :union, of: %i[integer string]
 
 **U5. Declaration-time guards.** `of:` is required, must be an `Array`, must have at least two members.
 
+### Pattern matching (P1–P6)
+
+Ruby 3.0+ pattern matching is wired in via the two standard protocols on `Base`.
+
+**P1. Hash pattern via `deconstruct_keys(keys)`.** Returns the canonical-name → value hash for the declared fields. If `keys` is `nil` (the `**rest` case) all fields come back; otherwise the result is sliced down.
+
+**P2. Array pattern via `deconstruct`.** Returns the field values in declaration order. Useful for small positional POROs.
+
+**P3. Canonical names only.** Aliases participate in `Klass.new`/`from_json` (import) and `as_json(aliased: true)` (export). They do **not** participate in pattern matching — Ruby-side patterns mirror Ruby-side accessors. (Hash patterns also disallow capital-start key literals at the syntactic level, so an alias like `EmailAddress:` couldn't even be written as a pattern key.)
+
+**P4. Nested FieldStructs recurse naturally.** Every FS subclass inherits the same protocol, so deep patterns like `{ address: { city: 'NYC' } }` work without extra code.
+
+**P5. Errors / validity are NOT pattern targets.** They aren't in `attributes` and don't show up in `deconstruct_keys`. Patterns match data, not validity state.
+
+**P6. Frozen and immutable instances work identically.** Pattern matching is read-only; no setter or freeze interaction.
+
+```ruby
+case user
+in { name: 'Alice', age: Integer => age }
+  "Alice is #{age}"
+in { age: ..18 }
+  'minor'
+end
+
+case order
+in { address: { city: 'NYC' } }
+  ...
+in { members: [*, { role: :admin, name: } => _, *] }
+  "admin: #{name}"
+end
+
+case point  # required :x, :integer; required :y, :integer
+in [x, y]
+  Math.hypot(x, y)
+end
+```
+
 ### Callable defaults + `new_registry` DSL
 
 Two small ergonomics improvements:

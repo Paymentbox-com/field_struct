@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-05-27
+
+Ruby pattern matching support.
+
 ### Added
 
 - **Pattern matching** — every FieldStruct instance now works as a Ruby 3.0+ pattern target. `deconstruct_keys(keys)` returns the canonical-name attribute hash (sliced down when keys is given, full when keys is `nil`); `deconstruct` returns field values in declaration order. Nested FieldStructs recurse naturally because every subclass inherits the same protocol. Aliases and `errors` do not participate (patterns match data, not validity, and use canonical names — the Ruby-side convention). Frozen and immutable instances work identically.

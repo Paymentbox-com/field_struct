@@ -459,6 +459,22 @@ Commits: `docs: add usage examples to README`, `chore: fill gemspec metadata`, `
 
 ---
 
+## Phase 2 — Field-level coercion_policy override (in flight)
+
+```ruby
+class Mixed < FieldStruct::Base
+  coercion_policy :keep_raw                   # class default
+  required :strict_id, :integer, coercion_policy: :raise   # this one raises
+  optional :lenient_count, :integer           # falls back to :keep_raw
+end
+```
+
+`Field#coercion_policy` is +nil+ by default (defer to class) or one of `:keep_raw`/`:replace`/`:raise`. The setter consults the field's policy first, then falls back to the class macro. Same validation values; unknown values raise `ArgumentError` at class load.
+
+Field-level overrides are inherited along with the rest of the Field's metadata; a subclass re-declaring the field with no override removes the parent's override (the new Field replaces the inherited one).
+
+---
+
 ## Phase 2 — Cross-field validation (in flight)
 
 `validate` declared as a class macro. Both block and method-symbol forms supported.
@@ -605,14 +621,13 @@ When the setter sees an invalid nested struct at assignment time, it stamps `err
 
 Surfaced during design but explicitly deferred. Ordered roughly by likely value:
 
-1. **Field-level coercion-policy override** — `field :x, :integer, coercion_policy: :raise` overrides the class default for one field.
-2. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
-3. **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Reuses `of:` as parameterization.
-4. **Extended types** — `:uuid`, `:url`, `:email`, `:symbol`, `:enum`. Same plumbing, more types.
-5. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
-6. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
-7. **`:binary` type** — if anyone asks.
-8. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
+1. **Custom RBS generator** — walks `Metadata`, emits `.rbs` files. Types' `ruby_type` consumed here.
+2. **Union types** — `optional :payload, :union, of: [Payload, :boolean]`. Reuses `of:` as parameterization.
+3. **Extended types** — `:uuid`, `:url`, `:email`, `:symbol`, `:enum`. Same plumbing, more types.
+4. **Conversion to/from other formats** — CSV, XML, Avro, JSON-schema. Probably separate gems.
+5. **Auto-generated documentation** — Markdown / HTML from Metadata. Probably a separate gem.
+6. **`:binary` type** — if anyone asks.
+7. **Frozen-on-construct sugar** — if `.freeze` proves insufficient.
 
 ---
 

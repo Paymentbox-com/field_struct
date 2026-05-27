@@ -29,6 +29,10 @@ module FieldStruct
     #   +aliased: true+ on {Base#as_json} / {Base#to_h} / etc.
     attr_reader :aliases
 
+    # @return [Symbol, nil] this field's coercion-failure policy, or
+    #   +nil+ to defer to the class-level setting on {Base.coercion_policy}.
+    attr_reader :coercion_policy
+
     # @param name [Symbol, String]
     # @param type [Class] a Types::Base subclass (already resolved from a symbol)
     # @param type_instance [Types::Base, nil] optional pre-built instance —
@@ -39,8 +43,12 @@ module FieldStruct
     # @param default [Object, nil]
     # @param aliases [Array<Symbol,String>] alternate import-time names; the
     #   first one doubles as the export key when +aliased: true+ is requested
+    # @param coercion_policy [Symbol, nil] override the class-level
+    #   coercion policy for this one field; +nil+ means "use whatever the
+    #   class says"
     # @param options [Hash] extra type/field options (e.g. +format:+, +of:+)
-    def initialize(name:, type:, type_instance: nil, required: false, default: nil, aliases: [], **options)
+    def initialize(name:, type:, type_instance: nil, required: false, default: nil,
+                   aliases: [], coercion_policy: nil, **options)
       @name = name.to_sym
       @type = type
       @required = required
@@ -48,6 +56,7 @@ module FieldStruct
       @options = options.freeze
       @type_instance = type_instance || type.new
       @aliases = aliases.map(&:to_sym).freeze
+      @coercion_policy = coercion_policy
       freeze
     end
 

@@ -118,6 +118,7 @@ module FieldStruct
       def field(name, type_name, **options)
         type_class = resolve_type(type_name)
         resolve_array_options!(type_class, options)
+        validate_format_option!(type_class, options)
         required = options.delete(:required) { false }
         default = options.delete(:default)
         field = Field.new(name: name, type: type_class, required: required, default: default, **options)
@@ -176,6 +177,14 @@ module FieldStruct
         raise ArgumentError, 'array field requires an `of:` option naming the element type' unless options.key?(:of)
 
         options[:of_type] = resolve_type(options.delete(:of))
+      end
+
+      def validate_format_option!(type_class, options)
+        return unless options.key?(:format)
+        return if type_class <= FieldStruct::Types::String
+
+        raise ArgumentError,
+          "format: option only applies to string-shaped fields (string, immutable_string), not #{type_class}"
       end
 
       def define_field_accessors(field)
@@ -344,7 +353,11 @@ module FieldStruct
 
     def validate_field(field, value)
       errors.clear(field.name)
-      errors.add(field.name, 'is required') if field.required? && field.type_instance.missing?(value)
+      if field.type_instance.missing?(value)
+        errors.add(field.name, 'is required') if field.required?
+      elsif field.options[:format]
+        errors.add(field.name, 'is invalid') unless field.options[:format].match?(value)
+      end
     end
 
     def apply_coercion_policy(field, raw_value, error)

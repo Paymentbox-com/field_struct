@@ -8,15 +8,33 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **`Field#inspect` / `Field#pretty_print` produce concise, readable output.** The default reflection-based `inspect` dumped every ivar, making `optional :x, :string` in IRB look like a wall of text. The new representation is a one-line summary of the meaningful Field attributes:
+- **Custom `#inspect` / `#pretty_print` across every surface object.** The default reflection-based output dumped every ivar, making FieldStruct objects in IRB look like a wall of text. Each library object now renders concisely:
 
   ```
+  # Field
   #<FieldStruct::Field :level String enum=["beginner", "pro"]>
-  #<FieldStruct::Field :age Integer default=0 description="Age in years">
   #<FieldStruct::Field :address Nested(Address) required>
-  #<FieldStruct::Field :tags Array of_type=String>
   #<FieldStruct::Field :payload Union(String | Integer)>
+
+  # Metadata — one-line inspect lists field names; pp fans out:
+  #<FieldStruct::Metadata fields=[:name, :age, :email]>
+  #<FieldStruct::Metadata
+    #<FieldStruct::Field :name String required>
+    #<FieldStruct::Field :age Integer default=0>
+    #<FieldStruct::Field :email String required format=/@/>>
+
+  # Type instances
+  #<FieldStruct::Types::String>
+  #<FieldStruct::Types::Nested struct_class=Address>
+  #<FieldStruct::Types::Union of=String | Integer>
+
+  # Errors / Registry
+  #<FieldStruct::Errors empty>
+  #<FieldStruct::Errors name=["can't be blank"]>
+  #<FieldStruct::Registry types=[:string, :integer, ...]>
   ```
+
+- **`field` / `required` / `optional` now return the class `Metadata`** instead of the just-added `Field`. The Field is still available as `metadata[name]`. This makes IRB DSL output show the running set of declared fields rather than just the last one, and feeds the new Metadata pretty-print directly. No FieldStruct internals depended on the previous return value.
 
 ## [0.5.3] - 2026-05-27
 

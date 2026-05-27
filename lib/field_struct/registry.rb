@@ -61,5 +61,14 @@ module FieldStruct
 
       !@parent.nil? && @parent.key?(key)
     end
+
+    # @return [String] one-line summary of the locally-registered names
+    #   (does not enumerate the parent chain), with a +parent+ marker
+    #   when the registry has one
+    def inspect
+      parts = ["types=#{@types.keys.inspect}"]
+      parts << 'parent' if @parent
+      "#<FieldStruct::Registry #{parts.join(" ")}>"
+    end
   end
 end

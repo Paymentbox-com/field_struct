@@ -50,6 +50,28 @@ module FieldStruct
       @fields.each_value(&block)
     end
 
+    # A copy-pasteable schema view of the declared fields, keyed by field
+    # name. Each value is a plain Hash of primitives/strings (no live type
+    # objects), so the result reads cleanly in a console and is safe to
+    # `pp` or dump — handy for seeing a model's shape without reading its
+    # source. Option values that are classes or type instances are rendered
+    # as short names; a callable default shows as +"<callable>"+.
+    #
+    #   User.metadata.to_h
+    #   # => { name: { type: "String", ruby_type: "String", required: true,
+    #   #              default: nil, options: {}, description: nil }, ... }
+    #
+    # When a block is given this falls back to +Enumerable#to_h+ (mapping
+    # each {Field} to a pair), preserving existing callers.
+    #
+    # @return [Hash{Symbol=>Hash{Symbol=>Object}}] field name → schema, or
+    #   the block-mapped pairs when a block is supplied
+    def to_h(&block)
+      return super if block
+
+      @fields.transform_values { |field| field_schema(field) }
+    end
+
     # Record a serialization mapping for the named format. Repeats on
     # the same format name replace the prior mapping (last-write-wins).
     # The mapping is frozen on its way in.
@@ -124,6 +146,44 @@ module FieldStruct
       end
       pp.text("\n  serializations=#{@serializations.keys.inspect}") unless @serializations.empty?
       pp.text("\n>")
+    end
+
+    private
+
+    # Render one field as a primitive-only schema Hash for {#to_h}.
+    def field_schema(field)
+      {
+        type: short_name(field.type),
+        ruby_type: ruby_type_repr(field.type_instance.ruby_type),
+        required: field.required?,
+        default: schema_value(field.default),
+        options: field.options.transform_values { |value| schema_value(value) },
+        description: field.description
+      }
+    end
+
+    # A single class, or +A | B+ for a multi-class ruby_type (boolean, union).
+    def ruby_type_repr(ruby_type)
+      Array(ruby_type).map(&:name).join(' | ')
+    end
+
+    # Reduce an option/default value to something printable: short class
+    # names for type references, +"<callable>"+ for procs, recursion into
+    # Array/Hash, everything else as-is.
+    def schema_value(value)
+      case value
+      when nil, true, false, ::Numeric, ::String, ::Symbol, ::Regexp, ::Range then value
+      when ::Class then short_name(value)
+      when FieldStruct::Types::Base then short_name(value.class)
+      when ::Array then value.map { |element| schema_value(element) }
+      when ::Hash then value.transform_values { |element| schema_value(element) }
+      else
+        value.respond_to?(:call) ? '<callable>' : value
+      end
+    end
+
+    def short_name(klass)
+      klass.name.to_s.split('::').last
     end
   end
 end

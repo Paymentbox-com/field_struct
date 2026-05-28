@@ -21,17 +21,17 @@ module FieldStruct
     # Ruby has no Boolean class, so {#ruby_type} returns the pair
     # +[TrueClass, FalseClass]+.
     class Boolean < Base
-      # @return [Array<String>] case-insensitive strings that coerce to true
+      # @return [Array<::String>] case-insensitive strings that coerce to true
       def self.default_truthy
         %w[true 1]
       end
 
-      # @return [Array<String>] case-insensitive strings that coerce to false
+      # @return [Array<::String>] case-insensitive strings that coerce to false
       def self.default_falsy
         %w[false 0]
       end
 
-      # @return [Hash{Symbol=>Hash}] named presets for the +values:+ option
+      # @return [Hash{::Symbol=>Hash}] named presets for the +values:+ option
       def self.presets
         {
           english_yes_no: {truthy: %w[true yes y on 1], falsy: %w[false no n off 0]},
@@ -61,11 +61,11 @@ module FieldStruct
         resolved
       end
 
-      # @param value [Boolean, Integer, String, nil] accepts literal
+      # @param value [Boolean, ::Integer, ::String, nil] accepts literal
       #   +true+/+false+; the integers +1+/+0+; or a String matched
       #   case-insensitively against the truthy/falsy vocabularies.
       #   Anything else raises ArgumentError.
-      # @param values [Hash{Symbol=>Array<String>}, nil] +{truthy: [...], falsy: [...]}+
+      # @param values [Hash{::Symbol=>Array<::String>}, nil] +{truthy: [...], falsy: [...]}+
       #   custom vocabulary; +nil+ uses {.default_truthy} / {.default_falsy}
       # @return [Boolean, nil]
       # @raise [ArgumentError] when the value can't be mapped to true/false

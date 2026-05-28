@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-28
+
+Type accuracy at the call site and ergonomics for editors and AI assistants: accurate stdlib signatures (backed by an RBS collection), an RBS generator for *your* FieldStruct subclasses, a dense `USAGE.md`, a bundled Claude Code skill, a schema view on `Metadata`, and README/USAGE examples that are now executed as doctests.
+
+### Added
+
+- **`FieldStruct::RBS.generate(klass)`** — emits RBS for the per-field accessors the `field` DSL defines on a subclass: a typed reader (nullability follows `required?`) and a permissive `(untyped) -> untyped` writer (the type coerces loose input). Handles nested structs, `:array` (`::Array[elem]`), `:union` (`(::A | ::B)`), `:boolean` (`bool`), `:value` (`untyped`), namespaced classes (module nesting), and inheritance (emits only own fields with `< ::Parent`). This is the deferred **D13 track 2** — Sord can't see these methods because they don't exist until you declare the fields. See the README "Type signatures" section for a Rake-task wiring example.
+- **`Metadata#to_h`** — a copy-pasteable schema view keyed by field name (`type`, `ruby_type`, `required`, `default`, `options`, `description`), rendered as primitives/short names so you can `pp Klass.metadata.to_h` to see a model's shape without reading its source. The block form still delegates to `Enumerable#to_h` (so `Base#attributes` is unchanged).
+- **`USAGE.md`** — a dense, example-first reference covering every type, field option, and class macro, plus validation/coercion semantics, JSON, nesting, registries, and gotchas. Ships in the gem package (`bundle show field_struct`) and is included in the YARD docs.
+- **Claude Code skill** — `skills/field-struct/SKILL.md` gives an assistant the DSL, the common mistakes, and how to debug an invalid instance. The repo doubles as a single-plugin marketplace via `.claude-plugin/{plugin.json,marketplace.json}` (`/plugin marketplace add Paymentbox-com/field_struct`); the skill also ships in the gem for a no-marketplace copy into `.claude/skills/`.
+- **RBS collection** — `rbs_collection.yaml` vendors the stdlib `date` / `time` / `bigdecimal` signatures so `sigs:validate` can resolve fully-qualified stdlib types. CI installs it and now runs the sig guards (`sigs:check` + `sigs:validate`), which the default `rake` task never exercised.
+- **Doctested examples** — `spec/docs_examples_spec.rb` executes every ` ```ruby ` block in README.md / USAGE.md that is preceded by an invisible `<!-- doctest -->` marker, asserting `# =>` expectations by value comparison.
+
+### Changed
+
+- **The generated sig now reports accurate stdlib return types.** `coerce` on the Date/Time/DateTime/BigDecimal types is typed `-> ::Date?` / `::Time?` / `::DateTime?` / `::BigDecimal?` instead of resolving to the FieldStruct *wrapper* classes. Core type names in the YARD docs are fully-qualified (`::String`, `::Symbol`, `::Integer`) so Sord resolves them cleanly — this clears 38 "wasn't able to be resolved to a constant" warnings.
+- **`rake sigs:validate`** loads the RBS collection (and installs it on first run) instead of running `--no-collection`.
+
+### Notes
+
+- The bundled plugin/marketplace manifests intentionally omit a pinned `version` (git-SHA tracked) to avoid drift from `version.rb`.
+
 ## [0.5.5] - 2026-05-27
 
 Documentation tooling: a `rake docs:generate` task that builds the YARD HTML, plus a `release:check` umbrella that runs the full pre-flight battery before every release.

@@ -22,7 +22,7 @@ module FieldStruct
         /\A[^@\s]+@[^@\s]+\.[^@\s]+\z/
       end
 
-      # @return [Hash{Symbol=>Regexp}] named presets for +format:+
+      # @return [Hash{::Symbol=>Regexp}] named presets for +format:+
       def self.presets
         {
           permissive: /\A[^@\s]+@[^@\s]+\z/,

@@ -115,7 +115,7 @@ RSpec.describe FieldStruct::Scaffold do
   end
 
   describe 'end to end with a real webhook payload' do
-    let(:json) { File.read(File.expand_path('../../scrap/examples/json/nmi_card_sale.json', __dir__)) }
+    let(:json) { File.read(File.expand_path('../fixtures/json/nmi_card_sale.json', __dir__)) }
 
     it 'scaffolds into a usable, self-validating class' do
       src = described_class.from_json(json, class_name: 'NmiCardSale')

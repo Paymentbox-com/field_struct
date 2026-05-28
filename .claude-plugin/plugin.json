@@ -1,0 +1,9 @@
+{
+  "name": "field-struct",
+  "description": "Guidance for building, debugging, and typing FieldStruct value classes — the field_struct gem's typed-PORO DSL.",
+  "author": {
+    "name": "Adrian Madrid",
+    "email": "amadrid@pmtbox.com"
+  },
+  "homepage": "https://github.com/Paymentbox-com/field_struct"
+}

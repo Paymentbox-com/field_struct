@@ -1,0 +1,15 @@
+{
+  "name": "field-struct",
+  "owner": {
+    "name": "Adrian Madrid",
+    "email": "amadrid@pmtbox.com"
+  },
+  "plugins": [
+    {
+      "name": "field-struct",
+      "source": ".",
+      "description": "Guidance for building, debugging, and typing FieldStruct value classes (the field_struct gem's typed-PORO DSL).",
+      "category": "development"
+    }
+  ]
+}

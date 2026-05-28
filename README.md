@@ -507,6 +507,26 @@ namespace :field_struct do
 end
 ```
 
+## Claude Code skill
+
+The gem bundles a [Claude Code](https://claude.com/claude-code) skill (`skills/field-struct/SKILL.md`) that teaches the assistant the DSL, the common mistakes, and how to debug an invalid instance — so editing FieldStruct models in a dependent project goes correctly.
+
+**Install as a plugin** (recommended — the repo doubles as a single-plugin marketplace):
+
+```text
+/plugin marketplace add Paymentbox-com/field_struct
+/plugin install field-struct@field-struct
+```
+
+**Or copy it into your project** (no marketplace needed) — the skill ships in the gem package:
+
+```bash
+mkdir -p .claude/skills/field-struct
+cp "$(bundle show field_struct)/skills/field-struct/SKILL.md" .claude/skills/field-struct/
+```
+
+Either way it triggers when you ask Claude to define, edit, or debug a `FieldStruct::Base` subclass. The skill points at [`USAGE.md`](USAGE.md) (also shipped) for the exhaustive reference.
+
 ## Development
 
 ```bash

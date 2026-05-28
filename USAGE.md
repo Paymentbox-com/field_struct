@@ -8,6 +8,7 @@ docs see `README.md`; for design rationale see `docs/origin/plan.md`.
 gets a coerced, typed reader/writer and presence/format validation. Construction
 and validity are *separate* — you can build an invalid instance; ask `valid?`.
 
+<!-- doctest -->
 ```ruby
 class User < FieldStruct::Base
   required :name, :string
@@ -16,7 +17,7 @@ end
 
 u = User.new(name: 'Alice', age: '30') # string + symbol keys both work
 u.name        # => "Alice"
-u.age         # => 30          (coerced from "30")
+u.age         # => 30
 u.attributes  # => { name: "Alice", age: 30 }
 u.valid?      # => true
 ```
@@ -205,6 +206,7 @@ Pattern matching recurses (`in { address: { city: 'NYC' } }`).
 - Conversions in `as_json`: `Date`/`Time`/`DateTime` → ISO-8601 (or the field's
   `format:`), `BigDecimal` → plain string, `Symbol` → String, arrays/nested recurse.
 
+<!-- doctest -->
 ```ruby
 class U < FieldStruct::Base
   required :first, :string

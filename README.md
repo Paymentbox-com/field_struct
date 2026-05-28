@@ -2,6 +2,7 @@
 
 Typed POROs for Ruby — declare fields with enforced types, presence checks, and per-field validation. Mirrors the ActiveModel interface shape where it helps adoption, but reuses none of its code.
 
+<!-- doctest -->
 ```ruby
 class User < FieldStruct::Base
   required :name, :string
@@ -12,7 +13,7 @@ end
 u = User.new(name: 'Alice', age: '30', tags: %w[admin staff])
 
 u.name        # => "Alice"
-u.age         # => 30           (coerced through the integer type)
+u.age         # => 30
 u.tags        # => ["admin", "staff"]
 u.valid?      # => true
 u.attributes  # => { name: "Alice", age: 30, tags: ["admin", "staff"] }

@@ -13,7 +13,7 @@ module FieldStruct
     # {Types::String} which treats whitespace-only as missing.
     class Binary < FieldStruct::Types::String
       # @param value [#to_s, nil] anything stringable; +nil+ stays +nil+
-      # @return [String, nil] +nil+ when input is +nil+, otherwise a
+      # @return [::String, nil] +nil+ when input is +nil+, otherwise a
       #   fresh ASCII-8BIT-encoded copy of +value.to_s+
       def coerce(value, **)
         result = super

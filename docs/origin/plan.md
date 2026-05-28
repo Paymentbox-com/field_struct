@@ -237,7 +237,7 @@ Lookup for a class like `Acme::Order < FieldStruct::Base` walks the **full** nes
 Two-track strategy:
 
 1. **Hand-written library classes** — Sord generates `sig/field_struct.rbs` from YARD comments. Landed in v0.6.0; committed to git. Three rake tasks (`sigs:generate` / `sigs:validate` / `sigs:check`) maintain the file.
-2. **User-defined FieldStruct subclasses** — a custom Metadata→RBS generator that walks each subclass's `metadata` to emit accessor signatures. Still deferred. Every type exposes `ruby_type` to keep this door open.
+2. **User-defined FieldStruct subclasses** — `FieldStruct::RBS.generate(klass)` walks each subclass's `metadata` and emits accessor signatures (typed reader + permissive `untyped` setter), built on each type's `ruby_type`. Landed: nested/array/union/bool/value all map, namespaced classes get module nesting, and subclasses emit only their own fields (`< ::Parent`).
 
 ### D14. Source layout: standard, explicit requires
 

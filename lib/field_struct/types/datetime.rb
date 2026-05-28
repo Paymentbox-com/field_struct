@@ -13,13 +13,13 @@ module FieldStruct
     # parsing (strptime when input is a String) and serialization
     # (strftime via +as_json+).
     class DateTime < Base
-      # @return [String, nil] field-level strftime/strptime format; +nil+
+      # @return [::String, nil] field-level strftime/strptime format; +nil+
       #   leaves the type using ISO-8601 in/out
       def self.default_format
         nil
       end
 
-      # @return [Hash{Symbol=>String}] named presets for the +format:+ option
+      # @return [Hash{::Symbol=>::String}] named presets for the +format:+ option
       def self.presets
         {
           iso8601: '%Y-%m-%dT%H:%M:%S%z',
@@ -32,13 +32,13 @@ module FieldStruct
         TimeFormatResolver.call(options, presets)
       end
 
-      # @param value [DateTime, #to_datetime, String, nil] +nil+ → +nil+;
+      # @param value [::DateTime, #to_datetime, ::String, nil] +nil+ → +nil+;
       #   a +String+ is parsed via +strptime+ when +format:+ is set,
       #   otherwise via +DateTime.parse+; anything responding to
       #   +to_datetime+ (Date, Time, etc.) is converted.
-      # @param format [String, nil] strptime/strftime format; +nil+ uses
+      # @param format [::String, nil] strptime/strftime format; +nil+ uses
       #   {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      # @return [DateTime, nil]
+      # @return [::DateTime, nil]
       # @raise [ArgumentError] when a string cannot be parsed
       def coerce(value, format: self.class.default_format, **)
         return nil if value.nil?

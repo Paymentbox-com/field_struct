@@ -19,7 +19,7 @@ module FieldStruct
         %r{\Ahttps?://[^\s/$.?#][^\s]*\z}i
       end
 
-      # @return [Hash{Symbol=>Regexp}] named presets for +format:+
+      # @return [Hash{::Symbol=>Regexp}] named presets for +format:+
       def self.presets
         {
           http: default_format,

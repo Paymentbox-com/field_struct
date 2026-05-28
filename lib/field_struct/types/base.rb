@@ -61,7 +61,7 @@ module FieldStruct
       # that carry parameter state (Nested, Union, …) override to surface
       # what they wrap.
       #
-      # @return [String]
+      # @return [::String]
       def inspect
         full = self.class.name || 'AnonymousType'
         prefixed = full.sub(/\AFieldStruct\b/, FieldStruct.inspect_namespace)

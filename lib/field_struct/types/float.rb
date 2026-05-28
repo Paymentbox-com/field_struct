@@ -7,15 +7,15 @@ module FieldStruct
     # Float type. Coerces via +Kernel#Float+, which parses numeric strings
     # strictly and rejects anything non-numeric.
     class Float < Base
-      # @return [Integer, nil] field-level rounding precision; +nil+ disables.
+      # @return [::Integer, nil] field-level rounding precision; +nil+ disables.
       def self.default_round
         nil
       end
 
-      # @param value [Numeric, String, nil] +nil+ → +nil+; everything
+      # @param value [Numeric, ::String, nil] +nil+ → +nil+; everything
       #   else flows through +Kernel#Float+ — strict on string parsing,
       #   rejects non-numeric strings, Symbols, Booleans, Arrays.
-      # @param round [Integer, nil] decimal places; +nil+ leaves the value unrounded
+      # @param round [::Integer, nil] decimal places; +nil+ leaves the value unrounded
       # @return [Float, nil] +nil+ for +nil+ input, otherwise the parsed float
       # @raise [ArgumentError, TypeError] when the value cannot be coerced
       def coerce(value, round: self.class.default_round, **)

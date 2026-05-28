@@ -3,4 +3,5 @@
 --output-dir doc
 lib/**/*.rb
 -
+USAGE.md
 CHANGELOG.md

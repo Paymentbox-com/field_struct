@@ -74,7 +74,13 @@ namespace :sigs do
 
   desc 'Validate sig/field_struct.rbs against the RBS grammar'
   task :validate do
-    sh "bundle exec rbs --no-collection -I #{SIG_FILE} validate"
+    # The rbs collection (stdlib date/time/bigdecimal sigs) must be present
+    # for the fully-qualified ::Date / ::Time / ::DateTime / ::BigDecimal
+    # types in the generated sig to resolve. Install it on first run so a
+    # fresh checkout's `rake release:check` is self-contained; the lock and
+    # installed sigs float with the (uncommitted) Gemfile.lock.
+    sh 'bundle exec rbs collection install' unless File.exist?('rbs_collection.lock.yaml')
+    sh "bundle exec rbs -I #{SIG_FILE} validate"
   end
 end
 

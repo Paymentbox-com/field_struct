@@ -39,6 +39,11 @@ gem install field_struct
 
 Requires Ruby 3.0+.
 
+> **Looking for a quick, complete reference?** [`USAGE.md`](USAGE.md) is a dense,
+> example-first cheat sheet — every type, option, and macro on one page. It ships
+> with the gem, so it's right there in `bundle show field_struct` for editors and
+> AI assistants to read.
+
 ## What FieldStruct is
 
 - A typed-value-object foundation: declare attributes, get coercion + validation for free.

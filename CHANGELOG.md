@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-28
+
+Two adoption-focused additions: a JSON-to-FieldStruct scaffolder for modeling existing APIs and webhooks, and a `FieldStruct.root` path helper.
+
 ### Added
 
 - **`FieldStruct::Scaffold.from_json`** — generates starter FieldStruct class source from a JSON example, or an array of same-shape examples. A *prototype you refine*: it reconstructs nesting (nested objects → nested classes emitted before their parent), maps arrays to `:array, of: …`, and types real JSON booleans/numbers, while keeping all strings as `:string` (a numeric-looking `authorization_code` must not become an Integer) and surfacing guesses as trailing comments. With multiple samples it resolves empty fields from other samples, drives `required`/`optional` from presence, and flags small repeated vocabularies as enum candidates. Non-identifier keys are snake-cased with a `serialize :json` mapping emitted. The developer adds enums, descriptions, and final scalar types — the comments point at where.

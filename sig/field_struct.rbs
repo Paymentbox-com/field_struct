@@ -51,6 +51,108 @@ module FieldStruct
   # +"FS"+) by {.use_alias!}.
   def self.inspect_namespace: () -> String
 
+  # Generates RBS type signatures for the *generated* instance surface of
+  # user-defined {FieldStruct::Base} subclasses — the per-field accessors the
+  # +field+ DSL defines dynamically.
+  # 
+  # Sord generates +sig/field_struct.rbs+ from the library's static source, so
+  # it covers {Base}, {Types}, {Registry}, … but it can never see +User#name+
+  # or +User#age=+: those methods don't exist until a consumer declares the
+  # fields. This is the deferred "track 2" of the plan's RBS strategy (D13) —
+  # walk a subclass's {Metadata} and emit signatures for its accessors so
+  # downstream Steep / Solargraph can type-check code that touches them.
+  # 
+  #   class User < FieldStruct::Base
+  #     required :name, :string
+  #     optional :age,  :integer
+  #   end
+  # 
+  #   puts FieldStruct::RBS.generate(User)
+  #   # class User < ::FieldStruct::Base
+  #   #   attr_reader name: ::String
+  #   #   def name=: (untyped value) -> untyped
+  #   #
+  #   #   attr_reader age: ::Integer?
+  #   #   def age=: (untyped value) -> untyped
+  #   # end
+  # 
+  # Design choices:
+  # 
+  # * **Reader type** is the field's {Types::Base#ruby_type}. Nullability
+  #   follows {Field#required?}: required → +T+, optional → +T?+. A
+  #   constructed-but-invalid instance (or a +:replace+ coercion failure) can
+  #   still hold +nil+ in a required field — the signature reflects declared
+  #   intent, not runtime validity.
+  # * **Writer** is +(untyped) -> untyped+. The type coerces loose input
+  #   (+user.age = "30"+ is valid), so a strict writer would be a false
+  #   positive.
+  # * **+new+ / +initialize+** are inherited from {Base} (+(?Hash) -> void+),
+  #   which already accepts +User.new(name: ...)+.
+  # 
+  # Each call emits one class. Referenced types (nested structs, array
+  # elements) appear as qualified names (+::Address+) — generate RBS for those
+  # classes too so the references resolve.
+  module RBS
+    # Generate RBS source for a single FieldStruct subclass.
+    # 
+    # _@param_ `klass`
+    # 
+    # _@return_ — RBS declaring the class (wrapped in its module nesting)
+    # and a typed reader + permissive writer for every field it declares
+    def self.generate: (singleton(FieldStruct::Base) klass) -> String
+
+    # Build the +class ... end+ block (unindented, no surrounding modules).
+    # 
+    # _@param_ `klass`
+    def self.class_block: (singleton(FieldStruct::Base) klass) -> String
+
+    # Fields declared on +klass+ itself — inherited fields (the same {Field}
+    # objects merged in at inheritance time) belong to the parent's RBS.
+    # 
+    # _@param_ `klass`
+    def self.own_fields: (singleton(FieldStruct::Base) klass) -> ::Array[Field]
+
+    # _@param_ `field`
+    # 
+    # _@return_ — the reader's RBS type, made nullable when optional
+    def self.reader_type: (Field field) -> String
+
+    # Map a type instance (plus its field options, needed for arrays) to an
+    # RBS type expression.
+    # 
+    # _@param_ `type_instance`
+    # 
+    # _@param_ `options`
+    def self.type_for: (Types::Base type_instance, ::Hash[Symbol, Object] options) -> String
+
+    # The element type of an array field, derived from its +:of_type+ (a
+    # +Types::Base+ subclass for stock types, or a built instance for
+    # parameterized ones like {Types::Nested}).
+    # 
+    # _@param_ `of_type`
+    def self.element_type: ((Class | Types::Base)? of_type) -> String
+
+    # _@param_ `klass` — a Ruby class from a {Types::Base#ruby_type}
+    # 
+    # _@return_ — qualified RBS name, or +untyped+ for the value type's +::Object+
+    def self.class_to_rbs: (Class klass) -> String
+
+    # Wrap an inner block in the +module ... end+ nesting implied by a
+    # qualified class name, indenting two spaces per level.
+    # 
+    # _@param_ `full_name` — e.g. +"Acme::Order"+
+    # 
+    # _@param_ `inner` — the class block
+    # 
+    # _@return_ — RBS source ending in a trailing newline
+    def self.wrap_namespace: (String full_name, String inner) -> String
+
+    # _@param_ `text`
+    # 
+    # _@return_ — +text+ with every non-blank line indented two spaces
+    def self.indent: (String text) -> String
+  end
+
   # Superclass for FieldStruct value classes.
   # 
   #   class User < FieldStruct::Base

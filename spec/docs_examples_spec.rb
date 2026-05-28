@@ -78,7 +78,7 @@ module DocExamples
 end
 
 RSpec.describe 'Documentation examples' do
-  %w[README.md USAGE.md].each do |doc|
+  %w[README.md USAGE.md docs/getting_started.md].each do |doc|
     path = File.expand_path("../#{doc}", __dir__)
     blocks = DocExamples.blocks(path)
 
@@ -89,7 +89,7 @@ RSpec.describe 'Documentation examples' do
     blocks.each_with_index do |block, position|
       it "#{doc} doctest block ##{position + 1} (line #{block.first_code_line})" do
         sandbox = Module.new
-        const = "DocExample_#{doc.tr(".", "_")}_#{position}"
+        const = "DocExample_#{doc.gsub(/[^a-zA-Z0-9]/, "_")}_#{position}"
         Object.const_set(const, sandbox)
         begin
           sandbox.module_eval(DocExamples.to_runnable(block, doc), path, block.first_code_line)

@@ -40,10 +40,11 @@ gem install field_struct
 
 Requires Ruby 3.0+.
 
-> **Looking for a quick, complete reference?** [`USAGE.md`](USAGE.md) is a dense,
-> example-first cheat sheet — every type, option, and macro on one page. It ships
-> with the gem, so it's right there in `bundle show field_struct` for editors and
-> AI assistants to read.
+> **New here?** [`docs/getting_started.md`](docs/getting_started.md) walks through
+> using FieldStruct in a repo (general Ruby + a Rails section). For the exhaustive
+> reference, [`USAGE.md`](USAGE.md) is a dense, example-first cheat sheet — every type,
+> option, and macro on one page. Both ship with the gem (`bundle show field_struct`),
+> for editors and AI assistants to read.
 
 ## What FieldStruct is
 
@@ -532,6 +533,8 @@ Pass an **array of same-shape objects** to gather more signal: empty fields get 
 FieldStruct::Scaffold.from_json('[{"kind":"cc"},{"kind":"ach"},{"kind":"cc"}]')
 # … optional :kind, :string # values: ["cc", "ach"] — enum?
 ```
+
+For the full scaffold-then-refine workflow (and how it fits a Rails integration), see [`docs/getting_started.md`](docs/getting_started.md).
 
 ## Claude Code skill
 

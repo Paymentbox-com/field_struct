@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`docs/getting_started.md`** — a getting-started / integration guide (general Ruby plus a Rails section) with a task→API map, an error→meaning→fix table, a worked end-to-end example, common mistakes, and an "agent toolbox". Its general-Ruby examples are executed by the doctest harness.
+- **`AGENTS.md`** — a tool-agnostic router that points AI coding agents at the usage docs and the top gotchas (complements the Claude-specific skill; distinct from the contributor-facing `CLAUDE.md`).
+
 ## [0.7.0] - 2026-05-28
 
 Two adoption-focused additions: a JSON-to-FieldStruct scaffolder for modeling existing APIs and webhooks, and a `FieldStruct.root` path helper.

@@ -31,6 +31,7 @@ require_relative 'field_struct/metadata'
 require_relative 'field_struct/errors'
 require_relative 'field_struct/base'
 require_relative 'field_struct/rbs'
+require_relative 'field_struct/scaffold'
 
 module FieldStruct
   # Build a new {Registry}, parented to +parent+ (defaults to

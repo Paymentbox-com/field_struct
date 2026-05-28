@@ -508,6 +508,31 @@ namespace :field_struct do
 end
 ```
 
+## Scaffolding a class from JSON
+
+`FieldStruct::Scaffold.from_json` turns a JSON example (or several) into starter FieldStruct source — handy when modeling an existing API or webhook. It's a **working prototype you refine**: it nails the structure and the obvious types and flags the rest with comments, leaving enums, descriptions, and final scalar types to you.
+
+```ruby
+puts FieldStruct::Scaffold.from_json(<<~JSON, class_name: 'User')
+  {"name": "Al", "age": 30, "active": true, "ref": "00421"}
+JSON
+# class User < FieldStruct::Base
+#   required :name, :string
+#   required :age, :integer
+#   required :active, :boolean
+#   required :ref, :string # numeric-looking (e.g. "00421") — :integer? or keep :string if an id/code
+# end
+```
+
+It's deliberately conservative: JSON objects become nested classes (emitted before their parent), arrays become `:array, of: …`, real JSON booleans/numbers map to `:boolean`/`:integer`/`:float`, and **strings stay `:string`** — including numeric-looking ones, because an `authorization_code` must not silently become an Integer. The guesses are surfaced as trailing comments, not committed types.
+
+Pass an **array of same-shape objects** to gather more signal: empty fields get resolved from samples that have them, presence across samples drives `required` vs `optional`, and small repeated vocabularies surface as `# values: [...] — enum?` hints.
+
+```ruby
+FieldStruct::Scaffold.from_json('[{"kind":"cc"},{"kind":"ach"},{"kind":"cc"}]')
+# … optional :kind, :string # values: ["cc", "ach"] — enum?
+```
+
 ## Claude Code skill
 
 The gem bundles a [Claude Code](https://claude.com/claude-code) skill (`skills/field-struct/SKILL.md`) that teaches the assistant the DSL, the common mistakes, and how to debug an invalid instance — so editing FieldStruct models in a dependent project goes correctly.

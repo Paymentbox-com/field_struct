@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`FieldStruct.root`** — returns a `Pathname` to the library's root directory (the parent of `lib/`), computed from the entry file's location so it resolves to the repo root in development and to the installed gem directory when packaged.
+
 ## [0.6.0] - 2026-05-28
 
 Type accuracy at the call site and ergonomics for editors and AI assistants: accurate stdlib signatures (backed by an RBS collection), an RBS generator for *your* FieldStruct subclasses, a dense `USAGE.md`, a bundled Claude Code skill, a schema view on `Metadata`, and README/USAGE examples that are now executed as doctests.

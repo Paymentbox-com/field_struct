@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'oj'
+require 'pathname'
 require_relative 'field_struct/version'
 require_relative 'field_struct/error'
 require_relative 'field_struct/model_name'
@@ -33,6 +34,17 @@ require_relative 'field_struct/base'
 require_relative 'field_struct/rbs'
 
 module FieldStruct
+  # The library's root directory — the parent of +lib/+. Computed from this
+  # file's location, so it resolves to the repo root in development and to the
+  # installed gem directory when packaged.
+  #
+  #   FieldStruct.root.join('lib', 'field_struct.rb') # => #<Pathname …>
+  #
+  # @return [Pathname] absolute path to the gem root
+  def self.root
+    @root ||= Pathname.new(File.expand_path('..', __dir__))
+  end
+
   # Build a new {Registry}, parented to +parent+ (defaults to
   # {FieldStruct.types}), and optionally configure it with a block
   # evaluated in the new registry's instance scope.

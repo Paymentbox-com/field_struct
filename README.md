@@ -465,7 +465,42 @@ bundle exec rake sigs:check      # CI guard: error if sigs are stale
 
 The generated file is committed to git. Improve YARD when you want to improve the sig — don't edit `sig/field_struct.rbs` by hand. Run `rake sigs:check` before pushing if you changed any YARD.
 
-The deferred custom Metadata→RBS generator (per [D13](docs/origin/plan.md)) is for **user-defined** FieldStruct subclasses (walking their `metadata` to emit signatures for declared accessors). Sord covers the **library** classes only.
+Sord covers the **library** classes only. The per-field accessors that the `field` DSL defines on **your** subclasses (`user.name`, `user.age=`) don't exist until you declare the fields, so Sord can't see them — that's the other half of [D13](docs/origin/plan.md).
+
+### Signatures for your own FieldStruct classes
+
+`FieldStruct::RBS.generate` walks a subclass's metadata and emits RBS for its generated accessors, so Steep / Solargraph can type-check code that touches them:
+
+```ruby
+class User < FieldStruct::Base
+  required :name, :string
+  optional :age,  :integer
+end
+
+puts FieldStruct::RBS.generate(User)
+# class User < ::FieldStruct::Base
+#   attr_reader name: ::String
+#   def name=: (untyped value) -> untyped
+#
+#   attr_reader age: ::Integer?
+#   def age=: (untyped value) -> untyped
+# end
+```
+
+Readers carry the field's coerced Ruby type; nullability follows `required?` (required → `T`, optional → `T?`). Setters accept `untyped` because the type coerces loose input (`user.age = "30"` is valid). Nested structs and array elements are referenced by qualified name (`::Address`, `::Array[::LineItem]`) — generate RBS for those classes too so the references resolve.
+
+Wire it into your project with a Rake task that writes a sig file per class — for example:
+
+```ruby
+# lib/tasks/field_struct_rbs.rake
+namespace :field_struct do
+  desc 'Generate RBS for the app\'s FieldStruct classes'
+  task rbs: :environment do
+    classes = [User, Account, Order] # the FieldStruct subclasses you want typed
+    File.write('sig/field_structs.rbs', classes.map { |k| FieldStruct::RBS.generate(k) }.join("\n"))
+  end
+end
+```
 
 ## Development
 

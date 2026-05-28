@@ -19,7 +19,7 @@ module FieldStruct
         /\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/i
       end
 
-      # @return [Hash{Symbol=>Regexp}] named presets for +format:+
+      # @return [Hash{::Symbol=>Regexp}] named presets for +format:+
       def self.presets
         {
           any_version: default_format,

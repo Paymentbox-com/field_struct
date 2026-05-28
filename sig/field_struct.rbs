@@ -740,7 +740,7 @@ module FieldStruct
       def self.default_format: () -> Regexp
 
       # _@return_ — named presets for +format:+
-      def self.presets: () -> ::Hash[Symbol, Regexp]
+      def self.presets: () -> ::Hash[::Symbol, Regexp]
 
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
     end
@@ -791,7 +791,7 @@ module FieldStruct
       # type-class name (e.g. +#<FieldStruct::Types::String>+). Subclasses
       # that carry parameter state (Nested, Union, …) override to surface
       # what they wrap.
-      def inspect: () -> String
+      def inspect: () -> ::String
 
       # _@param_ `pp` — a PP-shaped sink (responds to +#text+)
       def pretty_print: (Object pp) -> void
@@ -808,17 +808,17 @@ module FieldStruct
     class Date < FieldStruct::Types::Base
       # _@return_ — field-level strftime/strptime format; +nil+
       # leaves the type using ISO-8601 in/out
-      def self.default_format: () -> String?
+      def self.default_format: () -> ::String?
 
       # _@return_ — named presets for the +format:+ option
-      def self.presets: () -> ::Hash[Symbol, String]
+      def self.presets: () -> ::Hash[::Symbol, ::String]
 
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
       # _@param_ `value` — +nil+ → +nil+; a +Date+ passes through; anything responding to +to_date+ (DateTime, Time, ActiveSupport's TimeWithZone, etc.) is converted; a String is parsed via +strptime+ if a +format:+ is set, otherwise +Date.parse+. Anything else falls through to +Date.parse(value.to_s)+ — which raises ArgumentError.
       # 
       # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      def coerce: ((Date | untyped | String)? value, ?format: String?) -> Date?
+      def coerce: ((::Date | untyped | ::String)? value, ?format: ::String?) -> ::Date?
 
       # _@return_ — the top-level +::Date+ class
       def ruby_type: () -> Class
@@ -832,17 +832,17 @@ module FieldStruct
     # parsing (strptime when input is a String) and serialization
     # (strftime via +as_json+).
     class Time < FieldStruct::Types::Base
-      def self.default_format: () -> String?
+      def self.default_format: () -> ::String?
 
       # _@return_ — named presets for the +format:+ option
-      def self.presets: () -> ::Hash[Symbol, String]
+      def self.presets: () -> ::Hash[::Symbol, ::String]
 
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
       # _@param_ `value` — +nil+ → +nil+; a +String+ is parsed via +strptime+ when +format:+ is set, otherwise via +Time.parse+; anything responding to +to_time+ (Date, DateTime, etc.) is converted.
       # 
       # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      def coerce: ((Time | untyped | String)? value, ?format: String?) -> Time?
+      def coerce: ((::Time | untyped | ::String)? value, ?format: ::String?) -> ::Time?
 
       # _@return_ — the top-level +::Time+ class
       def ruby_type: () -> Class
@@ -862,7 +862,7 @@ module FieldStruct
       def self.default_format: () -> Regexp
 
       # _@return_ — named presets for +format:+
-      def self.presets: () -> ::Hash[Symbol, Regexp]
+      def self.presets: () -> ::Hash[::Symbol, Regexp]
 
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
     end
@@ -911,7 +911,7 @@ module FieldStruct
       def self.default_format: () -> Regexp
 
       # _@return_ — named presets for +format:+
-      def self.presets: () -> ::Hash[Symbol, Regexp]
+      def self.presets: () -> ::Hash[::Symbol, Regexp]
 
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
     end
@@ -920,14 +920,14 @@ module FieldStruct
     # strictly and rejects anything non-numeric.
     class Float < FieldStruct::Types::Base
       # _@return_ — field-level rounding precision; +nil+ disables.
-      def self.default_round: () -> Integer?
+      def self.default_round: () -> ::Integer?
 
       # _@param_ `value` — +nil+ → +nil+; everything else flows through +Kernel#Float+ — strict on string parsing, rejects non-numeric strings, Symbols, Booleans, Arrays.
       # 
       # _@param_ `round` — decimal places; +nil+ leaves the value unrounded
       # 
       # _@return_ — +nil+ for +nil+ input, otherwise the parsed float
-      def coerce: ((Numeric | String)? value, ?round: Integer?) -> Float?
+      def coerce: ((Numeric | ::String)? value, ?round: ::Integer?) -> Float?
 
       # _@return_ — the top-level +::Float+ class
       def ruby_type: () -> Class
@@ -969,7 +969,7 @@ module FieldStruct
       # removed.
       def ruby_type: () -> ::Array[Class]
 
-      def inspect: () -> String
+      def inspect: () -> ::String
 
       # _@return_ — the configured member type instances
       attr_reader member_types: ::Array[Types::Base]
@@ -1001,7 +1001,7 @@ module FieldStruct
       # 
       # _@return_ — +nil+ when input is +nil+, otherwise a
       # fresh ASCII-8BIT-encoded copy of +value.to_s+
-      def coerce: (_ToS? value) -> String?
+      def coerce: (_ToS? value) -> ::String?
 
       # Missing if nil or empty. Whitespace bytes are meaningful in
       # binary data, so they don't count as missing.
@@ -1057,7 +1057,7 @@ module FieldStruct
       # the actual nested type rather than a generic FieldStruct::Base
       def ruby_type: () -> Class
 
-      def inspect: () -> String
+      def inspect: () -> ::String
 
       # _@return_ — the FieldStruct::Base subclass this type wraps
       attr_reader struct_class: Class
@@ -1087,7 +1087,7 @@ module FieldStruct
     # +missing?+ is nil-only — an empty symbol counts as present.
     class Symbol < FieldStruct::Types::Base
       # _@param_ `value` — anything else raises TypeError
-      def coerce: ((Symbol | String)? value) -> Symbol?
+      def coerce: ((Symbol | ::String)? value) -> Symbol?
 
       # _@return_ — the top-level +::Symbol+ class
       def ruby_type: () -> Class
@@ -1111,13 +1111,13 @@ module FieldStruct
     # +[TrueClass, FalseClass]+.
     class Boolean < FieldStruct::Types::Base
       # _@return_ — case-insensitive strings that coerce to true
-      def self.default_truthy: () -> ::Array[String]
+      def self.default_truthy: () -> ::Array[::String]
 
       # _@return_ — case-insensitive strings that coerce to false
-      def self.default_falsy: () -> ::Array[String]
+      def self.default_falsy: () -> ::Array[::String]
 
       # _@return_ — named presets for the +values:+ option
-      def self.presets: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.presets: () -> ::Hash[::Symbol, ::Hash[untyped, untyped]]
 
       # Resolve a Symbol +values:+ to its preset Hash at field-declaration
       # time. Pass-through for Hash form; raises for unknown preset names.
@@ -1126,7 +1126,7 @@ module FieldStruct
       # _@param_ `value` — accepts literal +true+/+false+; the integers +1+/+0+; or a String matched case-insensitively against the truthy/falsy vocabularies. Anything else raises ArgumentError.
       # 
       # _@param_ `values` — +{truthy: [...], falsy: [...]}+ custom vocabulary; +nil+ uses {.default_truthy} / {.default_falsy}
-      def coerce: ((bool | Integer | String)? value, ?values: ::Hash[Symbol, ::Array[String]]?) -> bool?
+      def coerce: ((bool | ::Integer | ::String)? value, ?values: ::Hash[::Symbol, ::Array[::String]]?) -> bool?
 
       # _@return_ — +[TrueClass, FalseClass]+
       def ruby_type: () -> [Class, Class]
@@ -1142,7 +1142,7 @@ module FieldStruct
       # _@param_ `value` — +nil+ → +nil+; +Integer+ passes through; everything else flows through +Kernel#Integer+ — Floats are truncated, digit-strings parse, float-shaped strings ("3.14") and non-digit strings raise ArgumentError, Symbols/Booleans/Arrays raise TypeError.
       # 
       # _@return_ — +nil+ for +nil+ input, otherwise the parsed integer
-      def coerce: ((Integer | Numeric | String)? value) -> Integer?
+      def coerce: ((Integer | Numeric | ::String)? value) -> Integer?
 
       # _@return_ — the top-level +::Integer+ class
       def ruby_type: () -> Class
@@ -1158,17 +1158,17 @@ module FieldStruct
     class DateTime < FieldStruct::Types::Base
       # _@return_ — field-level strftime/strptime format; +nil+
       # leaves the type using ISO-8601 in/out
-      def self.default_format: () -> String?
+      def self.default_format: () -> ::String?
 
       # _@return_ — named presets for the +format:+ option
-      def self.presets: () -> ::Hash[Symbol, String]
+      def self.presets: () -> ::Hash[::Symbol, ::String]
 
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
       # _@param_ `value` — +nil+ → +nil+; a +String+ is parsed via +strptime+ when +format:+ is set, otherwise via +DateTime.parse+; anything responding to +to_datetime+ (Date, Time, etc.) is converted.
       # 
       # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      def coerce: ((DateTime | untyped | String)? value, ?format: String?) -> DateTime?
+      def coerce: ((::DateTime | untyped | ::String)? value, ?format: ::String?) -> ::DateTime?
 
       # _@return_ — the top-level +::DateTime+ class
       def ruby_type: () -> Class
@@ -1180,12 +1180,12 @@ module FieldStruct
     class BigDecimal < FieldStruct::Types::Base
       # _@return_ — the field-level rounding precision, or +nil+
       # for no rounding. Subclasses override.
-      def self.default_round: () -> Integer?
+      def self.default_round: () -> ::Integer?
 
       # _@param_ `value` — +nil+ → +nil+; a +BigDecimal+ passes through; +Float+ uses +Float::DIG+ precision; everything else goes through +Kernel.BigDecimal(value.to_s)+ — non-numeric strings raise ArgumentError.
       # 
       # _@param_ `round` — decimal places; +nil+ leaves the value unrounded
-      def coerce: ((BigDecimal | Numeric | String)? value, ?round: Integer?) -> BigDecimal?
+      def coerce: ((::BigDecimal | Numeric | ::String)? value, ?round: ::Integer?) -> ::BigDecimal?
 
       # _@return_ — the top-level +::BigDecimal+ class
       def ruby_type: () -> Class
@@ -1214,7 +1214,7 @@ module FieldStruct
       # _@param_ `value` — anything stringable; +nil+ stays +nil+
       # 
       # _@return_ — frozen string, or +nil+ if input is +nil+
-      def coerce: (_ToS? value) -> String?
+      def coerce: (_ToS? value) -> ::String?
     end
 
     # Shared +format:+ option resolution for {Date}/{Time}/{DateTime}.

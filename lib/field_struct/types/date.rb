@@ -14,13 +14,13 @@ module FieldStruct
     # (strftime when emitting via +as_json+ / +to_json+). When no format
     # is set, the type uses +Date.parse+ for input and ISO-8601 for output.
     class Date < Base
-      # @return [String, nil] field-level strftime/strptime format; +nil+
+      # @return [::String, nil] field-level strftime/strptime format; +nil+
       #   leaves the type using ISO-8601 in/out
       def self.default_format
         nil
       end
 
-      # @return [Hash{Symbol=>String}] named presets for the +format:+ option
+      # @return [Hash{::Symbol=>::String}] named presets for the +format:+ option
       def self.presets
         {
           iso8601: '%Y-%m-%d',
@@ -33,15 +33,15 @@ module FieldStruct
         TimeFormatResolver.call(options, presets)
       end
 
-      # @param value [Date, #to_date, String, nil] +nil+ → +nil+; a +Date+
+      # @param value [::Date, #to_date, ::String, nil] +nil+ → +nil+; a +Date+
       #   passes through; anything responding to +to_date+ (DateTime,
       #   Time, ActiveSupport's TimeWithZone, etc.) is converted; a
       #   String is parsed via +strptime+ if a +format:+ is set,
       #   otherwise +Date.parse+. Anything else falls through to
       #   +Date.parse(value.to_s)+ — which raises ArgumentError.
-      # @param format [String, nil] strptime/strftime format; +nil+ uses
+      # @param format [::String, nil] strptime/strftime format; +nil+ uses
       #   {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      # @return [Date, nil]
+      # @return [::Date, nil]
       # @raise [ArgumentError] when a string cannot be parsed
       def coerce(value, format: self.class.default_format, **)
         return nil if value.nil?

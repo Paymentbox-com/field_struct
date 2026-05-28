@@ -72,7 +72,7 @@ module FieldStruct
         @struct_class
       end
 
-      # @return [String]
+      # @return [::String]
       def inspect
         name = @struct_class.name || 'AnonymousFieldStruct'
         "#<#{FieldStruct.inspect_namespace}::Types::Nested struct_class=#{name}>"

@@ -1,4 +1,13 @@
 module FieldStruct
+  # The library's root directory — the parent of +lib/+. Computed from this
+  # file's location, so it resolves to the repo root in development and to the
+  # installed gem directory when packaged.
+  # 
+  #   FieldStruct.root.join('lib', 'field_struct.rb') # => #<Pathname …>
+  # 
+  # _@return_ — absolute path to the gem root
+  def self.root: () -> Pathname
+
   # Build a new {Registry}, parented to +parent+ (defaults to
   # {FieldStruct.types}), and optionally configure it with a block
   # evaluated in the new registry's instance scope.
@@ -856,6 +865,118 @@ module FieldStruct
 
     # _@return_ — the parent registry, or +nil+ for an unparented one
     attr_reader parent: Registry?
+  end
+
+  # Scaffolds FieldStruct class source from one or more JSON example objects.
+  # 
+  # The goal is a *working prototype* you then refine by hand — the generator
+  # is deliberately conservative about types and never guesses past the
+  # evidence. Pass a single object to seed the shape, or an array of
+  # same-shape objects to gather more signal (empty fields get resolved from
+  # other samples, presence drives required/optional, and small repeated
+  # vocabularies surface as enum candidates). A single object is just the
+  # one-sample case of the same engine.
+  # 
+  #   FieldStruct::Scaffold.from_json(<<~JSON, class_name: 'User')
+  #     {"name": "Al", "age": 30, "active": true}
+  #   JSON
+  #   # class User < FieldStruct::Base
+  #   #   required :name, :string
+  #   #   required :age, :integer
+  #   #   required :active, :boolean
+  #   # end
+  # 
+  # Inference rules (conservative on purpose):
+  # 
+  # * JSON object → a nested FieldStruct class (emitted before its parent).
+  # * JSON array → +:array, of: <element type>+ (element class for arrays of objects).
+  # * JSON +true+/+false+ → +:boolean+; integer → +:integer+; real → +:float+.
+  # * JSON string → +:string+ — *including numeric-looking strings* (an
+  #   +authorization_code+ must not become an Integer). Hints like "maybe
+  #   :big_decimal" are emitted as trailing comments, not committed types.
+  # * required when present and non-blank across *every* sample; else optional.
+  # 
+  # The developer adds enums, descriptions, formats, and final scalar types;
+  # the comments point at where.
+  module Scaffold
+    # Generate FieldStruct class source from JSON example(s).
+    # 
+    # _@param_ `input` — a JSON string (object or array root), a parsed Hash, or an Array of same-shape Hashes
+    # 
+    # _@param_ `class_name` — the root class name
+    # 
+    # _@return_ — Ruby source defining the class and any nested classes
+    def self.from_json: ((String | ::Hash[untyped, untyped] | ::Array[::Hash[untyped, untyped]]) input, ?class_name: String) -> String
+
+    # _@return_ — the sample set (a lone object becomes a set of one)
+    def self.normalize: (untyped input) -> ::Array[::Hash[untyped, untyped]]
+
+    # Build the class for +samples+ as +class_name+, appending nested classes
+    # to +classes+ first (post-order, so references resolve), and return the
+    # (deduplicated) class name used.
+    def self.emit_object: (
+                            untyped class_name,
+                            untyped samples,
+                            untyped classes,
+                            untyped used
+                          ) -> untyped
+
+    # _@return_ — +{ present: Integer, values: Array }+ for +key+ across samples
+    def self.observe: (untyped samples, untyped key) -> ::Hash[untyped, untyped]
+
+    def self.field_line: (
+                           untyped attr,
+                           untyped obs,
+                           untyped total,
+                           untyped classes,
+                           untyped used
+                         ) -> untyped
+
+    # _@return_ — +[type_part, comment_hint]+
+    def self.type_for: (
+                         untyped attr,
+                         untyped non_nil,
+                         untyped classes,
+                         untyped used
+                       ) -> [String, String]
+
+    # _@return_ — +of:+ value and a comment hint
+    def self.array_element: (
+                              untyped attr,
+                              untyped elements,
+                              untyped classes,
+                              untyped used
+                            ) -> [String, String]
+
+    # _@return_ — inferred scalar type and a comment hint
+    def self.infer_scalar: (untyped values) -> [Symbol, String]
+
+    def self.string_inference: (untyped values) -> untyped
+
+    def self.scalar_kind: (untyped value) -> untyped
+
+    def self.build_class: (untyped name, untyped mappings, untyped lines) -> untyped
+
+    def self.decorate: (untyped declaration, *untyped comment_parts) -> untyped
+
+    def self.availability_comment: (untyped present, untyped total, untyped missing) -> untyped
+
+    # First-seen union of keys across all samples.
+    def self.ordered_keys: (untyped samples) -> untyped
+
+    def self.unique_name: (untyped base, untyped used) -> untyped
+
+    def self.class_name_for: (untyped key) -> untyped
+
+    def self.camelize: (untyped str) -> untyped
+
+    # Naive: strip one trailing "s". Good enough for a prototype name; the
+    # developer renames as needed.
+    def self.singularize: (untyped str) -> untyped
+
+    def self.safe_attr: (untyped key) -> untyped
+
+    def self.blank_string?: (untyped value) -> bool
   end
 
   module Types

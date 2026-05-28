@@ -735,6 +735,24 @@ module FieldStruct
     # _@return_ — when no block is given
     def each: () ?{ (Field field) -> void } -> ::Enumerator[untyped]
 
+    # A copy-pasteable schema view of the declared fields, keyed by field
+    # name. Each value is a plain Hash of primitives/strings (no live type
+    # objects), so the result reads cleanly in a console and is safe to
+    # `pp` or dump — handy for seeing a model's shape without reading its
+    # source. Option values that are classes or type instances are rendered
+    # as short names; a callable default shows as +"<callable>"+.
+    # 
+    #   User.metadata.to_h
+    #   # => { name: { type: "String", ruby_type: "String", required: true,
+    #   #              default: nil, options: {}, description: nil }, ... }
+    # 
+    # When a block is given this falls back to +Enumerable#to_h+ (mapping
+    # each {Field} to a pair), preserving existing callers.
+    # 
+    # _@return_ — field name → schema, or
+    # the block-mapped pairs when a block is supplied
+    def to_h: () -> ::Hash[Symbol, ::Hash[Symbol, Object]]
+
     # Record a serialization mapping for the named format. Repeats on
     # the same format name replace the prior mapping (last-write-wins).
     # The mapping is frozen on its way in.
@@ -772,6 +790,19 @@ module FieldStruct
     # 
     # _@param_ `pp` — a PP-shaped sink (responds to +#text+)
     def pretty_print: (Object pp) -> void
+
+    # Render one field as a primitive-only schema Hash for {#to_h}.
+    def field_schema: (untyped field) -> untyped
+
+    # A single class, or +A | B+ for a multi-class ruby_type (boolean, union).
+    def ruby_type_repr: (untyped ruby_type) -> untyped
+
+    # Reduce an option/default value to something printable: short class
+    # names for type references, +"<callable>"+ for procs, recursion into
+    # Array/Hash, everything else as-is.
+    def schema_value: (untyped value) -> untyped
+
+    def short_name: (untyped klass) -> untyped
 
     # _@return_ — declared
     # external-name mappings keyed by format name. Each inner hash

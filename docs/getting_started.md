@@ -193,6 +193,10 @@ What the messages mean and what to do:
 5. **Option scoping** (misuse raises at declaration): `format:` → string-shaped +
    date/time/datetime; `enum:` → string/symbol; `in:` → numeric/temporal; `round:` →
    float/decimal; `values:` → boolean.
+6. **`immutable!` / `frozen!` are one-way.** They inherit to subclasses and can't be
+   un-set on a child (there's no `mutable!`). If only some subclasses should be
+   immutable, declare it on those leaf classes — not a shared parent. (`coercion_policy`
+   and `unknown_attributes` *can* be overridden to any value on a child.)
 
 ### Testing your models
 

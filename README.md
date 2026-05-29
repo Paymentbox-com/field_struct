@@ -303,6 +303,35 @@ end
 Strict.new(name: 'Alice', extra: 'x')  # raises FieldStruct::UnknownAttributeError
 ```
 
+### Inheritance
+
+All four macros inherit to subclasses. A child overrides one by re-declaring it; the override is isolated — it never changes the parent.
+
+<!-- doctest -->
+```ruby
+class Account < FieldStruct::Base
+  coercion_policy :raise
+  immutable!
+end
+
+class GuestAccount < Account
+  coercion_policy :keep_raw    # override — Account stays :raise
+end
+
+GuestAccount.coercion_policy   # => :keep_raw
+Account.coercion_policy        # => :raise
+GuestAccount.immutable?        # => true
+```
+
+| Macro | Inherited | Override on a child |
+|---|---|---|
+| `coercion_policy` | ✅ | any value |
+| `unknown_attributes` | ✅ | `:ignore` ↔ `:raise` |
+| `immutable!` | ✅ | can add, **not remove** (one-way; no `mutable!`) |
+| `frozen!` | ✅ | can add, **not remove** (one-way; no `unfrozen!`) |
+
+Because `immutable!` / `frozen!` tighten but don't loosen, put them on the leaf classes that need them — not a shared parent — if some subclasses must stay mutable.
+
 ## Namespace registries
 
 Each FieldStruct class resolves type names through a registry chain. Define a module-level `field_types` method to extend the default set inside a namespace:

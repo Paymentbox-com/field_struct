@@ -123,7 +123,8 @@ class Doc < FieldStruct::Base
 end
 ```
 
-- `coercion_policy` / `unknown_attributes` are read with no arg, set with one; both inherited & overridable.
+- `coercion_policy` / `unknown_attributes` are read with no arg, set with one.
+- **Inheritance:** all four macros inherit to subclasses; a child overrides by re-declaring, and the override never mutates the parent. `coercion_policy`/`unknown_attributes` override to any value; `immutable!`/`frozen!` are **one-way** — a child can add them but can't un-set an inherited one (no `mutable!`/`unfrozen!`).
 - `validate` runs at `valid?` (and at construct if any exist); convention is `errors.add(:base, ...)`; `errors[:base]` is cleared each `valid?` run.
 
 ---

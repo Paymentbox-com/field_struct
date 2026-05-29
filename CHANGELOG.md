@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-05-28
+
+Documentation: an adoption guide, an agent router, and clearer inheritance semantics.
+
+### Added
+
+- **`docs/getting_started.md`** — a getting-started / integration guide (general Ruby plus a Rails section) with a task→API map, an error→meaning→fix table, a worked end-to-end example, common mistakes, and an "agent toolbox". Its general-Ruby examples are executed by the doctest harness.
+- **`AGENTS.md`** — a tool-agnostic router that points AI coding agents at the usage docs and the top gotchas (complements the Claude-specific skill; distinct from the contributor-facing `CLAUDE.md`).
+
+### Documentation
+
+- Documented class-macro inheritance: `coercion_policy` / `unknown_attributes` / `immutable!` / `frozen!` inherit to subclasses and a child overrides them in isolation from the parent — with the asymmetry that `immutable!` / `frozen!` are one-way (a child can add but not un-set them). Covered in the README (a doctested example + table), `USAGE.md`, and the guide's common-mistakes list.
+
 ## [0.7.0] - 2026-05-28
 
 Two adoption-focused additions: a JSON-to-FieldStruct scaffolder for modeling existing APIs and webhooks, and a `FieldStruct.root` path helper.

@@ -22,6 +22,14 @@ module FieldStruct
     class Union < Base
       RESCUABLE = [ArgumentError, TypeError, FieldStruct::Error].freeze
 
+      # Native options: a required +of:+ Array of member types (the DSL
+      # additionally requires at least two members).
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        super.merge(of: option(type: [::Array], required: true))
+      end
+
       # @return [Array<Types::Base>] the configured member type instances
       attr_reader :member_types
 

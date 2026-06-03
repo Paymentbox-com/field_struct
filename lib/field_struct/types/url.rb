@@ -14,6 +14,14 @@ module FieldStruct
     # exhaustive — users can override via +format: /.../+ if they need
     # different schemes or stricter host rules.
     class URL < FieldStruct::Types::String
+      # Inherits +format:+ / +enum:+ from {Types::String}, advertising the
+      # +:format+ presets this subtype resolves (see {.presets}).
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        super.merge(format: option(type: [::Regexp, ::Symbol], presets: presets.keys))
+      end
+
       # @return [Regexp] practical http(s) pattern; override per-field via +format:+
       def self.default_format
         %r{\Ahttps?://[^\s/$.?#][^\s]*\z}i

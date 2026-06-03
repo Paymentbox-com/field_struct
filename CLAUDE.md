@@ -4,14 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Context Documents
 
-Before starting any work, read these in order:
+Before starting any work, read these in order. Each is authoritative for *one*
+thing — don't treat the design record as a current-state doc:
 
-| Document | Purpose |
+| Document | Authoritative for |
 |----------|---------|
-| `docs/origin/plan.md` | **Source of truth.** Phase 1 design decisions, slice plan, Phase 2+ backlog. |
-| `.claude/project_intent.md` | What FieldStruct is/isn't, terminology, design invariants |
+| `.claude/project_intent.md` | **Design invariants & terminology** — what FieldStruct is/isn't, the rules every change is checked against, current capabilities |
+| `README.md` / `USAGE.md` | **Current behavior** — what the library actually does today (USAGE.md is the dense, example-first reference) |
 | `.claude/tdd_guidelines.md` | Test-driven development patterns (non-negotiable) |
 | `.claude/planning_guide.md` | How to plan and build features |
+| `docs/origin/plan.md` | **Design rationale / history** — the frozen Phase 1 + Phase 2 design record (the *why* behind D1–D15). Phase 1 and all "Phase 2" sections have shipped; it is not a current-state doc. |
 | `docs/origin/first_discussion.md` | Original idea document — historical context |
 
 ---
@@ -22,7 +24,9 @@ Before starting any work, read these in order:
 
 It is *not* a database layer, form object, or ActiveModel replacement. It mirrors ActiveModel's *interface shape* in places but reuses none of its code.
 
-The library is in **Phase 1** (v0.1.0 in flight). The 15-slice plan lives in `docs/origin/plan.md`.
+The library is at **v0.7.1** — well past the original Phase 1 cut (nested structs, JSON import, unions, `serialize`, extended types, cross-field validation, RBS generation, pattern matching all ship today). `docs/origin/plan.md` records the original design *rationale*; current capabilities live in `.claude/project_intent.md` and `USAGE.md`.
+
+A primary goal is **legibility for humans and agents** — see invariant 7 in `.claude/project_intent.md`. Hold new public surfaces to it.
 
 ---
 
@@ -152,4 +156,4 @@ If (and only if) that happens: re-run the command outside sandbox mode, or ask A
 
 ## When in doubt
 
-The slice plan in `docs/origin/plan.md` is the authoritative roadmap. The design decisions D1–D15 in that document are locked unless explicitly revisited. If a question isn't answered there, ask before guessing.
+For *current behavior*, `USAGE.md` / `README.md` are authoritative. For *design rationale*, the decisions D1–D15 (and the Phase 2 sections) in `docs/origin/plan.md` are locked unless explicitly revisited — but read that doc as history, not current state. For *the rules a change must satisfy*, see the design invariants in `.claude/project_intent.md`. If a question isn't answered in any of them, ask before guessing.

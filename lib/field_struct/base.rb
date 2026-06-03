@@ -158,9 +158,7 @@ module FieldStruct
         options = resolve_array_options(type_class, options)
         options = apply_default_format(type_class, options)
         options = type_class.resolve_options(options)
-        validate_format_option!(type_class, options)
-        validate_enum_option!(type_class, options)
-        validate_in_option!(type_class, options)
+        validate_options!(type_class, options)
         required = options.delete(:required) { false }
         default = options.delete(:default)
         coercion_policy = options.delete(:coercion_policy)
@@ -393,21 +391,86 @@ module FieldStruct
         description || desc
       end
 
-      def validate_format_option!(type_class, options)
-        return unless options.key?(:format)
-        return if type_class <= FieldStruct::Types::String
-        return if FORMAT_AWARE_TIME_TYPES.any? { |t| type_class <= t }
+      # Field options reserved by FieldStruct's own DSL on *every* field,
+      # regardless of type. They're consumed by {.field} itself, so the
+      # type-option check skips them.
+      UNIVERSAL_FIELD_OPTIONS = %i[required default coercion_policy description desc].freeze
+      private_constant :UNIVERSAL_FIELD_OPTIONS
 
-        raise ArgumentError,
-          "format: option only applies to string-shaped fields or time-shaped fields, not #{type_class}"
+      # Three-way option check (design invariant 7): validate native, pass
+      # through foreign. For each declared option:
+      #
+      # 1. **Native to this type** (in its +option_schema+) → validate the
+      #    value's shape against the descriptor.
+      # 2. **Native to *another* registered type but not this one** → raise,
+      #    naming the types it does apply to (the old "wrong family" errors,
+      #    now schema-driven).
+      # 3. **Not a FieldStruct option at all** → leave it untouched. Foreign
+      #    options persist on the Field for downstream tooling (e.g. an Avro
+      #    schema exporter).
+      #
+      # @param type_class [Class<Types::Base>]
+      # @param options [Hash] the resolved per-field options
+      # @raise [ArgumentError] on a misapplied or wrong-shaped native option
+      def validate_options!(type_class, options)
+        schema = type_class.option_schema
+        registry = namespace_field_types || FieldStruct.types
+        reserved = reserved_option_names(registry)
+
+        options.each do |key, value|
+          next if UNIVERSAL_FIELD_OPTIONS.include?(key)
+
+          if (descriptor = schema[key])
+            validate_option_value!(type_class, key, value, descriptor)
+          elsif reserved.include?(key)
+            raise ArgumentError, wrong_family_message(key, type_class, registry)
+          end
+        end
       end
 
-      FORMAT_AWARE_TIME_TYPES = [
-        FieldStruct::Types::Date,
-        FieldStruct::Types::Time,
-        FieldStruct::Types::DateTime
-      ].freeze
-      private_constant :FORMAT_AWARE_TIME_TYPES
+      # Every option name FieldStruct treats as its own: the union of every
+      # registered type's native options plus the universal field options.
+      # Anything outside this set is foreign and passes through.
+      #
+      # @param registry [Registry]
+      # @return [Array<Symbol>]
+      def reserved_option_names(registry)
+        native = registry.type_classes.flat_map do |type_class|
+          type_class.respond_to?(:option_schema) ? type_class.option_schema.keys : []
+        end
+        (native + UNIVERSAL_FIELD_OPTIONS).uniq
+      end
+
+      # @raise [ArgumentError] when +value+ isn't one of the descriptor's
+      #   accepted classes. +nil+ is always allowed (matches the
+      #   nil-exemption of format:/enum:/in: validation).
+      def validate_option_value!(type_class, key, value, descriptor)
+        return if value.nil?
+        return if descriptor[:type].any? { |klass| value.is_a?(klass) }
+
+        expected = descriptor[:type].map { |klass| short_type_name(klass) }.join(' or ')
+        raise ArgumentError,
+          "#{key}: on #{short_type_name(type_class)} expects #{expected}, " \
+          "got #{value.class} (#{value.inspect})"
+      end
+
+      # @return [String] the message for a native-elsewhere option, naming
+      #   the registered types that do accept it
+      def wrong_family_message(key, type_class, registry)
+        accepting = registry.type_classes
+          .select { |candidate| candidate.respond_to?(:option_schema) && candidate.option_schema.key?(key) }
+          .map { |candidate| short_type_name(candidate) }
+          .uniq
+        applies = accepting.empty? ? 'no registered types' : accepting.join(', ')
+        "#{key}: option does not apply to #{short_type_name(type_class)} fields. " \
+          "It applies to: #{applies}."
+      end
+
+      # @return [String] the unqualified class name (+"Integer"+, not
+      #   +"FieldStruct::Types::Integer"+) for readable messages
+      def short_type_name(type_class)
+        type_class.name.to_s.split('::').last
+      end
 
       def validate_serialize_mapping!(name, mapping)
         unknown = mapping.keys.reject { |key| metadata[key] }
@@ -416,41 +479,6 @@ module FieldStruct
         raise ArgumentError,
           "serialize :#{name} references undeclared field(s): #{unknown.map(&:inspect).join(", ")}. " \
           'Declare fields before calling serialize.'
-      end
-
-      def validate_enum_option!(type_class, options)
-        return unless options.key?(:enum)
-        unless string_like_type?(type_class)
-          raise ArgumentError,
-            "enum: option only applies to string-like fields (string, symbol, and subclasses), not #{type_class}"
-        end
-        raise ArgumentError, 'enum: must be an Array of allowed values' unless options[:enum].is_a?(::Array)
-      end
-
-      def validate_in_option!(type_class, options)
-        return unless options.key?(:in)
-        unless rangy_type?(type_class)
-          raise ArgumentError,
-            "in: option only applies to rangy fields (integer, float, decimal, date/time), not #{type_class}"
-        end
-        unless options[:in].is_a?(::Array) || options[:in].is_a?(::Range)
-          raise ArgumentError, 'in: must be an Array or Range'
-        end
-      end
-
-      def string_like_type?(type_class)
-        type_class <= FieldStruct::Types::String || type_class <= FieldStruct::Types::Symbol
-      end
-
-      def rangy_type?(type_class)
-        [
-          FieldStruct::Types::Integer,
-          FieldStruct::Types::Float,
-          FieldStruct::Types::BigDecimal,
-          FieldStruct::Types::Date,
-          FieldStruct::Types::Time,
-          FieldStruct::Types::DateTime
-        ].any? { |t| type_class <= t }
       end
 
       def validate_coercion_policy_override!(value)
@@ -655,10 +683,23 @@ module FieldStruct
       Oj.dump(as_json, mode: :compat)
     end
 
-    # @return [String] +#<ClassName field: value, ...>+
+    # Readable representation. Valid instances render as
+    # +#<ClassName field: value, ...>+. An *invalid* instance additionally
+    # surfaces its errors — +#<ClassName name: "" errors: {name: ["is
+    # required"]}>+ — so the most-read debug output never hides invalidity
+    # (design invariant 7). This reads the current {#errors}; it does not
+    # re-run validation, so printing an instance never mutates it.
+    #
+    # @return [String]
     def inspect
       pairs = attributes.map { |name, value| "#{name}: #{value.inspect}" }.join(', ')
-      "#<#{self.class.name || "AnonymousFieldStruct"} #{pairs}>"
+      body = "#{self.class.name || "AnonymousFieldStruct"} #{pairs}"
+      current = errors.to_h
+      unless current.empty?
+        rendered = current.map { |field, msgs| "#{field}: #{msgs.inspect}" }.join(', ')
+        body = "#{body} errors: {#{rendered}}"
+      end
+      "#<#{body}>"
     end
 
     # @return [ModelName]

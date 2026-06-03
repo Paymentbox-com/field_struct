@@ -1,6 +1,12 @@
 # FieldStruct — Phase 1 Plan
 
-> Source-of-truth design and slice plan for FieldStruct v0.1.0. Lives alongside the original conversation in `docs/origin/`. Update this file when locked decisions change.
+> **Status (as of v0.7.1): frozen design record.** This is the original Phase 1
+> design and slice plan. Everything in Phase 1 *and* every "Phase 2" section
+> below has since shipped. It is preserved for the **design rationale** — the
+> D1–D15 (and Phase 2) *why* — not as a current-state document. For current
+> behavior see `README.md` / `USAGE.md`; for design invariants and terminology
+> see `.claude/project_intent.md`. Don't rewrite the body to chase currency; the
+> value here is the reasoning, kept intact.
 
 ---
 

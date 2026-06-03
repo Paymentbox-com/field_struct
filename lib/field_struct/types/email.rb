@@ -15,6 +15,14 @@ module FieldStruct
     # characters; users can override via +format: /.../+ for stricter
     # rules.
     class Email < FieldStruct::Types::String
+      # Inherits +format:+ / +enum:+ from {Types::String}, advertising the
+      # +:format+ presets this subtype resolves (see {.presets}).
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        super.merge(format: option(type: [::Regexp, ::Symbol], presets: presets.keys))
+      end
+
       # @return [Regexp] pragmatic +local@domain.tld+ shape, no internal
       #   whitespace or extra +@+; deliberately not RFC 5322 strict.
       #   Override per-field via +format:+ (Regexp or Symbol preset).

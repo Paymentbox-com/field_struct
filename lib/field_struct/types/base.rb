@@ -9,6 +9,38 @@ module FieldStruct
     # (e.g. strings consider empty/whitespace missing, arrays consider empty
     # missing).
     class Base
+      # Native per-field options this type understands, as a frozen Hash of
+      # option-name (Symbol) → descriptor. Each descriptor is built by
+      # {.option} and carries the accepted value classes, whether the option
+      # is required at declaration time, and any Symbol presets it accepts.
+      #
+      # The empty default means "no native options." Subclasses override with
+      # +super.merge(...)+ so a subtype inherits its parent's options — e.g.
+      # {Types::UUID} inherits {Types::String}'s +format:+ / +enum:+ for free.
+      #
+      # This is the single source of truth for both *validation* (the DSL
+      # checks declared values against these descriptors) and *discoverability*
+      # (an agent or human can ask a type what it accepts without reading
+      # source). Options *not* listed here are treated as foreign and pass
+      # through onto the Field untouched, available to downstream tooling.
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        {}
+      end
+
+      # Build a normalized descriptor for {.option_schema}.
+      #
+      # @param type [Class, Array<Class>] the Ruby class(es) a declared value
+      #   may be an instance of
+      # @param required [Boolean] whether the option must be present at
+      #   field-declaration time
+      # @param presets [Array<Symbol>] Symbol preset names the option also accepts
+      # @return [Hash] a frozen descriptor: +{ type:, required:, presets: }+
+      def self.option(type:, required: false, presets: [])
+        {type: ::Kernel.Array(type).freeze, required: required, presets: presets.to_a.freeze}.freeze
+      end
+
       # Resolve symbolic preset references on the per-field options hash
       # at field-declaration time. Default implementation passes options
       # through unchanged; concrete types override to interpret their

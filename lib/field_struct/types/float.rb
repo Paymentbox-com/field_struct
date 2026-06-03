@@ -7,6 +7,17 @@ module FieldStruct
     # Float type. Coerces via +Kernel#Float+, which parses numeric strings
     # strictly and rejects anything non-numeric.
     class Float < Base
+      # Native options: a +round:+ Integer precision and an +in:+ Array or
+      # Range of allowed values.
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        super.merge(
+          round: option(type: [::Integer]),
+          in: option(type: [::Array, ::Range])
+        )
+      end
+
       # @return [::Integer, nil] field-level rounding precision; +nil+ disables.
       def self.default_round
         nil

@@ -46,6 +46,25 @@ module FieldStruct
     end
     alias messages to_h
 
+    # Every message rendered as a full, human-readable sentence: the
+    # humanized field name prepended to each message. Messages on +:base+
+    # (the cross-field convention) pass through unprefixed — they are
+    # already complete sentences. Order follows field insertion order, then
+    # message order within a field.
+    #
+    #   errors.add(:first_name, 'is required')
+    #   errors.full_messages   # => ["First name is required"]
+    #
+    # @return [Array<String>]
+    def full_messages
+      to_h.flat_map do |field, msgs|
+        next msgs if field == :base
+
+        prefix = humanize(field)
+        msgs.map { |msg| "#{prefix} #{msg}" }
+      end
+    end
+
     # @return [String]
     def inspect
       prefix = "#{FieldStruct.inspect_namespace}::Errors"
@@ -53,6 +72,18 @@ module FieldStruct
 
       pairs = to_h.map { |field, msgs| "#{field}=#{msgs.inspect}" }.join(' ')
       "#<#{prefix} #{pairs}>"
+    end
+
+    private
+
+    # Turn a field name into a display label for {#full_messages}:
+    # underscores become spaces and the first character is upcased.
+    # Deliberately minimal — no inflection, no +_id+ stripping, no i18n.
+    #
+    # @param field [Symbol]
+    # @return [String]
+    def humanize(field)
+      field.to_s.tr('_', ' ').sub(/\A./, &:upcase)
     end
   end
 end

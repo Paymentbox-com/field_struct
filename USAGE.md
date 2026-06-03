@@ -64,6 +64,15 @@ optional :address,   Address                       # nested FieldStruct
 optional :lines,     :array, of: LineItem          # array of nested
 ```
 
+**Each type describes its own options at runtime** — you don't have to trust this
+table. `FieldStruct.types.lookup(:date).option_schema` returns
+`{ format: {type:, required:, presets:}, in: {...} }`. The DSL validates these
+*native* options at class load: a wrong-shaped value (`round: '2'`) or a
+misapplied option (`enum:` on `:integer`) raises with the expected shape / the
+types it applies to. An option the type doesn't recognize is **not** an error —
+it's stored verbatim on the `Field`, so downstream tooling (e.g. an Avro exporter)
+can stash and read its own options.
+
 ---
 
 ## Field options (any type)
@@ -139,6 +148,8 @@ u.attribute_names   # => [:name, :age]
 u.valid?            # runs cross-field validators, then errors.empty?
 u.invalid?
 u.errors            # FieldStruct::Errors
+u.inspect           # #<User name: "Alice" age: 31>; an invalid instance appends
+                    #   `errors: {name: ["is required"]}` so it never looks fine
 u == other          # value equality (same class + same attributes; errors ignored)
 u.as_json           # JSON-ready Hash with :json mapping applied
 u.to_json           # String (via Oj)
@@ -148,7 +159,10 @@ case u; in { name: 'Alice', age: } then age; end   # pattern matching
 ```
 
 `Errors` API: `errors[:field] # => Array<String>`, `errors.add(:field, 'msg')`,
-`errors.clear(:field)`, `errors.empty?`, `errors.to_h` (alias `messages`).
+`errors.clear(:field)`, `errors.empty?`, `errors.to_h` (alias `messages`),
+`errors.full_messages` (each message as a sentence — humanized field name
+prepended, e.g. `first_name`/`is required` → `"First name is required"`; `:base`
+messages pass through unprefixed).
 
 ---
 

@@ -65,6 +65,33 @@ RSpec.describe FieldStruct::Base, 'ActiveModel-shaped surface' do
       instance = klass.new(name: 'Alice', age: 30)
       expect(instance.inspect).to include('AnonymousFieldStruct')
     end
+
+    context 'validity in the output' do
+      let(:required_klass) do
+        Class.new(described_class) do
+          required :name, :string
+          optional :age, :integer
+        end
+      end
+
+      it 'adds no errors suffix when the instance is valid' do
+        stub_const('GoodUser', required_klass)
+        instance = GoodUser.new(name: 'Alice', age: 30)
+        expect(instance.inspect).to eq('#<GoodUser name: "Alice", age: 30>')
+      end
+
+      it 'appends the per-field error hash when invalid' do
+        stub_const('BadUser', required_klass)
+        instance = BadUser.new(age: 30)
+        expect(instance.inspect).to eq('#<BadUser name: nil, age: 30 errors: {name: ["is required"]}>')
+      end
+
+      it 'reads current errors rather than recomputing (side-effect-free)' do
+        instance = required_klass.new(age: 30)
+        instance.errors.clear(:name)
+        expect(instance.inspect).not_to include('errors:')
+      end
+    end
   end
 
   describe '.model_name and #model_name' do

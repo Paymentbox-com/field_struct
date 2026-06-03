@@ -47,7 +47,7 @@ RSpec.describe FieldStruct::Base, 'enum: and in: field options' do
       it 'raises ArgumentError at class load' do
         expect do
           Class.new(described_class) { required :n, :integer, enum: [1, 2, 3] }
-        end.to raise_error(ArgumentError, /string-like/)
+        end.to raise_error(ArgumentError, /enum: option does not apply to Integer/)
       end
     end
 
@@ -138,7 +138,7 @@ RSpec.describe FieldStruct::Base, 'enum: and in: field options' do
       it 'raises ArgumentError at class load' do
         expect do
           Class.new(described_class) { required :s, :string, in: [1, 2, 3] }
-        end.to raise_error(ArgumentError, /rangy/)
+        end.to raise_error(ArgumentError, /in: option does not apply to String/)
       end
     end
 

@@ -88,7 +88,7 @@ RSpec.describe FieldStruct::Base, 'format: option' do
     it 'raises ArgumentError at class-declaration time' do
       expect do
         Class.new(described_class) { optional :n, :integer, format: /\d+/ }
-      end.to raise_error(ArgumentError, /string-shaped/)
+      end.to raise_error(ArgumentError, /format: option does not apply to Integer/)
     end
   end
 end

@@ -20,9 +20,15 @@ u.attributes  # => { name: "Alice", age: 30, tags: ["admin", "staff"] }
 u.to_json     # => '{"name":"Alice","age":30,"tags":["admin","staff"]}'
 
 u.name = ''
-u.valid?            # => false
-u.errors[:name]     # => ["is required"]
+u.valid?               # => false
+u.errors[:name]        # => ["is required"]
+u.errors.full_messages # => ["Name is required"]
 ```
+
+`inspect` surfaces invalidity too: a valid instance reads cleanly
+(`#<User name: "Alice", age: 30, …>`), while an invalid one appends its errors —
+`#<User name: "", age: 30, … errors: {name: ["is required"]}>` — so an object
+never *looks* fine when it isn't.
 
 ## Installation
 
@@ -193,6 +199,8 @@ What each type supports:
 | `:email` | `format:` | Regexp, or Symbol | `:permissive`, `:default`, `:strict` |
 | `:uuid` | `format:` | Regexp, or Symbol | `:any_version`, `:v4`, `:v7` |
 | `:url` | `format:` | Regexp, or Symbol | `:http`, `:https_only`, `:any_scheme` |
+
+You don't have to memorize this table — **each type describes its own options at runtime**. `FieldStruct.types.lookup(:date).option_schema` returns `{ format: {type:, required:, presets:}, in: {...} }`. The DSL validates these native options at class-load: a wrong-shaped value (`round: '2'`) or a misapplied option (`enum:` on `:integer`) raises with the expected shape / the types it applies to. An option the type doesn't recognize is **not** an error — it's stored verbatim on the `Field`, so downstream tooling (e.g. an Avro exporter) can carry its own options.
 
 Time-shaped `format:` applies in **both** directions: input strings parse via `strptime`, output (`as_json` / `to_json`) emits via `strftime`. The round-trip property holds — `Klass.from_json(instance.to_json) == instance` for any format you pick.
 
@@ -477,13 +485,13 @@ Mirroring AM's call sites so Rails-adjacent code feels at home:
 u = User.new(name: 'Alice')
 
 u.valid?           # / u.invalid?
-u.errors           # FieldStruct::Errors  ([] / add / clear / empty? / to_h / messages)
+u.errors           # FieldStruct::Errors  ([] / add / clear / empty? / to_h / messages / full_messages)
 u.attributes       # / u.attribute_names
 u.assign_attributes(name: 'Bob')
 u.to_h             # alias of #attributes
 u.as_json          # JSON-ready hash (Date/Time -> ISO-8601, BigDecimal -> string)
 u.to_json          # via Oj
-u.inspect          # #<User name: "Alice">
+u.inspect          # #<User name: "Alice">  (appends `errors: {…}` when invalid)
 u.model_name       # FieldStruct::ModelName  (name / singular / plural / element)
 u.to_model         # self
 u == other         # structural equality (class + attributes)

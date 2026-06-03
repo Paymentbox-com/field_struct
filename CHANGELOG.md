@@ -6,6 +6,29 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-03
+
+Discoverability and toolchain hardening on top of v0.8.0's legibility work.
+
+### Added
+
+- **`FieldStruct::Base.describe` / `Metadata#describe`** — a human/agent-readable schema summary: one line per field with its type, required-ness, and the native options that field's type accepts (value shapes, required options starred, presets listed). The readable companion to the structured `metadata.to_h` — answers "what does this model look like, and what can I put where" in one call.
+- **`Types::Base.own_option_schema`** — the per-type hook for declaring a type's own options; `option_schema` merges it down the class chain.
+
+### Changed
+
+- **`Types#option_schema` is frozen and memoized per type class.** A type's option vocabulary is fixed at load, so the inheritance merge is computed once instead of on every field declaration. Types now declare `own_option_schema` instead of `super.merge(...)`; the public `option_schema` return value is unchanged.
+
+### Documentation
+
+- **YARD coverage to 100%** — documented the remaining constants, the `FieldStruct` / `FieldStruct::Types` modules, the per-type `resolve_options` overrides, `PresetResolver.call`, and the internal `inherited` / `canonicalize_serialized_value` hooks.
+- README now surfaces `errors.full_messages`, the invalid-instance `inspect` output, and runtime option discovery (`Type.option_schema`) — the v0.8.0 surfaces that only `USAGE.md` / `AGENTS.md` had documented.
+
+### Tooling / CI
+
+- **Sord-warning guard.** `sigs:generate` now fails when Sord can't resolve a YARD type and silently falls back to `untyped` — a degradation that was invisible to `sigs:check` (the committed file already carried the `untyped`). The usual cause is a bare stdlib name (`Symbol` / `Array`) colliding with `Types::Symbol` / `Types::Array`; the fix is to fully-qualify it. The affected `option_schema` annotations were qualified accordingly.
+- **CI matrix widened** from a single Ruby (3.3.6) to **3.2 / 3.3 / 3.4** (full battery), plus a new **Ruby-floor job** that runs the library specs on **3.0 / 3.1** via a minimal `gemfiles/floor.gemfile` (no dev toolchain — `rbs`/`sord` need Ruby ≥3.2), proving the gem's advertised `>= 3.0` runtime floor. The one rbs-grammar spec self-skips where the gem is absent.
+
 ## [0.8.0] - 2026-06-03
 
 Legibility for humans and agents, made a first-class design invariant and

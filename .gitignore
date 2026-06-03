@@ -9,6 +9,7 @@
 
 # Library — bundler resolution belongs to consumers, not the gem
 /Gemfile.lock
+/gemfiles/*.lock
 
 # rbs collection — installed sigs and the derived lock float with the
 # (uncommitted) Gemfile.lock; only rbs_collection.yaml is tracked.

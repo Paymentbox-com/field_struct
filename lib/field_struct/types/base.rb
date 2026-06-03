@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 module FieldStruct
+  # Namespace for the built-in coercion types ({Types::String}, {Types::Integer},
+  # …) and the {Types::Base} contract that custom types implement.
   module Types
     # Abstract base for all FieldStruct type classes.
     #
@@ -14,9 +16,11 @@ module FieldStruct
       # {.option} and carries the accepted value classes, whether the option
       # is required at declaration time, and any Symbol presets it accepts.
       #
-      # The empty default means "no native options." Subclasses override with
-      # +super.merge(...)+ so a subtype inherits its parent's options — e.g.
-      # {Types::UUID} inherits {Types::String}'s +format:+ / +enum:+ for free.
+      # This merges {.own_option_schema} down the class chain so a subtype
+      # inherits its parent's options for free (e.g. {Types::UUID} picks up
+      # {Types::String}'s +format:+ / +enum:+). The merged result is frozen and
+      # memoized per type class — a type's option vocabulary is fixed at load,
+      # so this is computed once rather than on every field declaration.
       #
       # This is the single source of truth for both *validation* (the DSL
       # checks declared values against these descriptors) and *discoverability*
@@ -26,6 +30,19 @@ module FieldStruct
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.option_schema
+        @option_schema ||= begin
+          inherited = superclass.respond_to?(:option_schema) ? superclass.option_schema : {}
+          inherited.merge(own_option_schema).freeze
+        end
+      end
+
+      # The options this type adds on top of its superclass's. Subclasses
+      # override *this* (not {.option_schema}) to declare their native options;
+      # the empty default means "adds nothing." {.option_schema} handles the
+      # inheritance merge.
+      #
+      # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
+      def self.own_option_schema
         {}
       end
 

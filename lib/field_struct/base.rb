@@ -18,7 +18,9 @@ module FieldStruct
   # / +attribute_names+, and metadata inheritance via the +inherited+
   # hook. Macros and validation layer on in later slices.
   class Base
+    # Accepted values for the +coercion_policy+ macro (class- and field-level).
     VALID_COERCION_POLICIES = %i[keep_raw replace raise].freeze
+    # Accepted values for the +unknown_attributes+ macro.
     VALID_UNKNOWN_POLICIES = %i[ignore raise].freeze
     UNSET = Object.new.freeze
     private_constant :UNSET
@@ -261,6 +263,17 @@ module FieldStruct
         @model_name ||= ModelName.new(name)
       end
 
+      # A human/agent-readable summary of this class's schema: the class name
+      # followed by one line per field (type, required-ness, and the native
+      # options that field's type accepts). A single call that answers "what
+      # does this model look like, and what can I put where" without reading
+      # source. See {Metadata#describe} for the field-line format.
+      #
+      # @return [String]
+      def describe
+        "#{name || "AnonymousFieldStruct"}\n#{metadata.describe}"
+      end
+
       # Parse a JSON string and build an instance.
       #
       #   Person.from_json('{"name":"Alice","address":{"street":"1","city":"NYC"}}')
@@ -307,6 +320,10 @@ module FieldStruct
         end
       end
 
+      # Reverse-map a single serialized value for its field, recursing into
+      # nested FieldStructs and arrays of nested. Companion to
+      # {.canonicalize_serialized_hash}.
+      #
       # @api private
       def canonicalize_serialized_value(value, field)
         return value if field.nil?
@@ -562,6 +579,11 @@ module FieldStruct
         self
       end
 
+      # Ruby hook: give each subclass its own metadata seeded from the
+      # parent's (merged copy) plus inherited macro settings, so field
+      # declarations and config flow down the class chain.
+      #
+      # @api private
       def inherited(subclass)
         super
         subclass.metadata.merge(metadata)

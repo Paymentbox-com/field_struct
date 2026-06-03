@@ -25,8 +25,8 @@ module FieldStruct
       # Symbol naming one of {.presets}.
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
-      def self.option_schema
-        super.merge(values: option(type: [::Hash, ::Symbol], presets: presets.keys))
+      def self.own_option_schema
+        {values: option(type: [::Hash, ::Symbol], presets: presets.keys)}
       end
 
       # @return [Array<::String>] case-insensitive strings that coerce to true

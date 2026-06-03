@@ -14,7 +14,7 @@ module FieldStruct
       # registered Symbol or a Class (a +Types::Base+ or +FieldStruct::Base+
       # subclass).
       #
-      # @return [Hash{Symbol=>Hash}]
+      # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.option_schema
         super.merge(of: option(type: [::Symbol, ::Class], required: true))
       end

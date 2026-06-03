@@ -13,7 +13,7 @@ module FieldStruct
       # Native options: an +enum:+ Array of allowed values (symbols are
       # string-like, so they share +enum:+ with {Types::String}).
       #
-      # @return [Hash{Symbol=>Hash}]
+      # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.option_schema
         super.merge(enum: option(type: [::Array]))
       end

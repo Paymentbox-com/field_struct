@@ -25,7 +25,7 @@ module FieldStruct
       # Native options: a required +of:+ Array of member types (the DSL
       # additionally requires at least two members).
       #
-      # @return [Hash{Symbol=>Hash}]
+      # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.option_schema
         super.merge(of: option(type: [::Array], required: true))
       end

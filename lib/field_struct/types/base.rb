@@ -24,19 +24,19 @@ module FieldStruct
       # source). Options *not* listed here are treated as foreign and pass
       # through onto the Field untouched, available to downstream tooling.
       #
-      # @return [Hash{Symbol=>Hash}]
+      # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.option_schema
         {}
       end
 
       # Build a normalized descriptor for {.option_schema}.
       #
-      # @param type [Class, Array<Class>] the Ruby class(es) a declared value
-      #   may be an instance of
+      # @param type [::Class, ::Array<::Class>] the Ruby class(es) a declared
+      #   value may be an instance of
       # @param required [Boolean] whether the option must be present at
       #   field-declaration time
-      # @param presets [Array<Symbol>] Symbol preset names the option also accepts
-      # @return [Hash] a frozen descriptor: +{ type:, required:, presets: }+
+      # @param presets [::Array<::Symbol>] Symbol preset names the option also accepts
+      # @return [::Hash{::Symbol => Object}] a frozen descriptor: +{ type:, required:, presets: }+
       def self.option(type:, required: false, presets: [])
         {type: ::Kernel.Array(type).freeze, required: required, presets: presets.to_a.freeze}.freeze
       end

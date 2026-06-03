@@ -10,7 +10,7 @@ module FieldStruct
       # Native options: a +round:+ Integer precision and an +in:+ Array or
       # Range of allowed values.
       #
-      # @return [Hash{Symbol=>Hash}]
+      # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.option_schema
         super.merge(
           round: option(type: [::Integer]),

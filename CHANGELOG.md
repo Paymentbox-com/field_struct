@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-03
+
+Legibility for humans and agents, made a first-class design invariant and
+delivered across the error, inspection, and option surfaces.
+
+### Added
+
+- **`FieldStruct::Errors#full_messages`** — renders each validation message as a complete sentence by prepending the humanized field name (`first_name` + `is required` → `"First name is required"`). Humanization is deliberately minimal (underscores to spaces, first character upcased — no inflector, no `_id` stripping, no i18n), so the transform stays predictable. Messages on `:base` (the cross-field convention) pass through unprefixed.
+- **`Types::Base.option_schema`** — every type now declares its native field options in one place, as a frozen `{name => {type:, required:, presets:}}` hash, inherited via `super.merge` so subtypes pick up their parent's options (`:uuid` inherits `:string`'s `format:` / `enum:`). The type system can now answer "what options do I accept, of what shape, with what presets" at runtime, for both humans and agents, without reading source.
+- **`Registry#type_classes`** — enumerates every distinct type class resolvable through the registry (local plus parent chain), backing the reserved-option-name computation and general discoverability.
+
+### Changed
+
+- **Field-option validation is now schema-driven and three-way** (validate-native, pass-through-foreign), replacing the scattered `format:`/`enum:`/`in:` applicability checks. A native option with a wrong-shaped value (`round: '2'`) raises at class load naming the expected shape; a known option used on the wrong type (`enum:` on `:integer`, a misplaced `of:`) raises naming the types it *does* apply to; an unknown option is left untouched on the `Field` so downstream tooling (e.g. an Avro schema exporter) can carry its own options. The wrong-family error *messages* changed (e.g. "enum: option does not apply to Integer fields. It applies to: String, Symbol.").
+- **`Base#inspect` surfaces validity.** An invalid instance now appends its per-field errors — `#<User name: "" age: 30 errors: {name: ["is required"]}>` — so the most-read debug output no longer hides invalidity. Valid instances are unchanged, byte for byte. `inspect` reads the current errors and never re-runs validation, so printing an instance can't mutate it.
+
+### Documentation
+
+- Named **legibility for humans and agents** as design invariant 7 in `.claude/project_intent.md`, phrased operationally (the public surface must explain itself without source). Reconciled the source-of-truth docs with reality: `docs/origin/plan.md` is now framed as the frozen design-rationale record, `project_intent.md` carries a current Capabilities section, and `CLAUDE.md` re-points "source of truth" (current behavior → `USAGE.md`/`README.md`; rationale → `plan.md`). `USAGE.md` / `AGENTS.md` document the new runtime option discoverability and the inspect/error surfaces.
+
 ## [0.7.1] - 2026-05-28
 
 Documentation: an adoption guide, an agent router, and clearer inheritance semantics.

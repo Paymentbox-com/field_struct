@@ -12,8 +12,8 @@ module FieldStruct
       # Native options: an +in:+ Array or Range of allowed values.
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
-      def self.option_schema
-        super.merge(in: option(type: [::Array, ::Range]))
+      def self.own_option_schema
+        {in: option(type: [::Array, ::Range])}
       end
 
       # @param value [Integer, Numeric, ::String, nil] +nil+ → +nil+;

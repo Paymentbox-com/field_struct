@@ -20,14 +20,16 @@ module FieldStruct
     # Order matters: +of: [String, Integer]+ coerces "42" to "42"
     # (String wins first); +of: [Integer, String]+ coerces "42" to 42.
     class Union < Base
+      # Member-coercion errors caught so the next member can be tried; other
+      # exceptions (e.g. +NoMethodError+) propagate as real bugs.
       RESCUABLE = [ArgumentError, TypeError, FieldStruct::Error].freeze
 
       # Native options: a required +of:+ Array of member types (the DSL
       # additionally requires at least two members).
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
-      def self.option_schema
-        super.merge(of: option(type: [::Array], required: true))
+      def self.own_option_schema
+        {of: option(type: [::Array], required: true)}
       end
 
       # @return [Array<Types::Base>] the configured member type instances

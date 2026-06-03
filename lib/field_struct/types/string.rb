@@ -12,11 +12,11 @@ module FieldStruct
       # allowed values.
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
-      def self.option_schema
-        super.merge(
+      def self.own_option_schema
+        {
           format: option(type: [::Regexp, ::Symbol]),
           enum: option(type: [::Array])
-        )
+        }
       end
 
       # @param value [#to_s, nil] anything stringable (everything in

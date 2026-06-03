@@ -15,8 +15,8 @@ module FieldStruct
       # subclass).
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
-      def self.option_schema
-        super.merge(of: option(type: [::Symbol, ::Class], required: true))
+      def self.own_option_schema
+        {of: option(type: [::Symbol, ::Class], required: true)}
       end
 
       # @param value [Array, nil] anything else raises TypeError

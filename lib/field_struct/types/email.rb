@@ -19,8 +19,8 @@ module FieldStruct
       # +:format+ presets this subtype resolves (see {.presets}).
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
-      def self.option_schema
-        super.merge(format: option(type: [::Regexp, ::Symbol], presets: presets.keys))
+      def self.own_option_schema
+        {format: option(type: [::Regexp, ::Symbol], presets: presets.keys)}
       end
 
       # @return [Regexp] pragmatic +local@domain.tld+ shape, no internal
@@ -39,6 +39,8 @@ module FieldStruct
         }
       end
 
+      # Resolve a Symbol +format:+ preset (see {.presets}) to its Regexp at
+      # field-declaration time; a user-supplied Regexp passes through.
       def self.resolve_options(options)
         PresetResolver.call(options, :format, presets, label: ':email format')
       end

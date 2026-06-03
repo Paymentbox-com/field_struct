@@ -326,6 +326,13 @@ module FieldStruct
     # _@return_ — an ActiveModel::Name-shaped value for this class
     def self.model_name: () -> ModelName
 
+    # A human/agent-readable summary of this class's schema: the class name
+    # followed by one line per field (type, required-ness, and the native
+    # options that field's type accepts). A single call that answers "what
+    # does this model look like, and what can I put where" without reading
+    # source. See {Metadata#describe} for the field-line format.
+    def self.describe: () -> String
+
     # Parse a JSON string and build an instance.
     # 
     #   Person.from_json('{"name":"Alice","address":{"street":"1","city":"NYC"}}')
@@ -859,6 +866,23 @@ module FieldStruct
     # 
     # _@param_ `pp` — a PP-shaped sink (responds to +#text+)
     def pretty_print: (Object pp) -> void
+
+    # Human/agent-readable summary of the declared fields: one line each
+    # with the field's type, required-ness, and the native options its type
+    # accepts (with value shapes, required options starred, and any presets).
+    # Answers "what can I put here?" without reading source. For the
+    # structured form use {#to_h}; for a class-titled version use
+    # {Base.describe}.
+    # 
+    #   name (String, required) — accepts format (Regexp | Symbol), enum (Array)
+    def describe: () -> String
+
+    # _@return_ — one +describe+ line for a field
+    def describe_field: (untyped field) -> String
+
+    # _@return_ — the type's native options as +name(shapes)+, required
+    # ones starred, presets appended — empty when the type has none
+    def native_options_summary: (untyped type_class) -> String
 
     # Render one field as a primitive-only schema Hash for {#to_h}.
     def field_schema: (untyped field) -> untyped

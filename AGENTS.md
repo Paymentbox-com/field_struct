@@ -24,6 +24,6 @@ things most often gotten wrong. (For *contributing to the gem itself*, see
 ## Fast paths
 
 - Bootstrap a model from a JSON sample: `FieldStruct::Scaffold.from_json(json)`.
-- See a model's shape without reading source: `pp Klass.metadata.to_h`.
+- See a model's shape without reading source: `pp Klass.metadata.to_h` (structured), or `puts Klass.describe` (readable — fields, types, and what each accepts).
 - Ask a type what options it accepts (name, value shape, presets): `FieldStruct.types.lookup(:date).option_schema`.
 - Type your models for Steep/Solargraph: `FieldStruct::RBS.generate(Klass)`.

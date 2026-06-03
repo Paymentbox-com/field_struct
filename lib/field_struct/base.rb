@@ -263,6 +263,17 @@ module FieldStruct
         @model_name ||= ModelName.new(name)
       end
 
+      # A human/agent-readable summary of this class's schema: the class name
+      # followed by one line per field (type, required-ness, and the native
+      # options that field's type accepts). A single call that answers "what
+      # does this model look like, and what can I put where" without reading
+      # source. See {Metadata#describe} for the field-line format.
+      #
+      # @return [String]
+      def describe
+        "#{name || "AnonymousFieldStruct"}\n#{metadata.describe}"
+      end
+
       # Parse a JSON string and build an instance.
       #
       #   Person.from_json('{"name":"Alice","address":{"street":"1","city":"NYC"}}')

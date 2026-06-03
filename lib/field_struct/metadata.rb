@@ -148,7 +148,43 @@ module FieldStruct
       pp.text("\n>")
     end
 
+    # Human/agent-readable summary of the declared fields: one line each
+    # with the field's type, required-ness, and the native options its type
+    # accepts (with value shapes, required options starred, and any presets).
+    # Answers "what can I put here?" without reading source. For the
+    # structured form use {#to_h}; for a class-titled version use
+    # {Base.describe}.
+    #
+    #   name (String, required) — accepts format (Regexp | Symbol), enum (Array)
+    #
+    # @return [String]
+    def describe
+      return '(no fields)' if @fields.empty?
+
+      @fields.each_value.map { |field| describe_field(field) }.join("\n")
+    end
+
     private
+
+    # @return [String] one +describe+ line for a field
+    def describe_field(field)
+      label = "  #{field.name} (#{short_name(field.type)}, #{field.required? ? "required" : "optional"})"
+      accepts = native_options_summary(field.type)
+      accepts.empty? ? label : "#{label} — accepts #{accepts}"
+    end
+
+    # @return [String] the type's native options as +name(shapes)+, required
+    #   ones starred, presets appended — empty when the type has none
+    def native_options_summary(type_class)
+      return '' unless type_class.respond_to?(:option_schema)
+
+      type_class.option_schema.map do |name, descriptor|
+        shapes = descriptor[:type].map { |klass| short_name(klass) }.join(' | ')
+        star = descriptor[:required] ? '*' : ''
+        presets = descriptor[:presets].empty? ? '' : "; presets: #{descriptor[:presets].join(", ")}"
+        "#{name}#{star} (#{shapes}#{presets})"
+      end.join(', ')
+    end
 
     # Render one field as a primitive-only schema Hash for {#to_h}.
     def field_schema(field)

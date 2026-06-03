@@ -19,10 +19,11 @@ things most often gotten wrong. (For *contributing to the gem itself*, see
 2. **`required` ≠ non-nil at runtime** — an invalid instance can hold `nil`. Gate on `valid?`.
 3. **Whitespace-only strings count as missing** for `:string` and its subtypes.
 4. **`:array` needs `of:`; `:union` needs `of: [...]`** (≥2 members).
-5. **Option scoping**: `format:`→string/date-ish, `enum:`→string/symbol, `in:`→numeric/temporal, `round:`→float/decimal, `values:`→boolean.
+5. **Option scoping**: `format:`→string/date-ish, `enum:`→string/symbol, `in:`→numeric/temporal, `round:`→float/decimal, `values:`→boolean. A misapplied known option raises at class load and names the types it applies to; an *unknown* option passes through onto the Field untouched (kept for downstream tooling). You don't have to memorize this table — ask the type (next section).
 
 ## Fast paths
 
 - Bootstrap a model from a JSON sample: `FieldStruct::Scaffold.from_json(json)`.
 - See a model's shape without reading source: `pp Klass.metadata.to_h`.
+- Ask a type what options it accepts (name, value shape, presets): `FieldStruct.types.lookup(:date).option_schema`.
 - Type your models for Steep/Solargraph: `FieldStruct::RBS.generate(Klass)`.

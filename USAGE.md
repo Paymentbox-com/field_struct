@@ -64,6 +64,15 @@ optional :address,   Address                       # nested FieldStruct
 optional :lines,     :array, of: LineItem          # array of nested
 ```
 
+**Each type describes its own options at runtime** — you don't have to trust this
+table. `FieldStruct.types.lookup(:date).option_schema` returns
+`{ format: {type:, required:, presets:}, in: {...} }`. The DSL validates these
+*native* options at class load: a wrong-shaped value (`round: '2'`) or a
+misapplied option (`enum:` on `:integer`) raises with the expected shape / the
+types it applies to. An option the type doesn't recognize is **not** an error —
+it's stored verbatim on the `Field`, so downstream tooling (e.g. an Avro exporter)
+can stash and read its own options.
+
 ---
 
 ## Field options (any type)

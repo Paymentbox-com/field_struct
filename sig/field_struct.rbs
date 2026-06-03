@@ -366,17 +366,46 @@ module FieldStruct
     # _@param_ `options` — mutated in place (keys deleted)
     def self.extract_description!: (::Hash[untyped, untyped] options) -> String?
 
-    def self.validate_format_option!: (untyped type_class, untyped options) -> untyped
+    # Three-way option check (design invariant 7): validate native, pass
+    # through foreign. For each declared option:
+    # 
+    # 1. **Native to this type** (in its +option_schema+) → validate the
+    #    value's shape against the descriptor.
+    # 2. **Native to *another* registered type but not this one** → raise,
+    #    naming the types it does apply to (the old "wrong family" errors,
+    #    now schema-driven).
+    # 3. **Not a FieldStruct option at all** → leave it untouched. Foreign
+    #    options persist on the Field for downstream tooling (e.g. an Avro
+    #    schema exporter).
+    # 
+    # _@param_ `type_class`
+    # 
+    # _@param_ `options` — the resolved per-field options
+    def self.validate_options!: (singleton(Types::Base) type_class, ::Hash[untyped, untyped] options) -> untyped
+
+    # Every option name FieldStruct treats as its own: the union of every
+    # registered type's native options plus the universal field options.
+    # Anything outside this set is foreign and passes through.
+    # 
+    # _@param_ `registry`
+    def self.reserved_option_names: (Registry registry) -> ::Array[Symbol]
+
+    def self.validate_option_value!: (
+                                       untyped type_class,
+                                       untyped key,
+                                       untyped value,
+                                       untyped descriptor
+                                     ) -> untyped
+
+    # _@return_ — the message for a native-elsewhere option, naming
+    # the registered types that do accept it
+    def self.wrong_family_message: (untyped key, untyped type_class, untyped registry) -> String
+
+    # _@return_ — the unqualified class name (+"Integer"+, not
+    # +"FieldStruct::Types::Integer"+) for readable messages
+    def self.short_type_name: (untyped type_class) -> String
 
     def self.validate_serialize_mapping!: (untyped name, untyped mapping) -> untyped
-
-    def self.validate_enum_option!: (untyped type_class, untyped options) -> untyped
-
-    def self.validate_in_option!: (untyped type_class, untyped options) -> untyped
-
-    def self.string_like_type?: (untyped type_class) -> bool
-
-    def self.rangy_type?: (untyped type_class) -> bool
 
     def self.validate_coercion_policy_override!: (untyped value) -> untyped
 
@@ -874,6 +903,14 @@ module FieldStruct
     # 
     # _@param_ `name`
     def key?: ((Symbol | String) name) -> bool
+
+    # Every distinct type class resolvable through this registry, including
+    # those inherited from the parent chain. Local entries come first;
+    # duplicates (e.g. an alias pointing at an already-listed class, or a
+    # parent class also registered locally) are removed.
+    # 
+    # _@return_ — deduplicated, local-first
+    def type_classes: () -> ::Array[Class]
 
     # _@return_ — one-line summary of the locally-registered names
     # (does not enumerate the parent chain), with a +parent+ marker

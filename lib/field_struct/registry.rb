@@ -62,6 +62,17 @@ module FieldStruct
       !@parent.nil? && @parent.key?(key)
     end
 
+    # Every distinct type class resolvable through this registry, including
+    # those inherited from the parent chain. Local entries come first;
+    # duplicates (e.g. an alias pointing at an already-listed class, or a
+    # parent class also registered locally) are removed.
+    #
+    # @return [Array<Class>] deduplicated, local-first
+    def type_classes
+      own = @types.values
+      (@parent ? own + @parent.type_classes : own).uniq
+    end
+
     # @return [String] one-line summary of the locally-registered names
     #   (does not enumerate the parent chain), with a +parent+ marker
     #   when the registry has one

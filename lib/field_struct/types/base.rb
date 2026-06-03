@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 module FieldStruct
+  # Namespace for the built-in coercion types ({Types::String}, {Types::Integer},
+  # …) and the {Types::Base} contract that custom types implement.
   module Types
     # Abstract base for all FieldStruct type classes.
     #

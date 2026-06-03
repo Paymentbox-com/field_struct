@@ -1,3 +1,6 @@
+# Typed PORO foundation: declare fields with enforced types, presence checks,
+# and per-field validation. Subclass {FieldStruct::Base} to get a value object
+# whose attributes coerce, validate on assignment, and introspect cleanly.
 module FieldStruct
   # The library's root directory — the parent of +lib/+. Computed from this
   # file's location, so it resolves to the repo root in development and to the
@@ -350,6 +353,9 @@ module FieldStruct
     # _@return_ — canonical-keyed input ready for +.new+
     def self.canonicalize_serialized_hash: (::Hash[untyped, untyped] hash) -> ::Hash[Symbol, Object]
 
+    # Reverse-map a single serialized value for its field, recursing into
+    # nested FieldStructs and arrays of nested. Companion to
+    # {.canonicalize_serialized_hash}.
     def self.canonicalize_serialized_value: (untyped value, untyped field) -> untyped
 
     def self.namespace_field_types: () -> untyped
@@ -451,6 +457,9 @@ module FieldStruct
     # _@param_ `method_names` — zero or more instance method names to invoke on each record at +valid?+ time
     def self.validate: (*::Array[Symbol] method_names) ?{ (Base record) -> void } -> self
 
+    # Ruby hook: give each subclass its own metadata seeded from the
+    # parent's (merged copy) plus inherited macro settings, so field
+    # declarations and config flow down the class chain.
     def self.inherited: (untyped subclass) -> untyped
 
     # _@param_ `attrs` — input values, by symbol or string key
@@ -1038,6 +1047,8 @@ module FieldStruct
     def self.blank_string?: (untyped value) -> bool
   end
 
+  # Namespace for the built-in coercion types ({Types::String}, {Types::Integer},
+  # …) and the {Types::Base} contract that custom types implement.
   module Types
     # URL type — a {Types::String} that pre-fills the field's +format:+
     # option with a practical http(s) URL pattern. Same shape as
@@ -1059,6 +1070,8 @@ module FieldStruct
       # _@return_ — named presets for +format:+
       def self.presets: () -> ::Hash[::Symbol, Regexp]
 
+      # Resolve a Symbol +format:+ preset (see {.presets}) to its Regexp at
+      # field-declaration time; a user-supplied Regexp passes through.
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
     end
 
@@ -1161,6 +1174,8 @@ module FieldStruct
       # _@return_ — named presets for the +format:+ option
       def self.presets: () -> ::Hash[::Symbol, ::String]
 
+      # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
+      # string at field-declaration time; other forms pass through.
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
       # _@param_ `value` — +nil+ → +nil+; a +Date+ passes through; anything responding to +to_date+ (DateTime, Time, ActiveSupport's TimeWithZone, etc.) is converted; a String is parsed via +strptime+ if a +format:+ is set, otherwise +Date.parse+. Anything else falls through to +Date.parse(value.to_s)+ — which raises ArgumentError.
@@ -1189,6 +1204,8 @@ module FieldStruct
       # _@return_ — named presets for the +format:+ option
       def self.presets: () -> ::Hash[::Symbol, ::String]
 
+      # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
+      # string at field-declaration time; other forms pass through.
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
       # _@param_ `value` — +nil+ → +nil+; a +String+ is parsed via +strptime+ when +format:+ is set, otherwise via +Time.parse+; anything responding to +to_time+ (Date, DateTime, etc.) is converted.
@@ -1220,6 +1237,8 @@ module FieldStruct
       # _@return_ — named presets for +format:+
       def self.presets: () -> ::Hash[::Symbol, Regexp]
 
+      # Resolve a Symbol +format:+ preset (see {.presets}) to its Regexp at
+      # field-declaration time; a user-supplied Regexp passes through.
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
     end
 
@@ -1278,6 +1297,8 @@ module FieldStruct
       # _@return_ — named presets for +format:+
       def self.presets: () -> ::Hash[::Symbol, Regexp]
 
+      # Resolve a Symbol +format:+ preset (see {.presets}) to its Regexp at
+      # field-declaration time; a user-supplied Regexp passes through.
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
     end
 
@@ -1556,6 +1577,8 @@ module FieldStruct
       # _@return_ — named presets for the +format:+ option
       def self.presets: () -> ::Hash[::Symbol, ::String]
 
+      # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
+      # string at field-declaration time; other forms pass through.
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
       # _@param_ `value` — +nil+ → +nil+; a +String+ is parsed via +strptime+ when +format:+ is set, otherwise via +DateTime.parse+; anything responding to +to_datetime+ (Date, Time, etc.) is converted.
@@ -1597,12 +1620,24 @@ module FieldStruct
     # time-shaped types (Date/Time/DateTime) via {TimeFormatResolver}
     # (which adds a stricter set of allowed value types).
     module PresetResolver
+      # Resolve +options[key]+ when it's a Symbol preset name, leaving other
+      # values untouched.
+      # 
+      # _@param_ `options` — the per-field options
+      # 
+      # _@param_ `key` — the option to resolve (e.g. +:format+)
+      # 
+      # _@param_ `presets` — preset name → concrete value
+      # 
+      # _@param_ `label` — used in the unknown-preset error message
+      # 
+      # _@return_ — options with +key+ resolved (a copy when changed)
       def self.call: (
-                       untyped options,
-                       untyped key,
-                       untyped presets,
-                       label: untyped
-                     ) -> untyped
+                       ::Hash[::Symbol, Object] options,
+                       ::Symbol key,
+                       ::Hash[::Symbol, Object] presets,
+                       label: ::String
+                     ) -> ::Hash[::Symbol, Object]
     end
 
     # Like {Types::String}, but the coerced value is frozen. Useful when

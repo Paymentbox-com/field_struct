@@ -36,6 +36,8 @@ module FieldStruct
         }
       end
 
+      # Resolve a Symbol +format:+ preset (see {.presets}) to its Regexp at
+      # field-declaration time; a user-supplied Regexp passes through.
       def self.resolve_options(options)
         PresetResolver.call(options, :format, presets, label: ':url format')
       end

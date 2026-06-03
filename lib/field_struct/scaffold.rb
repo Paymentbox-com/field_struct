@@ -33,8 +33,11 @@ module FieldStruct
   # The developer adds enums, descriptions, formats, and final scalar types;
   # the comments point at where.
   module Scaffold
+    # Matches an integer- or decimal-looking string (kept as +:string+, only hinted).
     NUMERIC_STRING = /\A-?\d+(?:\.\d+)?\z/
+    # Most distinct repeated string values before a field is flagged as an enum candidate.
     ENUM_MAX_DISTINCT = 6
+    # Ruby keywords that can't be used as attribute names (suffixed with +_field+).
     RESERVED = %w[
       BEGIN END alias and begin break case class def defined? do else elsif end
       ensure false for if in module next nil not or redo rescue retry return self

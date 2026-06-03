@@ -40,6 +40,8 @@ module FieldStruct
         }
       end
 
+      # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
+      # string at field-declaration time; other forms pass through.
       def self.resolve_options(options)
         TimeFormatResolver.call(options, presets)
       end

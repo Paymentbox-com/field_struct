@@ -34,6 +34,9 @@ require_relative 'field_struct/base'
 require_relative 'field_struct/rbs'
 require_relative 'field_struct/scaffold'
 
+# Typed PORO foundation: declare fields with enforced types, presence checks,
+# and per-field validation. Subclass {FieldStruct::Base} to get a value object
+# whose attributes coerce, validate on assignment, and introspect cleanly.
 module FieldStruct
   # The library's root directory — the parent of +lib/+. Computed from this
   # file's location, so it resolves to the repo root in development and to the

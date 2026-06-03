@@ -20,6 +20,8 @@ module FieldStruct
     # Order matters: +of: [String, Integer]+ coerces "42" to "42"
     # (String wins first); +of: [Integer, String]+ coerces "42" to 42.
     class Union < Base
+      # Member-coercion errors caught so the next member can be tried; other
+      # exceptions (e.g. +NoMethodError+) propagate as real bugs.
       RESCUABLE = [ArgumentError, TypeError, FieldStruct::Error].freeze
 
       # Native options: a required +of:+ Array of member types (the DSL

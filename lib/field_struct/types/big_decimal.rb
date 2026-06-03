@@ -13,11 +13,11 @@ module FieldStruct
       # Range of allowed values.
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
-      def self.option_schema
-        super.merge(
+      def self.own_option_schema
+        {
           round: option(type: [::Integer]),
           in: option(type: [::Array, ::Range])
-        )
+        }
       end
 
       # @return [::Integer, nil] the field-level rounding precision, or +nil+

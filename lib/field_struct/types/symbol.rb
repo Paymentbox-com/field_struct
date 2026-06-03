@@ -14,8 +14,8 @@ module FieldStruct
       # string-like, so they share +enum:+ with {Types::String}).
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
-      def self.option_schema
-        super.merge(enum: option(type: [::Array]))
+      def self.own_option_schema
+        {enum: option(type: [::Array])}
       end
 
       # @param value [Symbol, ::String, nil] anything else raises TypeError

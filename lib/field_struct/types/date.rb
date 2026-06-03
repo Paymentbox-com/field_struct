@@ -18,11 +18,11 @@ module FieldStruct
       # preset; see {.presets}) and an +in:+ Array or Range of allowed values.
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
-      def self.option_schema
-        super.merge(
+      def self.own_option_schema
+        {
           format: option(type: [::String, ::Symbol], presets: presets.keys),
           in: option(type: [::Array, ::Range])
-        )
+        }
       end
 
       # @return [::String, nil] field-level strftime/strptime format; +nil+

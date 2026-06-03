@@ -22,6 +22,20 @@ RSpec.describe 'Types option_schema' do
     end
   end
 
+  describe 'merging and memoization' do
+    it 'merges own_option_schema down the class chain' do
+      # UUID adds nothing of its own beyond format; enum comes from String.
+      expect(FieldStruct::Types::UUID.own_option_schema.keys).to eq([:format])
+      expect(FieldStruct::Types::UUID.option_schema.keys).to contain_exactly(:format, :enum)
+    end
+
+    it 'returns a frozen, memoized result (computed once per type)' do
+      first = FieldStruct::Types::Integer.option_schema
+      expect(first).to be_frozen
+      expect(FieldStruct::Types::Integer.option_schema).to equal(first)
+    end
+  end
+
   describe FieldStruct::Types::String do
     it 'accepts format: (Regexp/Symbol) and enum: (Array)' do
       schema = described_class.option_schema

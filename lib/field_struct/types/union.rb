@@ -28,8 +28,8 @@ module FieldStruct
       # additionally requires at least two members).
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
-      def self.option_schema
-        super.merge(of: option(type: [::Array], required: true))
+      def self.own_option_schema
+        {of: option(type: [::Array], required: true)}
       end
 
       # @return [Array<Types::Base>] the configured member type instances

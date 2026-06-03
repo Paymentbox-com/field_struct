@@ -16,8 +16,8 @@ module FieldStruct
       # +:format+ presets this subtype resolves (see {.presets}).
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
-      def self.option_schema
-        super.merge(format: option(type: [::Regexp, ::Symbol], presets: presets.keys))
+      def self.own_option_schema
+        {format: option(type: [::Regexp, ::Symbol], presets: presets.keys)}
       end
 
       # Hex-digit-only canonical RFC-4122 form. Permits any version.

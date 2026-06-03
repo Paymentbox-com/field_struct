@@ -683,10 +683,23 @@ module FieldStruct
       Oj.dump(as_json, mode: :compat)
     end
 
-    # @return [String] +#<ClassName field: value, ...>+
+    # Readable representation. Valid instances render as
+    # +#<ClassName field: value, ...>+. An *invalid* instance additionally
+    # surfaces its errors — +#<ClassName name: "" errors: {name: ["is
+    # required"]}>+ — so the most-read debug output never hides invalidity
+    # (design invariant 7). This reads the current {#errors}; it does not
+    # re-run validation, so printing an instance never mutates it.
+    #
+    # @return [String]
     def inspect
       pairs = attributes.map { |name, value| "#{name}: #{value.inspect}" }.join(', ')
-      "#<#{self.class.name || "AnonymousFieldStruct"} #{pairs}>"
+      body = "#{self.class.name || "AnonymousFieldStruct"} #{pairs}"
+      current = errors.to_h
+      unless current.empty?
+        rendered = current.map { |field, msgs| "#{field}: #{msgs.inspect}" }.join(', ')
+        body = "#{body} errors: {#{rendered}}"
+      end
+      "#<#{body}>"
     end
 
     # @return [ModelName]

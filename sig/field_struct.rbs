@@ -522,7 +522,12 @@ module FieldStruct
     # _@return_ — JSON representation, via Oj
     def to_json: (?Object? _options) -> String
 
-    # _@return_ — +#<ClassName field: value, ...>+
+    # Readable representation. Valid instances render as
+    # +#<ClassName field: value, ...>+. An *invalid* instance additionally
+    # surfaces its errors — +#<ClassName name: "" errors: {name: ["is
+    # required"]}>+ — so the most-read debug output never hides invalidity
+    # (design invariant 7). This reads the current {#errors}; it does not
+    # re-run validation, so printing an instance never mutates it.
     def inspect: () -> String
 
     def model_name: () -> ModelName

@@ -148,6 +148,8 @@ u.attribute_names   # => [:name, :age]
 u.valid?            # runs cross-field validators, then errors.empty?
 u.invalid?
 u.errors            # FieldStruct::Errors
+u.inspect           # #<User name: "Alice" age: 31>; an invalid instance appends
+                    #   `errors: {name: ["is required"]}` so it never looks fine
 u == other          # value equality (same class + same attributes; errors ignored)
 u.as_json           # JSON-ready Hash with :json mapping applied
 u.to_json           # String (via Oj)

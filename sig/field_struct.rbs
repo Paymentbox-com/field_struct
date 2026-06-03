@@ -715,7 +715,24 @@ module FieldStruct
     # skipping fields with empty message lists
     def to_h: () -> ::Hash[Symbol, ::Array[String]]
 
+    # Every message rendered as a full, human-readable sentence: the
+    # humanized field name prepended to each message. Messages on +:base+
+    # (the cross-field convention) pass through unprefixed — they are
+    # already complete sentences. Order follows field insertion order, then
+    # message order within a field.
+    # 
+    #   errors.add(:first_name, 'is required')
+    #   errors.full_messages   # => ["First name is required"]
+    def full_messages: () -> ::Array[String]
+
     def inspect: () -> String
+
+    # Turn a field name into a display label for {#full_messages}:
+    # underscores become spaces and the first character is upcased.
+    # Deliberately minimal — no inflection, no +_id+ stripping, no i18n.
+    # 
+    # _@param_ `field`
+    def humanize: (Symbol field) -> String
   end
 
   # The per-class collection of {Field} declarations.

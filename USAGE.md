@@ -148,7 +148,10 @@ case u; in { name: 'Alice', age: } then age; end   # pattern matching
 ```
 
 `Errors` API: `errors[:field] # => Array<String>`, `errors.add(:field, 'msg')`,
-`errors.clear(:field)`, `errors.empty?`, `errors.to_h` (alias `messages`).
+`errors.clear(:field)`, `errors.empty?`, `errors.to_h` (alias `messages`),
+`errors.full_messages` (each message as a sentence — humanized field name
+prepended, e.g. `first_name`/`is required` → `"First name is required"`; `:base`
+messages pass through unprefixed).
 
 ---
 

@@ -11,7 +11,7 @@ module FieldStruct
       # +:uuid+ / +:url+ / +:email+ subtypes) and an +enum:+ Array of
       # allowed values.
       #
-      # @return [Hash{Symbol=>Hash}]
+      # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.option_schema
         super.merge(
           format: option(type: [::Regexp, ::Symbol]),

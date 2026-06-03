@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'open3'
 require 'bundler/gem_tasks'
 require 'rspec/core/rake_task'
 
@@ -26,6 +27,27 @@ SORD_FIXUPS = [
   [/^    include Enumerable$/, '    include ::Enumerable[Field]']
 ].freeze
 
+# Sord exits 0 even when it can't resolve a referenced constant: it falls
+# back to +untyped+ (via --replace-errors-with-untyped) and only logs a
+# warning. That degradation is invisible to sigs:check — the committed file
+# already carries the +untyped+, so the diff stays clean — meaning a
+# regression would ship silently. Fail loudly instead.
+#
+# The usual cause is a bare stdlib name in a YARD type written inside the
+# FieldStruct::Types namespace (e.g. +Symbol+ / +Array+ / +Hash+) resolving
+# against +Types::Symbol+ / +Types::Array+ rather than the stdlib class.
+# Fix: fully-qualify it (+::Symbol+).
+def guard_sord_warnings!(output)
+  plain = output.gsub(/\e\[[0-9;]*m/, '') # strip ANSI colour codes
+  return unless plain.include?('important warnings in the output file')
+
+  details = plain.lines.grep(/wasn't able to be resolved|could not be/i).map(&:strip)
+  raise 'Sord could not resolve one or more YARD types — they silently became ' \
+        "`untyped`:\n  #{details.join("\n  ")}\n" \
+        'Fix the YARD type, usually by fully-qualifying a stdlib constant ' \
+        '(e.g. `::Symbol`, `::Array`, `::Hash`).'
+end
+
 def sord_run(target)
   # Temporarily hide the committed sig file — YARD picks up sig/*.rbs as
   # input, and the prior file's entries confuse Sord's parameter-matching
@@ -34,7 +56,12 @@ def sord_run(target)
   stash = "#{SIG_FILE}.stashed-by-sord-rake"
   stashed = File.exist?(SIG_FILE) && File.rename(SIG_FILE, stash) && true
   ok = false
-  sh "bundle exec sord #{target} --rbs --no-sord-comments --skip-constants --replace-errors-with-untyped"
+  cmd = "bundle exec sord #{target} --rbs --no-sord-comments --skip-constants --replace-errors-with-untyped"
+  output, status = Open3.capture2e(cmd)
+  puts output
+  raise "sord failed (exit #{status.exitstatus})" unless status.success?
+
+  guard_sord_warnings!(output)
   contents = File.read(target)
   SORD_FIXUPS.each { |pattern, replacement| contents.gsub!(pattern, replacement) }
   File.write(target, contents)

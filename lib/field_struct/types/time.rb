@@ -16,7 +16,7 @@ module FieldStruct
       # Native options: a +format:+ strftime/strptime String (or Symbol
       # preset; see {.presets}) and an +in:+ Array or Range of allowed values.
       #
-      # @return [Hash{Symbol=>Hash}]
+      # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.option_schema
         super.merge(
           format: option(type: [::String, ::Symbol], presets: presets.keys),

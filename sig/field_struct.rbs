@@ -1051,7 +1051,7 @@ module FieldStruct
     class URL < FieldStruct::Types::String
       # Inherits +format:+ / +enum:+ from {Types::String}, advertising the
       # +:format+ presets this subtype resolves (see {.presets}).
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@return_ — practical http(s) pattern; override per-field via +format:+
       def self.default_format: () -> Regexp
@@ -1083,7 +1083,7 @@ module FieldStruct
       # (an agent or human can ask a type what it accepts without reading
       # source). Options *not* listed here are treated as foreign and pass
       # through onto the Field untouched, available to downstream tooling.
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # Build a normalized descriptor for {.option_schema}.
       # 
@@ -1094,7 +1094,7 @@ module FieldStruct
       # _@param_ `presets` — Symbol preset names the option also accepts
       # 
       # _@return_ — a frozen descriptor: +{ type:, required:, presets: }+
-      def self.option: (_type: (Class | ::Array[Class]), ?required: bool, ?presets: ::Array[Symbol]) -> ::Hash[untyped, untyped]
+      def self.option: (_type: (::Class | ::Array[::Class]), ?required: bool, ?presets: ::Array[::Symbol]) -> ::Hash[::Symbol, Object]
 
       # Resolve symbolic preset references on the per-field options hash
       # at field-declaration time. Default implementation passes options
@@ -1152,7 +1152,7 @@ module FieldStruct
     class Date < FieldStruct::Types::Base
       # Native options: a +format:+ strftime/strptime String (or Symbol
       # preset; see {.presets}) and an +in:+ Array or Range of allowed values.
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@return_ — field-level strftime/strptime format; +nil+
       # leaves the type using ISO-8601 in/out
@@ -1182,7 +1182,7 @@ module FieldStruct
     class Time < FieldStruct::Types::Base
       # Native options: a +format:+ strftime/strptime String (or Symbol
       # preset; see {.presets}) and an +in:+ Array or Range of allowed values.
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       def self.default_format: () -> ::String?
 
@@ -1210,7 +1210,7 @@ module FieldStruct
     class UUID < FieldStruct::Types::String
       # Inherits +format:+ / +enum:+ from {Types::String}, advertising the
       # +:format+ presets this subtype resolves (see {.presets}).
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # Hex-digit-only canonical RFC-4122 form. Permits any version.
       # 
@@ -1232,7 +1232,7 @@ module FieldStruct
       # Native options: a required +of:+ naming the element type — a
       # registered Symbol or a Class (a +Types::Base+ or +FieldStruct::Base+
       # subclass).
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@param_ `value` — anything else raises TypeError
       # 
@@ -1268,7 +1268,7 @@ module FieldStruct
     class Email < FieldStruct::Types::String
       # Inherits +format:+ / +enum:+ from {Types::String}, advertising the
       # +:format+ presets this subtype resolves (see {.presets}).
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@return_ — pragmatic +local@domain.tld+ shape, no internal
       # whitespace or extra +@+; deliberately not RFC 5322 strict.
@@ -1286,7 +1286,7 @@ module FieldStruct
     class Float < FieldStruct::Types::Base
       # Native options: a +round:+ Integer precision and an +in:+ Array or
       # Range of allowed values.
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@return_ — field-level rounding precision; +nil+ disables.
       def self.default_round: () -> ::Integer?
@@ -1320,7 +1320,7 @@ module FieldStruct
     class Union < FieldStruct::Types::Base
       # Native options: a required +of:+ Array of member types (the DSL
       # additionally requires at least two members).
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@param_ `member_types` — member instances, in priority order
       def initialize: (::Array[Types::Base] member_types) -> void
@@ -1442,7 +1442,7 @@ module FieldStruct
       # Native options: a +format:+ Regexp (or Symbol preset, used by the
       # +:uuid+ / +:url+ / +:email+ subtypes) and an +enum:+ Array of
       # allowed values.
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@param_ `value` — anything stringable (everything in Ruby responds to +to_s+); +nil+ stays +nil+
       # 
@@ -1466,7 +1466,7 @@ module FieldStruct
     class Symbol < FieldStruct::Types::Base
       # Native options: an +enum:+ Array of allowed values (symbols are
       # string-like, so they share +enum:+ with {Types::String}).
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@param_ `value` — anything else raises TypeError
       def coerce: ((Symbol | ::String)? value) -> Symbol?
@@ -1494,7 +1494,7 @@ module FieldStruct
     class Boolean < FieldStruct::Types::Base
       # Native options: a +values:+ Hash with +:truthy+ / +:falsy+ keys, or a
       # Symbol naming one of {.presets}.
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@return_ — case-insensitive strings that coerce to true
       def self.default_truthy: () -> ::Array[::String]
@@ -1526,7 +1526,7 @@ module FieldStruct
     # matches +Kernel#Integer+'s own behavior on numeric input.
     class Integer < FieldStruct::Types::Base
       # Native options: an +in:+ Array or Range of allowed values.
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@param_ `value` — +nil+ → +nil+; +Integer+ passes through; everything else flows through +Kernel#Integer+ — Floats are truncated, digit-strings parse, float-shaped strings ("3.14") and non-digit strings raise ArgumentError, Symbols/Booleans/Arrays raise TypeError.
       # 
@@ -1547,7 +1547,7 @@ module FieldStruct
     class DateTime < FieldStruct::Types::Base
       # Native options: a +format:+ strftime/strptime String (or Symbol
       # preset; see {.presets}) and an +in:+ Array or Range of allowed values.
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@return_ — field-level strftime/strptime format; +nil+
       # leaves the type using ISO-8601 in/out
@@ -1573,7 +1573,7 @@ module FieldStruct
     class BigDecimal < FieldStruct::Types::Base
       # Native options: a +round:+ Integer precision and an +in:+ Array or
       # Range of allowed values.
-      def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
+      def self.option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@return_ — the field-level rounding precision, or +nil+
       # for no rounding. Subclasses override.

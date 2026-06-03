@@ -18,7 +18,7 @@ module FieldStruct
       # Inherits +format:+ / +enum:+ from {Types::String}, advertising the
       # +:format+ presets this subtype resolves (see {.presets}).
       #
-      # @return [Hash{Symbol=>Hash}]
+      # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.option_schema
         super.merge(format: option(type: [::Regexp, ::Symbol], presets: presets.keys))
       end

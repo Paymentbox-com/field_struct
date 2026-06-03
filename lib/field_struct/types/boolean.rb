@@ -24,7 +24,7 @@ module FieldStruct
       # Native options: a +values:+ Hash with +:truthy+ / +:falsy+ keys, or a
       # Symbol naming one of {.presets}.
       #
-      # @return [Hash{Symbol=>Hash}]
+      # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.option_schema
         super.merge(values: option(type: [::Hash, ::Symbol], presets: presets.keys))
       end

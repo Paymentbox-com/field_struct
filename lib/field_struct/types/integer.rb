@@ -11,7 +11,7 @@ module FieldStruct
     class Integer < Base
       # Native options: an +in:+ Array or Range of allowed values.
       #
-      # @return [Hash{Symbol=>Hash}]
+      # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.option_schema
         super.merge(in: option(type: [::Array, ::Range]))
       end

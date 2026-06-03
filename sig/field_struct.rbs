@@ -1492,8 +1492,8 @@ module FieldStruct
     # Ruby has no Boolean class, so {#ruby_type} returns the pair
     # +[TrueClass, FalseClass]+.
     class Boolean < FieldStruct::Types::Base
-      # Native options: a +values:+ Hash (+{truthy:, falsy:}+) or a Symbol
-      # naming one of {.presets}.
+      # Native options: a +values:+ Hash with +:truthy+ / +:falsy+ keys, or a
+      # Symbol naming one of {.presets}.
       def self.option_schema: () -> ::Hash[Symbol, ::Hash[untyped, untyped]]
 
       # _@return_ — case-insensitive strings that coerce to true

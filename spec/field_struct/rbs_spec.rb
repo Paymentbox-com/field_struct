@@ -1,6 +1,12 @@
 # frozen_string_literal: true
 
-require 'rbs'
+# The rbs gem is part of the dev toolchain (Ruby >= 3.2); it's absent on the
+# Ruby-floor CI job, where the single grammar-validation example below skips.
+begin
+  require 'rbs'
+rescue LoadError
+  nil
+end
 
 RSpec.describe FieldStruct::RBS do
   # Build a named FieldStruct subclass without leaking a top-level constant.
@@ -123,6 +129,8 @@ RSpec.describe FieldStruct::RBS do
         required :active, :boolean
         optional :joined_on, :date
       end
+
+      skip 'rbs gem not installed (Ruby-floor job)' unless defined?(RBS::Parser)
 
       expect { RBS::Parser.parse_signature(described_class.generate(klass)) }
         .not_to raise_error

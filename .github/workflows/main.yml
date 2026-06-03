@@ -15,11 +15,9 @@ jobs:
       # Test every version independently — don't let one failure mask the rest.
       fail-fast: false
       matrix:
-        # The gem's *runtime* deps (oj, bigdecimal) support Ruby >= 3.0, which
-        # is what `required_ruby_version` advertises to consumers. CI runs the
-        # full battery (incl. the rbs/sord type-signature guards), and the dev
-        # toolchain (`rbs`) requires Ruby >= 3.2 — so the CI floor is 3.2, not
-        # 3.0. We cover that toolchain floor through the current release.
+        # Full battery (specs + rubocop + rbs/sord type-signature guards). The
+        # dev toolchain (`rbs`) needs Ruby >= 3.2, so this job's floor is 3.2.
+        # The gem's own runtime floor (>= 3.0) is covered by the `floor` job.
         ruby:
           - '3.2'
           - '3.3'
@@ -38,3 +36,30 @@ jobs:
       run: bundle exec rake
     - name: Type signature guards (staleness + grammar)
       run: bundle exec rake sigs:check sigs:validate
+
+  # The gem advertises Ruby >= 3.0 (its runtime deps support it), but the dev
+  # toolchain above can't run that low. This job proves the *library* works on
+  # the advertised floor by running its specs with a minimal gemfile that omits
+  # rbs/sord/yard (see gemfiles/floor.gemfile). The one grammar-validation
+  # example that needs the rbs gem self-skips here.
+  floor:
+    runs-on: ubuntu-latest
+    name: Ruby ${{ matrix.ruby }} (library specs)
+    env:
+      BUNDLE_GEMFILE: gemfiles/floor.gemfile
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby:
+          - '3.0'
+          - '3.1'
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: ${{ matrix.ruby }}
+        bundler-cache: true
+    - name: Run the library specs
+      run: bundle exec rspec

@@ -10,6 +10,8 @@ A Ruby library for building POROs ("Plain Old Ruby Objects") with declared attri
 
 A class collects its field declarations into a class-level **Metadata** object that can be inspected, introspected, and used downstream (e.g. to generate type signatures or documentation). Each field is backed by a **Type** class that knows how to coerce input values and decide what counts as a "missing" value. Types live in a **Registry** so different namespaces can extend or replace the base set.
 
+A **primary goal** is legibility: the library is built to be understood and used correctly by both humans and AI agents. That goal is not decorative — it is a design invariant (see below) that constrains every public surface.
+
 ## What FieldStruct isn't
 
 - **Not a database layer.** It doesn't persist, query, or hold connections.
@@ -19,13 +21,31 @@ A class collects its field declarations into a class-level **Metadata** object t
 
 ---
 
-## Phase 1 scope (v0.1.0)
+## Capabilities (as of v0.7.1)
 
-See `docs/origin/plan.md` for the in/out lists. At a glance:
+The library is well past the original Phase 1 cut. For the *current behavior* the
+authoritative references are `README.md` and `USAGE.md`; `docs/origin/plan.md` is
+the frozen design record (the "why"), not a current-state doc. At a glance, what
+ships today:
 
-**In:** DSL (`field` / `required` / `optional`), `Base`, `Metadata`, `Registry`, base types (string, immutable_string, integer, float, big_decimal+decimal alias, boolean, date, time, datetime, value, array-with-`of:`), per-field validation, class macros (`coercion_policy`, `immutable!`, `unknown_attributes`), `format:` option, AM-shaped surface, JSON output via Oj, structural equality.
+- **DSL & core:** `field` / `required` / `optional`, `Base`, `Metadata`, `Registry`
+  (with namespace-chain lookup and `new_registry`), per-field validation on assign.
+- **Types:** string, immutable_string, integer, float, big_decimal (+`decimal`
+  alias), boolean, date, time, datetime, value, `array` (`of:`), `union` (`of:
+  [...]`), nested FieldStructs, and extended scalars (symbol, uuid, url, email,
+  binary).
+- **Field/type options:** `format:`, `enum:`, `in:`, `round:`, `values:`, callable
+  `default:`, `description:`/`desc:`, plus type-level option presets.
+- **Class macros (all inherited):** `coercion_policy` (class- and field-level),
+  `immutable!`, `frozen!`, `unknown_attributes`, cross-field `validate`.
+- **Serialization:** `serialize :json, ...` external-name mapping (replaced the
+  old per-field `aliases:` in v0.4.0), JSON import (`from_json`) / output via Oj,
+  round-trip equality, pattern matching (`deconstruct`/`deconstruct_keys`).
+- **Tooling:** AM-shaped surface, structural equality, `RBS.generate` for
+  user-defined subclasses, `Scaffold.from_json`, `metadata.to_h` introspection.
 
-**Out (deferred):** Nested FieldStructs, JSON import, aliases, cross-field validation, RBS generation, union types, CSV/XML/Avro conversion, docs generation, extended types.
+**Still deferred (Phase 2+ backlog):** custom Metadata→docs generation;
+conversion to/from CSV, XML, Avro, JSON-schema (likely separate gems).
 
 ---
 
@@ -57,6 +77,7 @@ These hold across the codebase. Don't break them without surfacing.
 4. **Explicit `require_relative`, no autoload.** New files under `lib/field_struct/` get a corresponding `require_relative` line in `lib/field_struct.rb`.
 5. **Oj for JSON.** Never `JSON.parse` / `to_json` (built-in). Always `Oj.load` / `Oj.dump`.
 6. **No code reuse from ActiveModel.** Mirroring the interface shape is fine; including modules or copying internals is not.
+7. **The public surface explains itself without source.** Errors render as full sentences; `inspect` shows state *and* validity; the type system answers "what native options do I accept, and of what type" at runtime. A new public affordance that can't be understood from its own output isn't done. This is the operational form of the legibility goal — it applies to both human and agent readers.
 
 ---
 

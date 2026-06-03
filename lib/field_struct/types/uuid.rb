@@ -12,6 +12,14 @@ module FieldStruct
     # Users can override the pattern by passing +format: /.../+ on the
     # field declaration.
     class UUID < FieldStruct::Types::String
+      # Inherits +format:+ / +enum:+ from {Types::String}, advertising the
+      # +:format+ presets this subtype resolves (see {.presets}).
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        super.merge(format: option(type: [::Regexp, ::Symbol], presets: presets.keys))
+      end
+
       # Hex-digit-only canonical RFC-4122 form. Permits any version.
       #
       # @return [Regexp] applied at the field level when no +format:+ is given

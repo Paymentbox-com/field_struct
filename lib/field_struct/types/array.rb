@@ -10,6 +10,15 @@ module FieldStruct
     #
     # Missing: +nil+ or empty array. ruby_type: +::Array+.
     class Array < Base
+      # Native options: a required +of:+ naming the element type — a
+      # registered Symbol or a Class (a +Types::Base+ or +FieldStruct::Base+
+      # subclass).
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        super.merge(of: option(type: [::Symbol, ::Class], required: true))
+      end
+
       # @param value [Array, nil] anything else raises TypeError
       # @param of_type [Class, Types::Base, nil] the element type — a
       #   Types::Base subclass for stock types, or an already-built

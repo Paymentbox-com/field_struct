@@ -14,6 +14,17 @@ module FieldStruct
     # (strftime when emitting via +as_json+ / +to_json+). When no format
     # is set, the type uses +Date.parse+ for input and ISO-8601 for output.
     class Date < Base
+      # Native options: a +format:+ strftime/strptime String (or Symbol
+      # preset; see {.presets}) and an +in:+ Array or Range of allowed values.
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        super.merge(
+          format: option(type: [::String, ::Symbol], presets: presets.keys),
+          in: option(type: [::Array, ::Range])
+        )
+      end
+
       # @return [::String, nil] field-level strftime/strptime format; +nil+
       #   leaves the type using ISO-8601 in/out
       def self.default_format

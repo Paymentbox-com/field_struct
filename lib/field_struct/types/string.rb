@@ -7,6 +7,18 @@ module FieldStruct
     # String type. Coerces any non-nil value via +to_s+; treats nil, empty,
     # and whitespace-only strings as missing.
     class String < Base
+      # Native options: a +format:+ Regexp (or Symbol preset, used by the
+      # +:uuid+ / +:url+ / +:email+ subtypes) and an +enum:+ Array of
+      # allowed values.
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        super.merge(
+          format: option(type: [::Regexp, ::Symbol]),
+          enum: option(type: [::Array])
+        )
+      end
+
       # @param value [#to_s, nil] anything stringable (everything in
       #   Ruby responds to +to_s+); +nil+ stays +nil+
       # @return [String, nil] +nil+ when input is +nil+, otherwise +value.to_s+

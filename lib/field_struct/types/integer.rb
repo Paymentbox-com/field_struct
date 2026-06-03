@@ -9,6 +9,13 @@ module FieldStruct
     # silently truncate. Float numerics, by contrast, are truncated — that
     # matches +Kernel#Integer+'s own behavior on numeric input.
     class Integer < Base
+      # Native options: an +in:+ Array or Range of allowed values.
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        super.merge(in: option(type: [::Array, ::Range]))
+      end
+
       # @param value [Integer, Numeric, ::String, nil] +nil+ → +nil+;
       #   +Integer+ passes through; everything else flows through
       #   +Kernel#Integer+ — Floats are truncated, digit-strings parse,

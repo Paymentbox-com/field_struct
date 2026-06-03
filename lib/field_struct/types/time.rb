@@ -13,6 +13,17 @@ module FieldStruct
     # parsing (strptime when input is a String) and serialization
     # (strftime via +as_json+).
     class Time < Base
+      # Native options: a +format:+ strftime/strptime String (or Symbol
+      # preset; see {.presets}) and an +in:+ Array or Range of allowed values.
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        super.merge(
+          format: option(type: [::String, ::Symbol], presets: presets.keys),
+          in: option(type: [::Array, ::Range])
+        )
+      end
+
       # @return [::String, nil]
       def self.default_format
         nil

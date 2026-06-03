@@ -10,6 +10,14 @@ module FieldStruct
     # Empty symbols (+:""+) are unusual; like other scalar non-string types,
     # +missing?+ is nil-only — an empty symbol counts as present.
     class Symbol < Base
+      # Native options: an +enum:+ Array of allowed values (symbols are
+      # string-like, so they share +enum:+ with {Types::String}).
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        super.merge(enum: option(type: [::Array]))
+      end
+
       # @param value [Symbol, ::String, nil] anything else raises TypeError
       # @return [Symbol, nil]
       # @raise [TypeError] when input is not nil/Symbol/String

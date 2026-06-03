@@ -9,6 +9,17 @@ module FieldStruct
     # numeric string. Float input is converted with +Float::DIG+ precision
     # to avoid the bare +BigDecimal(Float)+ "can't omit precision" error.
     class BigDecimal < Base
+      # Native options: a +round:+ Integer precision and an +in:+ Array or
+      # Range of allowed values.
+      #
+      # @return [Hash{Symbol=>Hash}]
+      def self.option_schema
+        super.merge(
+          round: option(type: [::Integer]),
+          in: option(type: [::Array, ::Range])
+        )
+      end
+
       # @return [::Integer, nil] the field-level rounding precision, or +nil+
       #   for no rounding. Subclasses override.
       def self.default_round

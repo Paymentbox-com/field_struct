@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`Date` now honours `format:` when parsing a String, as documented and as `DateTime` and `Time` already did.** `Types::Date#coerce` converted anything responding to `to_date` *before* consulting the format, which made the `strptime` branch unreachable for the exact input it exists for. ActiveSupport defines `String#to_date`, so **under Rails every string was parsed by `Date.parse` and the declared format was silently ignored** — an ambiguous date such as `07/03/2026` under `format: '%Y-%m-%d'` was accepted and read as 7 March instead of being refused. Plain Ruby has no `String#to_date`, which is why the type's own specs never took that branch and the defect survived. The `String`-with-`format` check now comes first, matching `DateTime` and `Time`; a non-string still converts through `to_date`, since a format describes how a *string* is read.
+
 ## [0.9.0] - 2026-06-03
 
 Discoverability and toolchain hardening on top of v0.8.0's legibility work.

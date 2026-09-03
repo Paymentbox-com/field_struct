@@ -77,7 +77,19 @@ These hold across the codebase. Don't break them without surfacing.
 4. **Explicit `require_relative`, no autoload.** New files under `lib/field_struct/` get a corresponding `require_relative` line in `lib/field_struct.rb`.
 5. **Oj for JSON.** Never `JSON.parse` / `to_json` (built-in). Always `Oj.load` / `Oj.dump`.
 6. **No code reuse from ActiveModel.** Mirroring the interface shape is fine; including modules or copying internals is not.
-7. **The public surface explains itself without source.** Errors render as full sentences; `inspect` shows state *and* validity; the type system answers "what native options do I accept, and of what type" at runtime. A new public affordance that can't be understood from its own output isn't done. This is the operational form of the legibility goal — it applies to both human and agent readers.
+7. **Behavior is identical with and without ActiveSupport.** Framework independence
+   is not "does not depend on ActiveSupport" — it is "behaves the same whether or not
+   a host has loaded it". AS adds `String#to_date` / `#to_time` / `#to_datetime` and
+   redefines `Time.===`, `Date#to_time` and `Date.parse`'s two-digit-year handling, so
+   **never dispatch on a predicate a framework can redefine**: branch on explicit
+   stdlib classes and parse through the stdlib class methods we name
+   (`Date.parse`, `Time.parse`, `strptime`), which AS does not redefine. Cross-class
+   conversion is built from components rather than `to_time`/`to_datetime`, which AS
+   *does* redefine. Enforced two ways: a dual CI lane (`gemfiles/activesupport_*.gemfile`,
+   run under a non-UTC `TZ` with deprecations raising) and a static guard in
+   `spec/guardrails_spec.rb`. The guard is necessary but not sufficient — AS changes
+   semantics, not only which predicates answer true.
+8. **The public surface explains itself without source.** Errors render as full sentences; `inspect` shows state *and* validity; the type system answers "what native options do I accept, and of what type" at runtime. A new public affordance that can't be understood from its own output isn't done. This is the operational form of the legibility goal — it applies to both human and agent readers.
 
 ---
 

@@ -169,8 +169,47 @@ module FieldStruct
     # @return [String] one +describe+ line for a field
     def describe_field(field)
       label = "  #{field.name} (#{short_name(field.type)}, #{field.required? ? "required" : "optional"})"
-      accepts = native_options_summary(field.type)
-      accepts.empty? ? label : "#{label} — accepts #{accepts}"
+      parts = [label, declared_options_summary(field), accepts_summary(field.type)].compact
+
+      parts.join(' — ')
+    end
+
+    # What this field actually declares, as written.
+    #
+    # Without this, +describe+ answered only "what COULD go in this field" —
+    # the type's option vocabulary — and a field declaring
+    # +format: :iso8601, enum: %w[USD EUR]+ rendered identically to one
+    # declaring nothing at all. The option schema belongs to the type; this
+    # belongs to the field.
+    #
+    # @return [String, nil] +nil+ when the field declares no options
+    def declared_options_summary(field)
+      # Every temporal field carries `format: nil` from apply_default_format,
+      # so nils are dropped rather than rendered as a declaration that isn't one.
+      declared = field.options.compact
+      return nil if declared.empty?
+
+      declared.map { |key, value| "#{key}: #{declared_option_repr(value)}" }.join(', ')
+    end
+
+    # @return [String] a declared option value, rendered for a human. Type
+    #   values (an Array field's +of_type:+) show their bare type name rather
+    #   than a quoted string, so the line reads like the declaration it
+    #   describes.
+    def declared_option_repr(value)
+      case value
+      when FieldStruct::Types::Nested then "Nested(#{short_name(value.struct_class)})"
+      when FieldStruct::Types::Base then short_name(value.class)
+      when ::Class then short_name(value)
+      else value.inspect
+      end
+    end
+
+    # @return [String, nil] the type's native option vocabulary, or +nil+ when
+    #   the type declares none
+    def accepts_summary(type_class)
+      accepts = native_options_summary(type_class)
+      accepts.empty? ? nil : "accepts #{accepts}"
     end
 
     # @return [String] the type's native options as +name(shapes)+, required

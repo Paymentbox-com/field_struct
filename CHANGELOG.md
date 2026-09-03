@@ -6,6 +6,76 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-03
+
+Temporal types: one behaviour whether or not ActiveSupport is loaded, a
+declared format that actually constrains, and an `iso8601` preset that means
+RFC 3339.
+
+The through-line is a single failure mode — **a wrong answer delivered
+confidently**. A `:time` field accepted `"not-a-time"` as valid-nil under Rails,
+read `2026-06-31` as 1 July everywhere, and a declared `format:` refused nothing
+it was given. Each of those returned a value rather than an error, which is the
+one outcome a caller cannot detect.
+
+### Breaking-ish (behaviour changes; no consumer declares a temporal field today)
+
+- A blank string is a coercion failure for all three temporal types.
+- A value that is neither a String nor a temporal object is refused.
+- A declared `format:` anchors — trailing junk is refused.
+- `:time` refuses a day that never existed, as `:date` and `:datetime` already did.
+- With no declared format, a string must name a whole day.
+- `format: :iso8601` is RFC 3339 in and out; its output is `Z`/`+HH:MM`, not `+0000`.
+
+### Changed
+
+- **`describe` now shows what a field declares, not only what its type accepts.** It rendered the *type's* option vocabulary and nothing else, so a field declaring `format: :iso8601, enum: %w[USD EUR]` printed identically to one declaring nothing at all — the schema belongs to the type, and the declaration belongs to the field. Both are now on the line, declaration first:
+
+  ```
+  on (Date, required) — format: :iso8601 — accepts format (String | Symbol; presets: iso8601, us, eu), in (Array | Range)
+  ```
+
+  Options left at `nil` are omitted, so a temporal field with no declared format does not advertise the `format: nil` that `apply_default_format` puts there internally.
+
+
+- **The `:iso8601` preset is now RFC 3339, in and out.** It was a strftime string, and that had it emitting a value its own documented format would reject: `%z` renders `+0000`, while RFC 3339 — which is what JSON Schema's `date-time` means — requires `+00:00` or `Z`. It also refused fractional seconds, which most JSON APIs emit, because no strftime string can express "optional fractional seconds".
+
+  FieldStruct now parses and renders the preset itself, via `Types::Rfc3339Format`. It is deliberately **not** `Time.iso8601` / `DateTime.iso8601`: those two disagree with each other on nearly every edge, and `Time.iso8601('2026-02-30T10:30:00Z')` returns **2 March** — the same silently-wrong-day defect this release exists to remove. A `:time` field and a `:datetime` field declaring the same preset now accept exactly the same strings, which was not previously true.
+
+  Accepted: full-width fields, `T` separator, whole seconds, optional fractional seconds, and a mandatory offset (`Z` or `±hh:mm`; `±hhmm` too, since that is what v0.9.0 emitted, so its own output still parses). Refused: a missing offset, a space separator, missing seconds, week and ordinal dates, the basic unseparated form, five-digit or signed years, hour 24, second 60, an impossible UTC offset, and any date that never existed. Output is `Z` for UTC and `+HH:MM` otherwise, with fractional seconds only when the value carries them.
+
+  **This is what lets a caller stop hand-rolling the contract.** `required :on, :date, format: :iso8601` now accepts and refuses exactly what `required :on, :string, format: /\A\d{4}-\d{2}-\d{2}\z/` plus a `Date.iso8601` validator does — verified input by input. The other presets (`:us`, `:eu`, `:db`, `:rfc2822`) are display and interchange formats rather than wire contracts, so they stay strftime-based; they still get anchoring and civil-date validity.
+
+- **A declared `format:` now anchors, and every temporal type refuses a day that never existed.** Three rules the stdlib parsers left to their caller, each one a case where the stdlib answers a question it was not asked:
+  - **Anchoring.** `strptime` matches a *prefix* and discards the rest, so `Date.strptime('2026-07-031', '%Y-%m-%d')` returned the 3rd and threw the trailing `1` away, and `'2026-07-03T10:30:00+0000-NONSENSE'` parsed clean under the `iso8601` preset. A string with characters left over is now refused. **"Anchor" means trailing-junk rejection and nothing more** — widths, sign and case stay strptime-lenient for a hand-written format, because `%m` accepting one or two digits is strptime's contract rather than a defect.
+  - **Civil validity.** `Date` and `DateTime` already refused the 30th of February. **`:time` did not** — `Time.parse`, `Time.strptime` and `Time.new` all roll it forward to 2 March silently, so `required :at, :time` read `"2026-06-31 10:30:00"` as 1 July and reported the struct valid, in *both* lanes. All three types now refuse it.
+  - **Completeness.** With no declared format the stdlib parsers fill in what the string omits, from *today*: `Time.parse('10:30')` is today at 10:30, `'July'` is the 1st of July this year, `'12'` is the 12th of this month. A value whose meaning depends on when it was parsed is not a value, so a string with no declared format must now name a whole day. A *declared* format that names only part of one (`format: '%H:%M'`) is a deliberate choice and still works.
+
+  This does not make `Date.parse` strict about what counts as a day — `'v1.2.3'` still reads as 2001-02-03, because `Date._parse` finds `1.2.3` and all three components are present. The no-format path delegates to the stdlib by design; a caller who needs a narrow contract declares a format.
+
+- **A declared `format:` is kept exactly as written.** `format: :iso8601` used to be overwritten at declaration time with the strftime String it expands to, so `metadata.to_h[:at][:options][:format]` reported `"%Y-%m-%dT%H:%M:%S%z"` and the preset *name* — the one fact a documentation or schema generator actually wants — was gone. Recovering it by reverse-mapping the String back to a name worked only while no two presets shared a value: luck, not a contract. The declaration now survives (`:iso8601` stays `:iso8601`, a hand-written String stays that String) and resolution to a strftime format happens at coerce and render time instead, via the new `Types::Base.resolve_format` and `TimeFormatResolver.resolve`. Parsing, serialization and round-tripping are unchanged; an unknown preset name still raises at declaration, not at first use.
+
+### Fixed
+
+- **`in:` with a Range is a bounds check again.** Validation asked `Range#include?`, which *enumerates* a non-numeric range instead of comparing endpoints. For a `Date` range that was only wasteful — 365 successor steps to answer one comparison. For a **`DateTime` range it was wrong**: the range steps by whole days, so any value not landing exactly on midnight was reported invalid inside a range that plainly contained it. `(DateTime.new(2026,1,1)..DateTime.new(2026,12,31)).include?(DateTime.new(2026,7,3,10,30))` is `false`; `cover?` is `true`. Ranges now use `cover?`; an `Array` remains a membership test. No string-range behaviour changes, because the DSL refuses `in:` on String fields outright.
+
+- **Temporal coercion no longer depends on whether ActiveSupport is loaded.** `Date`, `Time` and `DateTime` dispatched on `respond_to?(:to_date)` / `:to_time` / `:to_datetime` — predicates ActiveSupport adds to every core class, so the types took one branch in their own suite and a different one under Rails. Three defects followed, all measured on v0.9.0 under Rails 7.2:
+  - **`:time` accepted garbage as valid.** `optional :t, :time` given `"not-a-time"`, `"tomorrow at noon"` or `""` was **valid with a nil value**, because AS's `String#to_time` returns `nil` rather than raising. On plain Ruby all three were invalid.
+  - **Blank strings diverged.** `""` and `"  "` were valid-nil under Rails and a coercion failure on plain Ruby.
+  - **Two-digit years diverged.** `"03 Jul 26"` was year **0026** under Rails (AS passes `comp=false` to `Date.parse`) and 2026 on plain Ruby.
+
+  Coercion now dispatches on explicit stdlib classes — `String`, then `DateTime` (before `Date`, being its subclass), then `Date`, then `Time` — and parses through `Date.parse` / `Time.parse` / `DateTime.parse` / `strptime`, none of which ActiveSupport redefines. Cross-class conversion is built from components rather than `to_time` / `to_datetime`, which ActiveSupport *does* redefine: under AS 7.2 `DateTime#to_time` shifts to the system-local zone and emits a deprecation warning, while 8.x preserves the offset. Building from parts yields the same instant and the same offset with no ActiveSupport, with 7.2, and with 8.x.
+
+  Two behaviour changes fall out, both of which restore the plain-Ruby answer: **a blank string is now a coercion failure** for all three types (as it already was for `:integer`, `:float`, `:big_decimal` and `:boolean` — only `:string` treats blank as missing), and **a value that is neither a String nor a temporal object is now refused** rather than run through `parse(value.to_s)`, which invented data: `Time.parse('[2026, 7, 3]')` returned *now*, `'v1.2.3'` read as 2001-02-03, and the Integer `20260703` parsed as a valid Date. That arm was already inconsistent — with a format declared, `:date` refused the Integer while `:time` accepted it.
+
+- **`Date` now honours `format:` when parsing a String, as documented and as `DateTime` and `Time` already did.** `Types::Date#coerce` converted anything responding to `to_date` *before* consulting the format, which made the `strptime` branch unreachable for the exact input it exists for. ActiveSupport defines `String#to_date`, so **under Rails every string was parsed by `Date.parse` and the declared format was silently ignored** — an ambiguous date such as `07/03/2026` under `format: '%Y-%m-%d'` was accepted and read as 7 March instead of being refused. Plain Ruby has no `String#to_date`, which is why the type's own specs never took that branch and the defect survived. The `String`-with-`format` check now comes first, matching `DateTime` and `Time`; a non-string still converts through `to_date`, since a format describes how a *string* is read.
+
+### Tooling / CI
+
+- **New ActiveSupport lane.** The suite now also runs against a host that has loaded ActiveSupport, on **7.2 and 8.1 pinned separately** (they differ on `to_time_preserves_timezone`, which changes what `DateTime#to_time` returns). Dev dependency only — the gemspec is untouched. The lane runs under a **non-UTC `TZ`** on purpose: two of the defects it exists to catch involve the process zone and one of them does not reproduce under `TZ=UTC`, so a UTC-only lane would hide a bug it was added to find. It also **raises on ActiveSupport deprecations** rather than warning, so code reaching for a deprecated conversion fails loudly instead of quietly returning the wrong zone. Set `FIELD_STRUCT_ACTIVESUPPORT=1` with `BUNDLE_GEMFILE=gemfiles/activesupport_7_2.gemfile` (or `_8_1`) to run it locally. This lane is the reason the defects above are now visible: without it, the gem's suite could only ever test the half of the world that does not load Rails.
+
+- **Static guardrail against framework-redefinable dispatch.** `spec/guardrails_spec.rb` now fails if anything in `lib/` calls `respond_to?` with a predicate ActiveSupport defines or redefines on core classes (`to_date`, `to_time`, `to_datetime`, `as_json`, `blank?`, `try`, …), naming the offending file and line. One documented exception is allowlisted: `Base#json_value`'s terminal `as_json` arm, which is reached only for `:value`-typed fields and where the ActiveSupport outcome is the better one (a Struct serializes as `{"x":1,"y":2}` rather than `"#<struct ...>"`). The guard runs in milliseconds and catches a new probe at PR time; it does **not** replace the ActiveSupport lane, because AS changes semantics and not merely which predicates answer true.
+
 ## [0.9.0] - 2026-06-03
 
 Discoverability and toolchain hardening on top of v0.8.0's legibility work.

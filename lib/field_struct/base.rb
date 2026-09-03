@@ -695,7 +695,7 @@ module FieldStruct
       attributes.each_with_object({}) do |(field_name, value), out|
         key = mapping.key?(field_name) ? mapping[field_name].to_sym : field_name
         field = self.class.metadata[field_name]
-        out[key] = json_value(value, field&.options || {})
+        out[key] = json_value(value, field)
       end
     end
 
@@ -781,20 +781,34 @@ module FieldStruct
 
     private
 
-    def json_value(value, field_options = {})
+    def json_value(value, field = nil)
       case value
       when nil, true, false, ::String, ::Integer, ::Float then value
       when ::Symbol then value.to_s
       when ::BigDecimal then value.to_s('F')
-      when ::DateTime, ::Date, ::Time
-        fmt = field_options[:format]
-        fmt ? value.strftime(fmt) : value.iso8601
-      when ::Array then value.map { |element| json_value(element, field_options) }
-      when ::Hash then value.transform_values { |v| json_value(v, field_options) }
+      when ::DateTime, ::Date, ::Time then temporal_json_value(value, field)
+      when ::Array then value.map { |element| json_value(element, field) }
+      when ::Hash then value.transform_values { |v| json_value(v, field) }
       when FieldStruct::Base then value.as_json
       else
         value.respond_to?(:as_json) ? value.as_json : value
       end
+    end
+
+    # A declared +format:+ is now stored as written, so a preset name has to be
+    # expanded before strftime sees it — and only the field's own type knows
+    # its preset table. With no declared format (an :array of dates, a :value
+    # field holding one) the answer is ISO-8601, as it has always been.
+    def temporal_json_value(value, field)
+      format = field&.options&.[](:format)
+      return value.iso8601 if format.nil?
+
+      resolved = field.type_instance.class.resolve_format(format)
+      # A format FieldStruct implements itself renders itself; a strftime
+      # String is handed to strftime, as it always was.
+      return resolved.render(value) if resolved.is_a?(Types::Rfc3339Format)
+
+      value.strftime(resolved)
     end
 
     def apply_defaults
@@ -837,9 +851,27 @@ module FieldStruct
       fmt = field.options[:format]
       return true if fmt.is_a?(::Regexp) && !fmt.match?(value)
       return true if field.options[:enum] && !field.options[:enum].include?(value)
-      return true if field.options[:in] && !field.options[:in].include?(value)
+      return true if field.options[:in] && !within_allowed?(field.options[:in], value)
 
       nested_invalid?(value)
+    end
+
+    # `in:` with a Range means a BOUNDS check, so ask the Range for its bounds.
+    #
+    # Range#include? ENUMERATES a non-numeric range rather than comparing
+    # endpoints. For a Date range that is merely wasteful — 365 successor steps
+    # to answer one comparison. For a DateTime range it is wrong: the range
+    # steps by whole days, so a value that isn't exactly midnight is reported
+    # outside a range that plainly contains it.
+    #
+    #   (DateTime.new(2026, 1, 1)..DateTime.new(2026, 12, 31))
+    #     .include?(DateTime.new(2026, 7, 3, 10, 30))  # => false
+    #     .cover?(DateTime.new(2026, 7, 3, 10, 30))    # => true
+    #
+    # An Array stays a membership test. There is no string-range case to worry
+    # about: the DSL refuses `in:` on String fields outright.
+    def within_allowed?(allowed, value)
+      allowed.is_a?(::Range) ? allowed.cover?(value) : allowed.include?(value)
     end
 
     def nested_invalid?(value)

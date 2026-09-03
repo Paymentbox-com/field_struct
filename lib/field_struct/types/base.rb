@@ -69,6 +69,23 @@ module FieldStruct
         options
       end
 
+      # Resolve a declared +format:+ into the form coercion and rendering use.
+      #
+      # Declared options are kept exactly as the user wrote them — see
+      # {TimeFormatResolver} for why — so a Symbol preset name has to be
+      # expanded somewhere, and the type owning the preset table is the only
+      # thing that can do it. This default serves types with no preset table:
+      # a String passes through, a Symbol is refused.
+      #
+      # @param format [::String, ::Symbol, nil] the format as declared
+      # @return [::String, nil]
+      # @raise [ArgumentError] when given a Symbol and the type has no presets
+      def self.resolve_format(format)
+        return format if format.nil? || format.is_a?(::String)
+
+        raise ArgumentError, "#{name || "this type"} has no format presets; got #{format.inspect}"
+      end
+
       # Coerce an input value into the type's domain.
       #
       # The contract here is intentionally loose — subclasses override with

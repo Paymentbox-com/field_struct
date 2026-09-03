@@ -26,7 +26,7 @@ It is *not* a database layer, form object, or ActiveModel replacement. It mirror
 
 The library is at **v0.7.1** — well past the original Phase 1 cut (nested structs, JSON import, unions, `serialize`, extended types, cross-field validation, RBS generation, pattern matching all ship today). `docs/origin/plan.md` records the original design *rationale*; current capabilities live in `.claude/project_intent.md` and `USAGE.md`.
 
-A primary goal is **legibility for humans and agents** — see invariant 7 in `.claude/project_intent.md`. Hold new public surfaces to it.
+A primary goal is **legibility for humans and agents** — see invariant 8 in `.claude/project_intent.md`. Hold new public surfaces to it.
 
 ---
 

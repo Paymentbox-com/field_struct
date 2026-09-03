@@ -38,9 +38,9 @@ as `nil`). "Missing" is what counts as absent for presence checks.
 | `:float` | `Float` | `Kernel.Float` (strict) | `round:`, `in:` | nil |
 | `:big_decimal` (alias `:decimal`) | `BigDecimal` | BigDecimal/Integer/Float/numeric string | `round:`, `in:` | nil |
 | `:boolean` | `true`/`false` | `true`/`false`, `1`/`0`, truthy/falsy strings | `values:` | nil |
-| `:date` | `Date` | `Date`, `#to_date`, String (parse/strptime) | `format:`, `in:` | nil |
-| `:time` | `Time` | `Time`, `#to_time`, String | `format:`, `in:` | nil |
-| `:datetime` | `DateTime` | `DateTime`, `#to_datetime`, String | `format:`, `in:` | nil |
+| `:date` | `Date` | `Date`, `DateTime`/`Time` (narrowed), String | `format:`, `in:` | nil |
+| `:time` | `Time` | `Time`, `Date`/`DateTime` (from components), String | `format:`, `in:` | nil |
+| `:datetime` | `DateTime` | `DateTime`, `Date`/`Time` (from components), String | `format:`, `in:` | nil |
 | `:symbol` | `Symbol` | `Symbol`, `String#to_sym` (else `TypeError`) | `enum:` | nil |
 | `:uuid` | `String` | `to_s` | `format:` (`:any_version`/`:v4`/`:v7`), `enum:` | nil / empty / whitespace |
 | `:url` | `String` | `to_s` | `format:` (`:http`/`:https_only`/`:any_scheme`), `enum:` | nil / empty / whitespace |
@@ -106,6 +106,52 @@ required :flag,   :boolean, values: { truthy: %w[on], falsy: %w[off] }
 Boolean presets: `:english_yes_no`/`:english` (`true yes y on 1` / `false no n off 0`),
 `:numeric` (`1`/`0`). Date presets: `:iso8601 :us :eu`. Time/DateTime presets:
 `:iso8601 :rfc2822 :db`.
+
+### The temporal contract
+
+Three rules apply to `:date` / `:time` / `:datetime`, and they exist because the
+stdlib parsers answer questions they were not asked.
+
+- **A declared `format:` anchors.** `'2026-07-031'` under `'%Y-%m-%d'` is refused
+  rather than read as the 3rd with the trailing character dropped. "Anchor" means
+  trailing-junk rejection and nothing more — a hand-written format stays
+  strptime-lenient about widths and sign, because `%m` accepting one or two digits
+  is strptime's contract.
+- **A day that never existed is refused**, by all three types. `'2026-06-31'` is
+  not 1 July.
+- **With no declared format, the string must name a whole day.** `Time.parse('10:30')`
+  is *today* at 10:30 and `'July'` is 1 July of this year; a value whose meaning
+  depends on when it was parsed is not a value. A *declared* partial format
+  (`format: '%H:%M'`) is a deliberate choice and still works.
+
+A blank string is a coercion failure, as it already was for `:integer`, `:float`,
+`:big_decimal` and `:boolean`. Only `:string` treats blank as missing.
+
+**`format: :iso8601` is RFC 3339**, which is what "ISO-8601" means in an API
+contract and what JSON Schema's `date-time` refers to. FieldStruct parses and
+renders it itself rather than delegating to `Time.iso8601` / `DateTime.iso8601`,
+which disagree with each other (and `Time.iso8601` reads `2026-02-30T10:30:00Z`
+as 2 March). It accepts full-width fields, a `T` separator, whole seconds,
+optional fractional seconds, and a **mandatory** offset (`Z` or `±hh:mm`); it
+refuses `2026-7-3`, `+2026-07-03`, `20261-07-03`, `20260703`, week and ordinal
+dates, a missing offset, hour 24 and second 60. Output is `Z` for UTC and
+`+HH:MM` otherwise.
+
+```ruby
+required :on, :date,     format: :iso8601   # 2026-07-03 exactly, and a real day
+required :at, :datetime, format: :iso8601   # 2026-07-03T10:30:00Z, offset required
+```
+
+That strictness is the point: it is what lets you declare the field instead of
+hand-rolling `format: /\A\d{4}-\d{2}-\d{2}\z/` plus a validator. The other
+presets (`:us`, `:eu`, `:db`, `:rfc2822`) are display and interchange formats, so
+they stay strftime-based — with anchoring and civil-date validity still applied.
+
+**Zones.** A zone-less string follows the stdlib semantics of the type you
+declared: `:time` uses `Time.parse` and lands in the *process* zone, `:datetime`
+uses `DateTime.parse` and lands in **UTC**. That is a real difference and it is
+not an accident of FieldStruct — if it matters to you, declare `format: :iso8601`,
+which requires an explicit offset and removes the question.
 
 ---
 
@@ -306,6 +352,10 @@ RBS for nested/element classes too so `::Address` references resolve. See the RE
   (`:uuid`/`:url`/`:email`/`:immutable_string`). `:binary` is the exception — its
   whitespace bytes are real data, so only nil/empty count as missing.
 - **`nil` passes through coercion as `nil`** for essentially every type.
+- **Temporal coercion behaves the same with or without ActiveSupport loaded.**
+  That is a deliberate invariant, not a coincidence — see `.claude/project_intent.md`
+  invariant 8. Coercion dispatches on explicit stdlib classes rather than on
+  `respond_to?(:to_date)` and friends, which ActiveSupport defines on every String.
 - `:array` requires `of:`; `:union` requires `of: [...]` with ≥2 members.
 - Option scoping: `format:` → string-shaped + date/time/datetime; `enum:` →
   string/symbol; `in:` → integer/float/decimal/date/time/datetime; `round:` →

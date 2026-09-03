@@ -31,8 +31,18 @@ RSpec.describe FieldStruct::Base, 'format: option on time-shaped types' do
       end
     end
 
-    it 'resolves the preset to its strftime String at declaration time' do
-      expect(klass.metadata[:on].options[:format]).to eq('%m/%d/%Y')
+    # The declared value is kept as the user wrote it. It used to be overwritten
+    # with the strftime String it expands to, which threw away the one piece of
+    # information a doc generator actually wants: that this field is `:us`, not
+    # some anonymous slash-separated format. Reverse-mapping the String back to
+    # a name worked only as long as no two presets shared a value — luck, not a
+    # contract.
+    it 'keeps the declared preset name rather than overwriting it' do
+      expect(klass.metadata[:on].options[:format]).to eq(:us)
+    end
+
+    it 'reports the preset name through to_h, where a generator can read it' do
+      expect(klass.metadata.to_h[:on][:options][:format]).to eq(:us)
     end
 
     it 'parses and serializes via the preset format' do
@@ -56,6 +66,14 @@ RSpec.describe FieldStruct::Base, 'format: option on time-shaped types' do
     end
   end
 
+  describe 'an unknown preset name' do
+    it 'still raises at declaration time, not at first use' do
+      expect do
+        Class.new(FieldStruct::Base) { required :on, :date, format: :klingon }
+      end.to raise_error(ArgumentError, /unknown time format preset :klingon/)
+    end
+  end
+
   describe ':datetime with the :db preset' do
     let(:klass) do
       Class.new(described_class) do
@@ -63,8 +81,8 @@ RSpec.describe FieldStruct::Base, 'format: option on time-shaped types' do
       end
     end
 
-    it 'resolves to the DB-shaped strftime format' do
-      expect(klass.metadata[:at].options[:format]).to eq('%Y-%m-%d %H:%M:%S')
+    it 'keeps the declared preset name' do
+      expect(klass.metadata[:at].options[:format]).to eq(:db)
     end
 
     it 'round-trips DB-format strings' do

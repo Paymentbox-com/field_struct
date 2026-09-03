@@ -8,6 +8,20 @@ if ENV['COVERAGE']
   end
 end
 
+# The ActiveSupport lane (gemfiles/activesupport-*.gemfile) loads AS *before*
+# FieldStruct, so the suite runs against a host that has already monkey-patched
+# the core classes — String#to_date, Time.===, Date#to_time and the rest. That
+# is the environment the gem's own suite could never see, and the one in which
+# v0.9.0 failed 7 examples.
+#
+# Deprecations are raised rather than warned. That is not tidiness: under AS 7.2
+# `DateTime#to_time` emits a deprecation, so any code reaching for it fails the
+# lane loudly instead of quietly returning the wrong zone.
+if ENV['FIELD_STRUCT_ACTIVESUPPORT']
+  require 'active_support/all'
+  ActiveSupport.deprecator.behavior = :raise
+end
+
 require 'field_struct'
 
 RSpec.configure do |config|

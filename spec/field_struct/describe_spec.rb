@@ -55,3 +55,57 @@ RSpec.describe 'FieldStruct::Base.describe' do
     end
   end
 end
+
+# `describe` answered "what COULD go in this field" and never "what does this
+# field actually say". A field declaring `format: :iso8601, enum: %w[USD EUR]`
+# rendered identically to one declaring nothing — the option schema is a
+# property of the TYPE, not of the field. For a surface whose whole job is to
+# explain a class without reading its source (invariant 7), that is the wrong
+# half of the answer.
+RSpec.describe FieldStruct::Base, 'describe renders declared options' do
+  let(:klass) do
+    Class.new(described_class) do
+      required :on, :date, format: :iso8601
+      required :code, :string, format: /\A[A-Z]{3}\z/, enum: %w[USD EUR]
+      optional :qty, :integer, in: (1..10)
+      optional :note, :string
+    end
+  end
+
+  it 'shows a declared preset by name' do
+    expect(klass.describe).to match(/on \(Date, required\) — format: :iso8601/)
+  end
+
+  it 'shows a declared enum and regexp format' do
+    line = klass.describe.lines.find { |l| l.include?('code') }
+
+    expect(line).to include('enum: ["USD", "EUR"]')
+    expect(line).to include('format: /\A[A-Z]{3}\z/')
+  end
+
+  it 'shows a declared range' do
+    expect(klass.describe).to match(/qty \(Integer, optional\) — in: 1\.\.10/)
+  end
+
+  # Every temporal field carries `format: nil` internally, because
+  # `apply_default_format` merges the type's default in at declaration. Rendering
+  # that would put a lie on the line.
+  it 'says nothing for a field that declared nothing' do
+    line = klass.describe.lines.find { |l| l.include?('note') }
+
+    expect(line).not_to include('format:')
+  end
+
+  it 'omits a nil default_format on a temporal field with no declared format' do
+    plain = Class.new(described_class) { required :at, :datetime }
+
+    expect(plain.describe).not_to include('format:  —')
+    expect(plain.describe).not_to match(/format: nil/)
+  end
+
+  # The type's option vocabulary is still there — it answers a different and
+  # still-useful question. Declared first, because it is what the field IS.
+  it 'keeps the accepts summary alongside' do
+    expect(klass.describe).to match(/on \(Date, required\) — format: :iso8601 — accepts format \(/)
+  end
+end

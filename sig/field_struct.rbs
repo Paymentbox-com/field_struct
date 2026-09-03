@@ -586,7 +586,13 @@ module FieldStruct
     #   end
     def deconstruct: () -> ::Array[Object]
 
-    def json_value: (untyped value, ?untyped field_options) -> untyped
+    def json_value: (untyped value, ?untyped field) -> untyped
+
+    # A declared +format:+ is now stored as written, so a preset name has to be
+    # expanded before strftime sees it — and only the field's own type knows
+    # its preset table. With no declared format (an :array of dates, a :value
+    # field holding one) the answer is ISO-8601, as it has always been.
+    def temporal_json_value: (untyped value, untyped field) -> untyped
 
     def apply_defaults: () -> untyped
 
@@ -597,6 +603,22 @@ module FieldStruct
     def validate_field: (untyped field, untyped value) -> untyped
 
     def field_value_invalid?: (untyped field, untyped value) -> bool
+
+    # `in:` with a Range means a BOUNDS check, so ask the Range for its bounds.
+    # 
+    # Range#include? ENUMERATES a non-numeric range rather than comparing
+    # endpoints. For a Date range that is merely wasteful — 365 successor steps
+    # to answer one comparison. For a DateTime range it is wrong: the range
+    # steps by whole days, so a value that isn't exactly midnight is reported
+    # outside a range that plainly contains it.
+    # 
+    #   (DateTime.new(2026, 1, 1)..DateTime.new(2026, 12, 31))
+    #     .include?(DateTime.new(2026, 7, 3, 10, 30))  # => false
+    #     .cover?(DateTime.new(2026, 7, 3, 10, 30))    # => true
+    # 
+    # An Array stays a membership test. There is no string-range case to worry
+    # about: the DSL refuses `in:` on String fields outright.
+    def within_allowed?: (untyped allowed, untyped value) -> bool
 
     def nested_invalid?: (untyped value) -> bool
 
@@ -880,6 +902,27 @@ module FieldStruct
     # _@return_ — one +describe+ line for a field
     def describe_field: (untyped field) -> String
 
+    # What this field actually declares, as written.
+    # 
+    # Without this, +describe+ answered only "what COULD go in this field" —
+    # the type's option vocabulary — and a field declaring
+    # +format: :iso8601, enum: %w[USD EUR]+ rendered identically to one
+    # declaring nothing at all. The option schema belongs to the type; this
+    # belongs to the field.
+    # 
+    # _@return_ — +nil+ when the field declares no options
+    def declared_options_summary: (untyped field) -> String?
+
+    # _@return_ — a declared option value, rendered for a human. Type
+    # values (an Array field's +of_type:+) show their bare type name rather
+    # than a quoted string, so the line reads like the declaration it
+    # describes.
+    def declared_option_repr: (untyped value) -> String
+
+    # _@return_ — the type's native option vocabulary, or +nil+ when
+    # the type declares none
+    def accepts_summary: (untyped type_class) -> String?
+
     # _@return_ — the type's native options as +name(shapes)+, required
     # ones starred, presets appended — empty when the type has none
     def native_options_summary: (untyped type_class) -> String
@@ -1151,6 +1194,17 @@ module FieldStruct
       # _@return_ — possibly-modified options to store on the Field
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
+      # Resolve a declared +format:+ into the form coercion and rendering use.
+      # 
+      # Declared options are kept exactly as the user wrote them — see
+      # {TimeFormatResolver} for why — so a Symbol preset name has to be
+      # expanded somewhere, and the type owning the preset table is the only
+      # thing that can do it. This default serves types with no preset table:
+      # a String passes through, a Symbol is refused.
+      # 
+      # _@param_ `format` — the format as declared
+      def self.resolve_format: ((::String | ::Symbol)? format) -> ::String?
+
       # Coerce an input value into the type's domain.
       # 
       # The contract here is intentionally loose — subclasses override with
@@ -1186,9 +1240,9 @@ module FieldStruct
       def pretty_print: (Object pp) -> void
     end
 
-    # Date type. Returns Date as-is, converts DateTime/Time/anything that
-    # responds to +to_date+ down to a plain Date, and otherwise parses
-    # +Date.parse(value.to_s)+ — which raises +ArgumentError+ on garbage.
+    # Date type. Returns a +Date+ as-is, narrows a +DateTime+ or +Time+ down
+    # to a plain Date, reads a String via +Date.parse+ (or +strptime+ when the
+    # field declares a +format:+), and refuses everything else.
     # 
     # Per-field +format:+ option (String or Symbol-preset) controls both
     # parsing (strptime when input is a String) and serialization
@@ -1203,25 +1257,53 @@ module FieldStruct
       # leaves the type using ISO-8601 in/out
       def self.default_format: () -> ::String?
 
-      # _@return_ — named presets for the +format:+ option
-      def self.presets: () -> ::Hash[::Symbol, ::String]
+      # Named presets for the +format:+ option.
+      # 
+      # +:iso8601+ is an {Rfc3339Format} rather than a strftime String: the
+      # contract cannot be written as one (see that class). The display presets
+      # stay strftime-based — they are for humans, not wire formats.
+      def self.presets: () -> ::Hash[::Symbol, Object]
 
       # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
       # string at field-declaration time; other forms pass through.
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
-      # _@param_ `value` — +nil+ → +nil+; a +Date+ passes through; anything responding to +to_date+ (DateTime, Time, ActiveSupport's TimeWithZone, etc.) is converted; a String is parsed via +strptime+ if a +format:+ is set, otherwise +Date.parse+. Anything else falls through to +Date.parse(value.to_s)+ — which raises ArgumentError.
+      # Resolve a declared +format:+ (a Symbol preset name or a strftime
+      # String) into the String that {#coerce} and JSON rendering actually
+      # use. Declarations are stored exactly as written, so this is where a
+      # preset name becomes usable. See {TimeFormatResolver}.
+      # 
+      # _@param_ `format` — the format as declared
+      # 
+      # _@return_ — +nil+ when the field declares no format
+      def self.resolve_format: ((::String | ::Symbol)? format) -> ::String?
+
+      # Dispatch is on explicit stdlib classes, never on a +respond_to?+ probe
+      # against the value. ActiveSupport defines +String#to_date+, so a probe
+      # that is false on plain Ruby is TRUE under Rails, and the type would take
+      # a different branch there than it does in its own suite — which is
+      # exactly how a declared +format:+ came to be ignored under Rails while
+      # every spec here passed. +Date.parse+ and +Date.strptime+ are not
+      # redefined by ActiveSupport, so dispatching on them gives one behaviour
+      # in both worlds.
+      # 
+      # _@param_ `value` — +nil+ → +nil+; a String is read through +strptime+ when a +format:+ is set and +Date.parse+ otherwise; a +Date+ passes through; a +DateTime+ or +Time+ (including ActiveSupport's TimeWithZone) is narrowed to a plain +Date+. Anything else is refused.
       # 
       # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      def coerce: ((::Date | untyped | ::String)? value, ?format: ::String?) -> ::Date?
+      def coerce: ((::String | ::Date | ::DateTime | ::Time)? value, ?format: ::String?) -> ::Date?
 
       # _@return_ — the top-level +::Date+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value` — the raw string
+      # 
+      # _@param_ `format` — strptime format, when the field declares one
+      def parse_string: (::String value, ::String? format) -> ::Date
     end
 
-    # Time type. Returns Time as-is, converts Date/DateTime via +to_time+,
-    # and parses anything stringy via +Time.parse+ — which raises
-    # +ArgumentError+ on garbage.
+    # Time type. Returns a +Time+ as-is, builds one from a +Date+ or
+    # +DateTime+'s components, reads a String via +Time.parse+ (or +strptime+
+    # when the field declares a +format:+), and refuses everything else.
     # 
     # Per-field +format:+ option (String or Symbol-preset) controls both
     # parsing (strptime when input is a String) and serialization
@@ -1233,20 +1315,61 @@ module FieldStruct
 
       def self.default_format: () -> ::String?
 
-      # _@return_ — named presets for the +format:+ option
-      def self.presets: () -> ::Hash[::Symbol, ::String]
+      # Named presets for the +format:+ option.
+      # 
+      # +:iso8601+ is an {Rfc3339Format} rather than a strftime String: +%z+
+      # renders +\+0000+, which RFC 3339 rejects, and no strftime string can
+      # express optional fractional seconds. The interchange and display
+      # presets stay strftime-based.
+      def self.presets: () -> ::Hash[::Symbol, Object]
 
       # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
       # string at field-declaration time; other forms pass through.
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
-      # _@param_ `value` — +nil+ → +nil+; a +String+ is parsed via +strptime+ when +format:+ is set, otherwise via +Time.parse+; anything responding to +to_time+ (Date, DateTime, etc.) is converted.
+      # Resolve a declared +format:+ (a Symbol preset name or a strftime
+      # String) into the String that {#coerce} and JSON rendering actually
+      # use. Declarations are stored exactly as written, so this is where a
+      # preset name becomes usable. See {TimeFormatResolver}.
+      # 
+      # _@param_ `format` — the format as declared
+      # 
+      # _@return_ — +nil+ when the field declares no format
+      def self.resolve_format: ((::String | ::Symbol)? format) -> ::String?
+
+      # Dispatch is on explicit stdlib classes, never on a +respond_to?+ probe
+      # against the value. ActiveSupport defines +String#to_time+, and it
+      # returns +nil+ for a string with no time in it rather than raising — so
+      # under Rails "not-a-time" was coerced to nil and reported VALID. The
+      # probe is gone; +Time.parse+ and +Time.strptime+ behave the same with or
+      # without ActiveSupport loaded.
+      # 
+      # Cross-class conversion builds a Time from components rather than
+      # calling +to_time+, which ActiveSupport redefines: under AS 7.2
+      # +DateTime#to_time+ converts to the system-local zone and emits a
+      # deprecation warning, while 8.x preserves the offset. Constructing from
+      # parts gives the same instant and the same offset in all three
+      # environments, which is what makes the behaviour host-independent rather
+      # than merely documented.
+      # 
+      # _@param_ `value` — +nil+ → +nil+; a String is read through +strptime+ when a +format:+ is set and +Time.parse+ otherwise; a +Time+ passes through; a +DateTime+, +Date+ or Time-like value (ActiveSupport's TimeWithZone) is converted. Anything else is refused.
       # 
       # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      def coerce: ((::Time | untyped | ::String)? value, ?format: ::String?) -> ::Time?
+      def coerce: ((::String | ::Time | ::Date | ::DateTime)? value, ?format: ::String?) -> ::Time?
 
       # _@return_ — the top-level +::Time+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value` — the raw string
+      # 
+      # _@param_ `format` — strptime format, when the field declares one
+      def parse_string: (::String value, ::String? format) -> ::Time
+
+      # _@param_ `value` — the value to convert
+      # 
+      # _@return_ — the same instant, at the same offset, sub-second
+      # precision preserved
+      def time_from_datetime: (::DateTime value) -> ::Time
     end
 
     # UUID type — a {Types::String} that pre-fills the field's +format:+
@@ -1590,9 +1713,9 @@ module FieldStruct
       def ruby_type: () -> Class
     end
 
-    # DateTime type. Uses +to_datetime+ for anything that responds (Date,
-    # Time, DateTime itself), and otherwise parses via +DateTime.parse+,
-    # which raises +ArgumentError+ on garbage.
+    # DateTime type. Returns a +DateTime+ as-is, builds one from a +Date+ or
+    # +Time+'s components, reads a String via +DateTime.parse+ (or +strptime+
+    # when the field declares a +format:+), and refuses everything else.
     # 
     # Per-field +format:+ option (String or Symbol-preset) controls both
     # parsing (strptime when input is a String) and serialization
@@ -1606,20 +1729,53 @@ module FieldStruct
       # leaves the type using ISO-8601 in/out
       def self.default_format: () -> ::String?
 
-      # _@return_ — named presets for the +format:+ option
-      def self.presets: () -> ::Hash[::Symbol, ::String]
+      # Named presets for the +format:+ option.
+      # 
+      # +:iso8601+ is an {Rfc3339Format} rather than a strftime String: +%z+
+      # renders +\+0000+, which RFC 3339 rejects, and no strftime string can
+      # express optional fractional seconds. The interchange and display
+      # presets stay strftime-based.
+      def self.presets: () -> ::Hash[::Symbol, Object]
 
       # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
       # string at field-declaration time; other forms pass through.
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
-      # _@param_ `value` — +nil+ → +nil+; a +String+ is parsed via +strptime+ when +format:+ is set, otherwise via +DateTime.parse+; anything responding to +to_datetime+ (Date, Time, etc.) is converted.
+      # Resolve a declared +format:+ (a Symbol preset name or a strftime
+      # String) into the String that {#coerce} and JSON rendering actually
+      # use. Declarations are stored exactly as written, so this is where a
+      # preset name becomes usable. See {TimeFormatResolver}.
+      # 
+      # _@param_ `format` — the format as declared
+      # 
+      # _@return_ — +nil+ when the field declares no format
+      def self.resolve_format: ((::String | ::Symbol)? format) -> ::String?
+
+      # Dispatch is on explicit stdlib classes, never on a +respond_to?+ probe
+      # against the value: ActiveSupport defines +String#to_datetime+, so a
+      # probe that is false on plain Ruby is TRUE under Rails.
+      # +DateTime.parse+ and +DateTime.strptime+ are not redefined by
+      # ActiveSupport. See {Types::Time#coerce} for why cross-class conversion
+      # is built from components rather than +to_datetime+.
+      # 
+      # _@param_ `value` — +nil+ → +nil+; a String is read through +strptime+ when a +format:+ is set and +DateTime.parse+ otherwise; a +DateTime+ passes through; a +Date+ becomes midnight and a +Time+ (including ActiveSupport's TimeWithZone) keeps its instant and offset. Anything else is refused.
       # 
       # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      def coerce: ((::DateTime | untyped | ::String)? value, ?format: ::String?) -> ::DateTime?
+      def coerce: ((::String | ::DateTime | ::Date | ::Time)? value, ?format: ::String?) -> ::DateTime?
 
       # _@return_ — the top-level +::DateTime+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value` — the raw string
+      # 
+      # _@param_ `format` — strptime format, when the field declares one
+      def parse_string: (::String value, ::String? format) -> ::DateTime
+
+      # _@param_ `value` — the value to convert
+      # 
+      # _@return_ — the same instant, at the same offset, sub-second
+      # precision preserved
+      def datetime_from_time: (::Time value) -> ::DateTime
     end
 
     # BigDecimal type. Accepts a {::BigDecimal}, +Integer+, +Float+, or a
@@ -1641,6 +1797,89 @@ module FieldStruct
 
       # _@return_ — the top-level +::BigDecimal+ class
       def ruby_type: () -> Class
+    end
+
+    # RFC 3339 — the profile of ISO 8601 that "ISO-8601" means in an API
+    # contract, and what JSON Schema's +date-time+ refers to. This is what the
+    # +:iso8601+ preset resolves to for {Date}, {Time} and {DateTime}.
+    # 
+    # FieldStruct parses and renders it itself, for two reasons.
+    # 
+    # **It cannot be written as a strftime string.** +%z+ renders +\+0000+,
+    # which RFC 3339 rejects — so the preset named +iso8601+ used to emit a
+    # value its own documented format would refuse. And no strftime string can
+    # express "optional fractional seconds", which most JSON APIs emit.
+    # 
+    # **The stdlib helpers disagree with each other.** Routing +Time+ through
+    # +Time.iso8601+ and +DateTime+ through +DateTime.iso8601+ would give the
+    # same declared preset two different contracts:
+    # 
+    #     Time.iso8601('2026-02-30T10:30:00Z')      # => 2026-03-02 10:30 UTC
+    #     DateTime.iso8601('2026-02-30T10:30:00Z')  # => refused
+    #     Time.iso8601('2026-07-03T10:30Z')         # => refused
+    #     DateTime.iso8601('2026-07-03T10:30Z')     # => accepted
+    #     DateTime.iso8601('10:30:00Z')             # => TODAY at 10:30
+    # 
+    # +Time.iso8601+ reading 30 February as 2 March is the exact
+    # silently-wrong-day defect this release exists to remove, so it cannot be
+    # the thing that implements the strict preset.
+    # 
+    # The pattern is deliberately narrow: fixed-width fields, a mandatory
+    # offset, and no week dates, ordinal dates or basic (unseparated) forms.
+    # That narrowness is the point — it is what lets a caller replace a
+    # hand-rolled +/\A\d{4}-\d{2}-\d{2}\z/+ with a declared format.
+    class Rfc3339Format
+      # _@return_ — the date-only form, for {Types::Date}
+      def self.date: () -> Rfc3339Format
+
+      # _@return_ — the timestamp form, for {Types::Time} and {Types::DateTime}
+      def self.timestamp: () -> Rfc3339Format
+
+      # _@param_ `kind` — +:date+ or +:timestamp+
+      def initialize: (::Symbol kind) -> void
+
+      # _@return_ — the preset name this format implements
+      def name: () -> ::Symbol
+
+      # The accepted shape, as a regular expression whose source is also valid
+      # as an ECMA pattern — so a schema or documentation generator can publish
+      # the enforced contract rather than a prose approximation of it.
+      def pattern: () -> ::Regexp
+
+      # _@return_ — the format's name, for error messages and inspection
+      def to_s: () -> ::String
+
+      # Parse a String into date/time fragments.
+      # 
+      # _@param_ `value` — the raw string
+      # 
+      # _@return_ — +:year+, +:mon+, +:mday+ and, for a
+      # timestamp, +:hour+, +:min+, +:sec+, +:sec_fraction+, +:offset+
+      def parse: (::String value) -> ::Hash[::Symbol, Object]
+
+      # Render a coerced value back to RFC 3339.
+      # 
+      # _@param_ `value` — the coerced value
+      def render: ((::Date | ::Time | ::DateTime) value) -> ::String
+
+      def date_parts: (untyped match) -> ::Hash[::Symbol, ::Integer]
+
+      def timestamp_parts: (untyped match) -> ::Hash[::Symbol, Object]
+
+      # _@return_ — seconds after the whole second, exact
+      def fraction_from: (untyped text) -> ::Rational
+
+      # _@return_ — seconds east of UTC
+      def offset_from: (untyped text) -> ::Integer
+
+      # _@return_ — +".123"+, or empty when the value is on a whole second
+      def fraction_of: (untyped value) -> ::String
+
+      # _@return_ — +"Z"+ for UTC, otherwise +"+HH:MM"+
+      def offset_of: (untyped value) -> ::String
+
+      # _@return_ — +:date+ or +:timestamp+
+      attr_reader kind: ::Symbol
     end
 
     # Generic preset resolution for a single named option on a single
@@ -1672,6 +1911,57 @@ module FieldStruct
                      ) -> ::Hash[::Symbol, Object]
     end
 
+    # Shared String-parsing rules for {Date}, {Time} and {DateTime}.
+    # 
+    # Three rules the stdlib parsers leave to their caller. Each of them is a
+    # case where the stdlib answers a question it was not asked, confidently.
+    # 
+    # **Anchoring.** +strptime+ matches a PREFIX and discards the rest.
+    # +Date.strptime('2026-07-031', '%Y-%m-%d')+ returns the 3rd and throws the
+    # trailing +1+ away; +'2026-07-03T10:30:00+0000-NONSENSE'+ parses clean
+    # under the +iso8601+ preset. A declared +format:+ is a contract about the
+    # whole string, so anything left over is refused. (Leading whitespace needs
+    # no rule — +Date._strptime+ already returns +nil+ for it.)
+    # 
+    # **Civil validity.** +Date.strptime+ and +DateTime.strptime+ refuse the
+    # 30th of February. +Time+ does not: +Time.parse+, +Time.strptime+ and
+    # +Time.new+ all roll it forward to 2 March and say nothing. All three
+    # types refuse it here.
+    # 
+    # **Completeness.** With no declared format the stdlib parsers fill in
+    # whatever the string omits, from *today*: +Time.parse('10:30')+ is today
+    # at 10:30, +'July'+ is the 1st of July this year, +'12'+ is the 12th of
+    # this month. A value whose meaning depends on when it was parsed is not a
+    # value, so a string with no declared format must name a whole day.
+    # 
+    # Anchoring is trailing-junk rejection and nothing more. Widths, sign and
+    # case stay strptime-lenient for a hand-written format: +%m+ and +%d+
+    # accept one or two digits, which is strptime's contract rather than a
+    # defect. Strictness for the built-in presets is a separate concern.
+    module TemporalParser
+      # Validate a String against a declared format.
+      # 
+      # _@param_ `value` — the raw string
+      # 
+      # _@param_ `format` — a resolved strftime/strptime format
+      # 
+      # _@return_ — the parsed fragments
+      def self.strptime_parts: (::String value, ::String format) -> ::Hash[::Symbol, Object]
+
+      # Validate a String with no declared format.
+      # 
+      # _@param_ `value` — the raw string
+      # 
+      # _@return_ — the parsed fragments
+      def self.parse_parts: (::String value) -> ::Hash[::Symbol, Object]
+
+      # _@param_ `parts` — fragments from +Date._parse+
+      def self.ensure_whole_day!: (::Hash[::Symbol, Object] parts) -> void
+
+      # _@param_ `parts` — fragments from +Date._parse+ or +Date._strptime+
+      def self.ensure_real_day!: (::Hash[::Symbol, Object] parts) -> void
+    end
+
     # Like {Types::String}, but the coerced value is frozen. Useful when
     # downstream code must not mutate a stored string.
     class ImmutableString < FieldStruct::Types::String
@@ -1685,10 +1975,34 @@ module FieldStruct
     # Each of those types calls +TimeFormatResolver.call(options, presets)+
     # from its +resolve_options+ class method.
     # 
-    # Symbol +format:+ values are looked up in the type's presets table;
-    # String values pass through. Anything else raises ArgumentError.
+    # A declared +format:+ is VALIDATED at declaration time and kept exactly as
+    # the user wrote it; it is resolved to a strftime string later, at coerce
+    # and render time, by {.resolve}.
+    # 
+    # Keeping the declaration is the point. The Symbol used to be overwritten
+    # with the strftime String it expands to, which destroyed the only fact a
+    # documentation generator actually wants — that the field is +:iso8601+,
+    # not some anonymous String of percent-escapes. Recovering the name by
+    # reverse-mapping the String worked only while no two presets shared a
+    # value, which is luck rather than a contract.
     module TimeFormatResolver
-      def self.call: (untyped options, untyped presets) -> untyped
+      # Validate a declared +format:+ and return the options unchanged.
+      # 
+      # _@param_ `options` — the per-field options as written
+      # 
+      # _@param_ `presets` — the type's preset table
+      # 
+      # _@return_ — +options+, unmodified
+      def self.call: (::Hash[::Symbol, Object] options, ::Hash[::Symbol, ::String] presets) -> ::Hash[::Symbol, Object]
+
+      # Resolve a declared +format:+ to a strftime/strptime String.
+      # 
+      # _@param_ `format` — as declared
+      # 
+      # _@param_ `presets` — the type's preset table
+      # 
+      # _@return_ — +nil+ when no format is declared
+      def self.resolve: ((::String | ::Symbol)? format, ::Hash[::Symbol, ::String] presets) -> ::String?
     end
   end
 

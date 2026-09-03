@@ -63,3 +63,53 @@ jobs:
         bundler-cache: true
     - name: Run the library specs
       run: bundle exec rspec
+
+  # FieldStruct has no ActiveSupport dependency and is not getting one. But
+  # "framework independent" has to mean "behaves the same whether or not
+  # ActiveSupport is loaded", and it did not: AS defines String#to_date /
+  # #to_time / #to_datetime and redefines Time.===, Date#to_time and friends,
+  # so a host that loads it silently changed what the gem did. On v0.9.0 the
+  # unchanged suite failed 7 examples under AS — and the gem could not see it,
+  # because its own suite never ran in that environment. This job is that
+  # environment. Dev dependency only; the gemspec is untouched.
+  activesupport:
+    runs-on: ubuntu-latest
+    name: ActiveSupport ${{ matrix.activesupport }} (Ruby ${{ matrix.ruby }})
+    env:
+      BUNDLE_GEMFILE: gemfiles/${{ matrix.gemfile }}.gemfile
+      # Loads active_support/all before field_struct and raises on deprecations
+      # (see spec/spec_helper.rb).
+      FIELD_STRUCT_ACTIVESUPPORT: '1'
+      # Deliberately NOT UTC. Two of the defects this lane exists to catch
+      # involve the process zone, and one of them does not reproduce under
+      # TZ=UTC — a UTC-only lane would hide a bug it was added to find. CI
+      # runners and prod containers are UTC, which is exactly why this must
+      # not be.
+      TZ: America/Denver
+    strategy:
+      fail-fast: false
+      matrix:
+        # 7.2 and 8.x are not interchangeable: they differ on
+        # to_time_preserves_timezone, which changes what DateTime#to_time
+        # returns and how many examples fail. Both are pinned. AS 7.2 needs
+        # Ruby >= 3.1 and 8.1 needs >= 3.2, so this lane cannot ride the
+        # Ruby-floor job above.
+        include:
+          # `activesupport` is the display version, `gemfile` the (snake_case)
+          # file that pins it.
+          - activesupport: '7.2'
+            gemfile: activesupport_7_2
+            ruby: '3.2'
+          - activesupport: '8.1'
+            gemfile: activesupport_8_1
+            ruby: '3.4'
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: ${{ matrix.ruby }}
+        bundler-cache: true
+    - name: Run the library specs against an ActiveSupport host
+      run: bundle exec rspec

@@ -1793,6 +1793,57 @@ module FieldStruct
                      ) -> ::Hash[::Symbol, Object]
     end
 
+    # Shared String-parsing rules for {Date}, {Time} and {DateTime}.
+    # 
+    # Three rules the stdlib parsers leave to their caller. Each of them is a
+    # case where the stdlib answers a question it was not asked, confidently.
+    # 
+    # **Anchoring.** +strptime+ matches a PREFIX and discards the rest.
+    # +Date.strptime('2026-07-031', '%Y-%m-%d')+ returns the 3rd and throws the
+    # trailing +1+ away; +'2026-07-03T10:30:00+0000-NONSENSE'+ parses clean
+    # under the +iso8601+ preset. A declared +format:+ is a contract about the
+    # whole string, so anything left over is refused. (Leading whitespace needs
+    # no rule — +Date._strptime+ already returns +nil+ for it.)
+    # 
+    # **Civil validity.** +Date.strptime+ and +DateTime.strptime+ refuse the
+    # 30th of February. +Time+ does not: +Time.parse+, +Time.strptime+ and
+    # +Time.new+ all roll it forward to 2 March and say nothing. All three
+    # types refuse it here.
+    # 
+    # **Completeness.** With no declared format the stdlib parsers fill in
+    # whatever the string omits, from *today*: +Time.parse('10:30')+ is today
+    # at 10:30, +'July'+ is the 1st of July this year, +'12'+ is the 12th of
+    # this month. A value whose meaning depends on when it was parsed is not a
+    # value, so a string with no declared format must name a whole day.
+    # 
+    # Anchoring is trailing-junk rejection and nothing more. Widths, sign and
+    # case stay strptime-lenient for a hand-written format: +%m+ and +%d+
+    # accept one or two digits, which is strptime's contract rather than a
+    # defect. Strictness for the built-in presets is a separate concern.
+    module TemporalParser
+      # Validate a String against a declared format.
+      # 
+      # _@param_ `value` — the raw string
+      # 
+      # _@param_ `format` — a resolved strftime/strptime format
+      # 
+      # _@return_ — the parsed fragments
+      def self.strptime_parts: (::String value, ::String format) -> ::Hash[::Symbol, Object]
+
+      # Validate a String with no declared format.
+      # 
+      # _@param_ `value` — the raw string
+      # 
+      # _@return_ — the parsed fragments
+      def self.parse_parts: (::String value) -> ::Hash[::Symbol, Object]
+
+      # _@param_ `parts` — fragments from +Date._parse+
+      def self.ensure_whole_day!: (::Hash[::Symbol, Object] parts) -> void
+
+      # _@param_ `parts` — fragments from +Date._parse+ or +Date._strptime+
+      def self.ensure_real_day!: (::Hash[::Symbol, Object] parts) -> void
+    end
+
     # Like {Types::String}, but the coerced value is frozen. Useful when
     # downstream code must not mutate a stored string.
     class ImmutableString < FieldStruct::Types::String

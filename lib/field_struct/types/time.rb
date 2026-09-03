@@ -114,8 +114,15 @@ module FieldStruct
       # @return [::Time]
       # @raise [ArgumentError] when the string cannot be read
       def parse_string(value, format)
-        return ::Time.strptime(value, format) if format
+        # Validated first, then handed to the stdlib parser: the checks decide
+        # what is ACCEPTABLE, the stdlib still decides what the value IS, so
+        # the two can't drift apart. See {TemporalParser} for the three rules.
+        if format
+          TemporalParser.strptime_parts(value, format)
+          return ::Time.strptime(value, format)
+        end
 
+        TemporalParser.parse_parts(value)
         ::Time.parse(value)
       end
 

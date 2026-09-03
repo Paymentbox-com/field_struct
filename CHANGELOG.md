@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A declared `format:` now anchors, and every temporal type refuses a day that never existed.** Three rules the stdlib parsers left to their caller, each one a case where the stdlib answers a question it was not asked:
+  - **Anchoring.** `strptime` matches a *prefix* and discards the rest, so `Date.strptime('2026-07-031', '%Y-%m-%d')` returned the 3rd and threw the trailing `1` away, and `'2026-07-03T10:30:00+0000-NONSENSE'` parsed clean under the `iso8601` preset. A string with characters left over is now refused. **"Anchor" means trailing-junk rejection and nothing more** — widths, sign and case stay strptime-lenient for a hand-written format, because `%m` accepting one or two digits is strptime's contract rather than a defect.
+  - **Civil validity.** `Date` and `DateTime` already refused the 30th of February. **`:time` did not** — `Time.parse`, `Time.strptime` and `Time.new` all roll it forward to 2 March silently, so `required :at, :time` read `"2026-06-31 10:30:00"` as 1 July and reported the struct valid, in *both* lanes. All three types now refuse it.
+  - **Completeness.** With no declared format the stdlib parsers fill in what the string omits, from *today*: `Time.parse('10:30')` is today at 10:30, `'July'` is the 1st of July this year, `'12'` is the 12th of this month. A value whose meaning depends on when it was parsed is not a value, so a string with no declared format must now name a whole day. A *declared* format that names only part of one (`format: '%H:%M'`) is a deliberate choice and still works.
+
+  This does not make `Date.parse` strict about what counts as a day — `'v1.2.3'` still reads as 2001-02-03, because `Date._parse` finds `1.2.3` and all three components are present. The no-format path delegates to the stdlib by design; a caller who needs a narrow contract declares a format.
+
 - **A declared `format:` is kept exactly as written.** `format: :iso8601` used to be overwritten at declaration time with the strftime String it expands to, so `metadata.to_h[:at][:options][:format]` reported `"%Y-%m-%dT%H:%M:%S%z"` and the preset *name* — the one fact a documentation or schema generator actually wants — was gone. Recovering it by reverse-mapping the String back to a name worked only while no two presets shared a value: luck, not a contract. The declaration now survives (`:iso8601` stays `:iso8601`, a hand-written String stays that String) and resolution to a strftime format happens at coerce and render time instead, via the new `Types::Base.resolve_format` and `TimeFormatResolver.resolve`. Parsing, serialization and round-tripping are unchanged; an unknown preset name still raises at declaration, not at first use.
 
 ### Fixed

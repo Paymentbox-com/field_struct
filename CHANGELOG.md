@@ -19,6 +19,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - **`Date` now honours `format:` when parsing a String, as documented and as `DateTime` and `Time` already did.** `Types::Date#coerce` converted anything responding to `to_date` *before* consulting the format, which made the `strptime` branch unreachable for the exact input it exists for. ActiveSupport defines `String#to_date`, so **under Rails every string was parsed by `Date.parse` and the declared format was silently ignored** — an ambiguous date such as `07/03/2026` under `format: '%Y-%m-%d'` was accepted and read as 7 March instead of being refused. Plain Ruby has no `String#to_date`, which is why the type's own specs never took that branch and the defect survived. The `String`-with-`format` check now comes first, matching `DateTime` and `Time`; a non-string still converts through `to_date`, since a format describes how a *string* is read.
 
+### Tooling / CI
+
+- **New ActiveSupport lane.** The suite now also runs against a host that has loaded ActiveSupport, on **7.2 and 8.1 pinned separately** (they differ on `to_time_preserves_timezone`, which changes what `DateTime#to_time` returns). Dev dependency only — the gemspec is untouched. The lane runs under a **non-UTC `TZ`** on purpose: two of the defects it exists to catch involve the process zone and one of them does not reproduce under `TZ=UTC`, so a UTC-only lane would hide a bug it was added to find. It also **raises on ActiveSupport deprecations** rather than warning, so code reaching for a deprecated conversion fails loudly instead of quietly returning the wrong zone. Set `FIELD_STRUCT_ACTIVESUPPORT=1` with `BUNDLE_GEMFILE=gemfiles/activesupport_7_2.gemfile` (or `_8_1`) to run it locally. This lane is the reason the defects above are now visible: without it, the gem's suite could only ever test the half of the world that does not load Rails.
+
 ## [0.9.0] - 2026-06-03
 
 Discoverability and toolchain hardening on top of v0.8.0's legibility work.

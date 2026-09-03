@@ -1,0 +1,27 @@
+# frozen_string_literal: true
+
+# ActiveSupport lane — see the `activesupport` job in .github/workflows/main.yml.
+#
+# FieldStruct has no ActiveSupport dependency and is not getting one. But
+# "framework independent" has to mean "behaves the same whether or not
+# ActiveSupport is loaded", and it did not: AS defines String#to_date /
+# #to_time / #to_datetime and redefines Time.===, Date#to_time and friends, so
+# a host that loads it silently changes what the gem does. On v0.9.0 the
+# unchanged suite failed 7 examples under AS and the gem could not see it,
+# because its own suite never ran in that environment.
+#
+# This gemfile is that environment. Dev dependency only — the gemspec is
+# untouched. Run with:
+#
+#   BUNDLE_GEMFILE=gemfiles/activesupport_8_1.gemfile \
+#     FIELD_STRUCT_ACTIVESUPPORT=1 TZ=America/Denver bundle exec rspec
+#
+# 7.2 and 8.x are pinned separately and both are required: they differ on
+# to_time_preserves_timezone, which changes what DateTime#to_time returns.
+source 'https://rubygems.org'
+
+gemspec path: '..'
+
+gem 'rspec', '~> 3.0'
+
+gem 'activesupport', '~> 8.1.0'

@@ -138,7 +138,9 @@ RSpec.describe 'temporal coercion dispatch' do
       t = Time.new(2024, 1, 15, 12, 30, 0, '-06:00')
       result = type.coerce(t)
       expect(result).to be_a(DateTime)
-      expect(result.to_time.to_r).to eq(t.to_r)
+      # Compared via strftime('%s%N') rather than #to_time: ActiveSupport 7.2
+      # deprecates DateTime#to_time, and this lane raises on deprecations.
+      expect(result.strftime('%s%N')).to eq(t.strftime('%s%N'))
       expect(result.offset).to eq(Rational(-6, 24))
     end
 

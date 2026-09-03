@@ -59,8 +59,16 @@ module FieldStruct
       def coerce(value, format: self.class.default_format, **)
         return nil if value.nil?
         return value if value.instance_of?(::Date)
+        # A formatted STRING is read through strptime before anything else.
+        #
+        # This used to sit below the `to_date` branch, which made it unreachable
+        # for the exact input it exists for: ActiveSupport defines
+        # String#to_date, so under Rails every string converted through
+        # Date.parse and the declared format was silently ignored — turning an
+        # ambiguous date into a confident wrong answer rather than a refusal.
+        # DateTime and Time have always guarded it this way; Date now matches.
+        return ::Date.strptime(value, format) if value.is_a?(::String) && format
         return value.to_date if value.respond_to?(:to_date)
-        return ::Date.strptime(value.to_s, format) if format
 
         ::Date.parse(value.to_s)
       end

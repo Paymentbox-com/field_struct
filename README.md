@@ -202,7 +202,7 @@ What each type supports:
 
 You don't have to memorize this table — **each type describes its own options at runtime**. `FieldStruct.types.lookup(:date).option_schema` returns `{ format: {type:, required:, presets:}, in: {...} }`. The DSL validates these native options at class-load: a wrong-shaped value (`round: '2'`) or a misapplied option (`enum:` on `:integer`) raises with the expected shape / the types it applies to. An option the type doesn't recognize is **not** an error — it's stored verbatim on the `Field`, so downstream tooling (e.g. an Avro exporter) can carry its own options.
 
-Time-shaped `format:` applies in **both** directions: input strings parse via `strptime`, output (`as_json` / `to_json`) emits via `strftime`. The round-trip property holds — `Klass.from_json(instance.to_json) == instance` for any format you pick.
+Time-shaped `format:` applies in **both** directions: input strings parse via `strptime`, output (`as_json` / `to_json`) emits via `strftime`. The exception is `:iso8601`, which FieldStruct parses and renders itself as RFC 3339 (`Types::Rfc3339Format`) rather than through a strftime string — no strftime string can express an optional fractional second, and `%z` emits `+0000` where RFC 3339 requires `+00:00` or `Z`. The round-trip property holds either way — `Klass.from_json(instance.to_json) == instance` for any format you pick.
 
 You can override the type's defaults class-wide by subclassing and overriding the relevant `default_*` or `presets` method, then registering the subclass:
 
@@ -232,7 +232,7 @@ required :start_on,  :date,    in: Date.new(2024, 1, 1)..Date.new(2024, 12, 31)
 ```
 
 - `enum: [...]` — string-like types (`:string`, `:symbol`, `:uuid`, etc.). Array of allowed values.
-- `in:` — rangy types (`:integer`, `:float`, `:decimal`, `:date`, `:time`, `:datetime`). Either an Array or a Range (closed, half-open — anything that responds to `include?`).
+- `in:` — rangy types (`:integer`, `:float`, `:decimal`, `:date`, `:time`, `:datetime`). An Array is a membership test; a Range is a bounds check via `cover?`, so closed and half-open both work and a `:date` / `:datetime` range compares endpoints instead of enumerating days.
 - Both run post-coercion (`'10'` becomes `10` before the check) and emit `'is invalid'` on mismatch.
 - Passing `enum:` to a rangy field — or `in:` to a string-like field — raises `ArgumentError` at class load.
 

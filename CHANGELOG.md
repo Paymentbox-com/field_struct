@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`in:` with a Range is a bounds check again.** Validation asked `Range#include?`, which *enumerates* a non-numeric range instead of comparing endpoints. For a `Date` range that was only wasteful — 365 successor steps to answer one comparison. For a **`DateTime` range it was wrong**: the range steps by whole days, so any value not landing exactly on midnight was reported invalid inside a range that plainly contained it. `(DateTime.new(2026,1,1)..DateTime.new(2026,12,31)).include?(DateTime.new(2026,7,3,10,30))` is `false`; `cover?` is `true`. Ranges now use `cover?`; an `Array` remains a membership test. No string-range behaviour changes, because the DSL refuses `in:` on String fields outright.
+
 - **Temporal coercion no longer depends on whether ActiveSupport is loaded.** `Date`, `Time` and `DateTime` dispatched on `respond_to?(:to_date)` / `:to_time` / `:to_datetime` — predicates ActiveSupport adds to every core class, so the types took one branch in their own suite and a different one under Rails. Three defects followed, all measured on v0.9.0 under Rails 7.2:
   - **`:time` accepted garbage as valid.** `optional :t, :time` given `"not-a-time"`, `"tomorrow at noon"` or `""` was **valid with a nil value**, because AS's `String#to_time` returns `nil` rather than raising. On plain Ruby all three were invalid.
   - **Blank strings diverged.** `""` and `"  "` were valid-nil under Rails and a coercion failure on plain Ruby.

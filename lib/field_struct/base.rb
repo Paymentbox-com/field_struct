@@ -837,9 +837,27 @@ module FieldStruct
       fmt = field.options[:format]
       return true if fmt.is_a?(::Regexp) && !fmt.match?(value)
       return true if field.options[:enum] && !field.options[:enum].include?(value)
-      return true if field.options[:in] && !field.options[:in].include?(value)
+      return true if field.options[:in] && !within_allowed?(field.options[:in], value)
 
       nested_invalid?(value)
+    end
+
+    # `in:` with a Range means a BOUNDS check, so ask the Range for its bounds.
+    #
+    # Range#include? ENUMERATES a non-numeric range rather than comparing
+    # endpoints. For a Date range that is merely wasteful — 365 successor steps
+    # to answer one comparison. For a DateTime range it is wrong: the range
+    # steps by whole days, so a value that isn't exactly midnight is reported
+    # outside a range that plainly contains it.
+    #
+    #   (DateTime.new(2026, 1, 1)..DateTime.new(2026, 12, 31))
+    #     .include?(DateTime.new(2026, 7, 3, 10, 30))  # => false
+    #     .cover?(DateTime.new(2026, 7, 3, 10, 30))    # => true
+    #
+    # An Array stays a membership test. There is no string-range case to worry
+    # about: the DSL refuses `in:` on String fields outright.
+    def within_allowed?(allowed, value)
+      allowed.is_a?(::Range) ? allowed.cover?(value) : allowed.include?(value)
     end
 
     def nested_invalid?(value)

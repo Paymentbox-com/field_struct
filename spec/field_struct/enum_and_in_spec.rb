@@ -204,3 +204,67 @@ RSpec.describe FieldStruct::Base, 'enum: and in: field options' do
     end
   end
 end
+
+# `in:` with a Range is a BOUNDS check, and it was asking Range#include?, which
+# for a non-numeric range ITERATES rather than comparing endpoints.
+#
+# For a Date range that is merely slow — 365 steps to answer one comparison. For
+# a DateTime range it is wrong: the range steps by whole days, so any value not
+# landing exactly on midnight is reported outside a range that plainly contains
+# it. Measured on v0.9.0:
+#
+#   (DateTime.new(2026,1,1)..DateTime.new(2026,12,31)).include?(DateTime.new(2026,7,3,10,30))
+#   # => false        .cover?(...) # => true
+#
+# `in:` is only accepted on integer/float/big_decimal/date/time/datetime — the
+# DSL refuses it on String fields — so there is no string-range case where
+# cover? and include? would disagree about enumeration.
+RSpec.describe FieldStruct::Base, 'in: with a Range' do
+  it 'accepts a DateTime inside the range but not on a whole-day boundary' do
+    klass = Class.new(described_class) do
+      required :at, :datetime, in: (DateTime.new(2026, 1, 1)..DateTime.new(2026, 12, 31))
+    end
+
+    expect(klass.new(at: '2026-07-03T10:30:00+00:00')).to be_valid
+  end
+
+  it 'still refuses a DateTime outside the range' do
+    klass = Class.new(described_class) do
+      required :at, :datetime, in: (DateTime.new(2026, 1, 1)..DateTime.new(2026, 12, 31))
+    end
+
+    expect(klass.new(at: '2027-07-03T10:30:00+00:00').errors[:at]).to include('is invalid')
+  end
+
+  it 'accepts a Time inside the range' do
+    klass = Class.new(described_class) do
+      required :at, :time, in: (Time.utc(2026, 1, 1)..Time.utc(2026, 12, 31))
+    end
+
+    expect(klass.new(at: '2026-07-03T10:30:00Z')).to be_valid
+  end
+
+  it 'accepts a Date inside the range without walking the whole range' do
+    klass = Class.new(described_class) do
+      required :on, :date, in: (Date.new(2026, 1, 1)..Date.new(2026, 12, 31))
+    end
+
+    expect(klass.new(on: '2026-07-03')).to be_valid
+  end
+
+  # An endless range is the shape a real consumer uses for "a positive amount".
+  it 'works with an endless numeric range' do
+    klass = Class.new(described_class) { required :amount, :integer, in: (1..) }
+
+    expect(klass.new(amount: 5)).to be_valid
+    expect(klass.new(amount: 0).errors[:amount]).to include('is invalid')
+  end
+
+  # An Array is a membership test, not a bounds check, and keeps using include?.
+  it 'still treats an Array as membership, not bounds' do
+    klass = Class.new(described_class) { required :n, :integer, in: [1, 3, 5] }
+
+    expect(klass.new(n: 3)).to be_valid
+    expect(klass.new(n: 2).errors[:n]).to include('is invalid')
+  end
+end

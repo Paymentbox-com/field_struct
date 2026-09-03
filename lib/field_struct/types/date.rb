@@ -5,9 +5,9 @@ require_relative 'base'
 
 module FieldStruct
   module Types
-    # Date type. Returns Date as-is, converts DateTime/Time/anything that
-    # responds to +to_date+ down to a plain Date, and otherwise parses
-    # +Date.parse(value.to_s)+ — which raises +ArgumentError+ on garbage.
+    # Date type. Returns a +Date+ as-is, narrows a +DateTime+ or +Time+ down
+    # to a plain Date, reads a String via +Date.parse+ (or +strptime+ when the
+    # field declares a +format:+), and refuses everything else.
     #
     # Per-field +format:+ option (String or Symbol-preset) controls both
     # parsing (strptime when input is a String) and serialization
@@ -46,36 +46,59 @@ module FieldStruct
         TimeFormatResolver.call(options, presets)
       end
 
-      # @param value [::Date, #to_date, ::String, nil] +nil+ → +nil+; a +Date+
-      #   passes through; anything responding to +to_date+ (DateTime,
-      #   Time, ActiveSupport's TimeWithZone, etc.) is converted; a
-      #   String is parsed via +strptime+ if a +format:+ is set,
-      #   otherwise +Date.parse+. Anything else falls through to
-      #   +Date.parse(value.to_s)+ — which raises ArgumentError.
+      # Dispatch is on explicit stdlib classes, never on a +respond_to?+ probe
+      # against the value. ActiveSupport defines +String#to_date+, so a probe
+      # that is false on plain Ruby is TRUE under Rails, and the type would take
+      # a different branch there than it does in its own suite — which is
+      # exactly how a declared +format:+ came to be ignored under Rails while
+      # every spec here passed. +Date.parse+ and +Date.strptime+ are not
+      # redefined by ActiveSupport, so dispatching on them gives one behaviour
+      # in both worlds.
+      #
+      # @param value [::String, ::Date, ::DateTime, ::Time, nil] +nil+ → +nil+;
+      #   a String is read through +strptime+ when a +format:+ is set and
+      #   +Date.parse+ otherwise; a +Date+ passes through; a +DateTime+ or
+      #   +Time+ (including ActiveSupport's TimeWithZone) is narrowed to a
+      #   plain +Date+. Anything else is refused.
       # @param format [::String, nil] strptime/strftime format; +nil+ uses
       #   {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
       # @return [::Date, nil]
-      # @raise [ArgumentError] when a string cannot be parsed
+      # @raise [ArgumentError] when a String cannot be parsed, or the value is
+      #   not a String or a temporal object
       def coerce(value, format: self.class.default_format, **)
         return nil if value.nil?
-        return value if value.instance_of?(::Date)
-        # A formatted STRING is read through strptime before anything else.
-        #
-        # This used to sit below the `to_date` branch, which made it unreachable
-        # for the exact input it exists for: ActiveSupport defines
-        # String#to_date, so under Rails every string converted through
-        # Date.parse and the declared format was silently ignored — turning an
-        # ambiguous date into a confident wrong answer rather than a refusal.
-        # DateTime and Time have always guarded it this way; Date now matches.
-        return ::Date.strptime(value, format) if value.is_a?(::String) && format
-        return value.to_date if value.respond_to?(:to_date)
 
-        ::Date.parse(value.to_s)
+        case value
+        when ::String then parse_string(value, format)
+        # ::DateTime is a ::Date, so this arm narrows both. A plain Date is
+        # returned untouched; a DateTime is rebuilt as one.
+        when ::Date then value.instance_of?(::Date) ? value : ::Date.new(value.year, value.mon, value.mday)
+        # ActiveSupport::TimeWithZone lands here: AS overrides Time.=== so it
+        # matches, even though it is not an instance of ::Time.
+        when ::Time then ::Date.new(value.year, value.mon, value.mday)
+        else
+          # The class, never the value. FieldStruct wraps this as "could not be
+          # coerced: <message>" and that string reaches API responses and audit
+          # rows, so a value echoed here is a value published.
+          raise ArgumentError, "expected a String, Date, DateTime or Time, got #{value.class}"
+        end
       end
 
       # @return [Class] the top-level +::Date+ class
       def ruby_type
         ::Date
+      end
+
+      private
+
+      # @param value [::String] the raw string
+      # @param format [::String, nil] strptime format, when the field declares one
+      # @return [::Date]
+      # @raise [ArgumentError] when the string cannot be read
+      def parse_string(value, format)
+        return ::Date.strptime(value, format) if format
+
+        ::Date.parse(value)
       end
     end
   end

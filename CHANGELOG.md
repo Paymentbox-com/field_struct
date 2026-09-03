@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Temporal coercion no longer depends on whether ActiveSupport is loaded.** `Date`, `Time` and `DateTime` dispatched on `respond_to?(:to_date)` / `:to_time` / `:to_datetime` — predicates ActiveSupport adds to every core class, so the types took one branch in their own suite and a different one under Rails. Three defects followed, all measured on v0.9.0 under Rails 7.2:
+  - **`:time` accepted garbage as valid.** `optional :t, :time` given `"not-a-time"`, `"tomorrow at noon"` or `""` was **valid with a nil value**, because AS's `String#to_time` returns `nil` rather than raising. On plain Ruby all three were invalid.
+  - **Blank strings diverged.** `""` and `"  "` were valid-nil under Rails and a coercion failure on plain Ruby.
+  - **Two-digit years diverged.** `"03 Jul 26"` was year **0026** under Rails (AS passes `comp=false` to `Date.parse`) and 2026 on plain Ruby.
+
+  Coercion now dispatches on explicit stdlib classes — `String`, then `DateTime` (before `Date`, being its subclass), then `Date`, then `Time` — and parses through `Date.parse` / `Time.parse` / `DateTime.parse` / `strptime`, none of which ActiveSupport redefines. Cross-class conversion is built from components rather than `to_time` / `to_datetime`, which ActiveSupport *does* redefine: under AS 7.2 `DateTime#to_time` shifts to the system-local zone and emits a deprecation warning, while 8.x preserves the offset. Building from parts yields the same instant and the same offset with no ActiveSupport, with 7.2, and with 8.x.
+
+  Two behaviour changes fall out, both of which restore the plain-Ruby answer: **a blank string is now a coercion failure** for all three types (as it already was for `:integer`, `:float`, `:big_decimal` and `:boolean` — only `:string` treats blank as missing), and **a value that is neither a String nor a temporal object is now refused** rather than run through `parse(value.to_s)`, which invented data: `Time.parse('[2026, 7, 3]')` returned *now*, `'v1.2.3'` read as 2001-02-03, and the Integer `20260703` parsed as a valid Date. That arm was already inconsistent — with a format declared, `:date` refused the Integer while `:time` accepted it.
+
 - **`Date` now honours `format:` when parsing a String, as documented and as `DateTime` and `Time` already did.** `Types::Date#coerce` converted anything responding to `to_date` *before* consulting the format, which made the `strptime` branch unreachable for the exact input it exists for. ActiveSupport defines `String#to_date`, so **under Rails every string was parsed by `Date.parse` and the declared format was silently ignored** — an ambiguous date such as `07/03/2026` under `format: '%Y-%m-%d'` was accepted and read as 7 March instead of being refused. Plain Ruby has no `String#to_date`, which is why the type's own specs never took that branch and the defect survived. The `String`-with-`format` check now comes first, matching `DateTime` and `Time`; a non-string still converts through `to_date`, since a format describes how a *string* is read.
 
 ## [0.9.0] - 2026-06-03

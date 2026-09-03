@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-03
+
+Temporal types: one behaviour whether or not ActiveSupport is loaded, a
+declared format that actually constrains, and an `iso8601` preset that means
+RFC 3339.
+
+The through-line is a single failure mode — **a wrong answer delivered
+confidently**. A `:time` field accepted `"not-a-time"` as valid-nil under Rails,
+read `2026-06-31` as 1 July everywhere, and a declared `format:` refused nothing
+it was given. Each of those returned a value rather than an error, which is the
+one outcome a caller cannot detect.
+
+### Breaking-ish (behaviour changes; no consumer declares a temporal field today)
+
+- A blank string is a coercion failure for all three temporal types.
+- A value that is neither a String nor a temporal object is refused.
+- A declared `format:` anchors — trailing junk is refused.
+- `:time` refuses a day that never existed, as `:date` and `:datetime` already did.
+- With no declared format, a string must name a whole day.
+- `format: :iso8601` is RFC 3339 in and out; its output is `Z`/`+HH:MM`, not `+0000`.
+
 ### Changed
 
 - **`describe` now shows what a field declares, not only what its type accepts.** It rendered the *type's* option vocabulary and nothing else, so a field declaring `format: :iso8601, enum: %w[USD EUR]` printed identically to one declaring nothing at all — the schema belongs to the type, and the declaration belongs to the field. Both are now on the line, declaration first:

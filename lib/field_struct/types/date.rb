@@ -46,6 +46,18 @@ module FieldStruct
         TimeFormatResolver.call(options, presets)
       end
 
+      # Resolve a declared +format:+ (a Symbol preset name or a strftime
+      # String) into the String that {#coerce} and JSON rendering actually
+      # use. Declarations are stored exactly as written, so this is where a
+      # preset name becomes usable. See {TimeFormatResolver}.
+      #
+      # @param format [::String, ::Symbol, nil] the format as declared
+      # @return [::String, nil] +nil+ when the field declares no format
+      # @raise [ArgumentError] when a Symbol names no preset in {.presets}
+      def self.resolve_format(format)
+        TimeFormatResolver.resolve(format, presets)
+      end
+
       # Dispatch is on explicit stdlib classes, never on a +respond_to?+ probe
       # against the value. ActiveSupport defines +String#to_date+, so a probe
       # that is false on plain Ruby is TRUE under Rails, and the type would take
@@ -68,8 +80,10 @@ module FieldStruct
       def coerce(value, format: self.class.default_format, **)
         return nil if value.nil?
 
+        fmt = self.class.resolve_format(format)
+
         case value
-        when ::String then parse_string(value, format)
+        when ::String then parse_string(value, fmt)
         # ::DateTime is a ::Date, so this arm narrows both. A plain Date is
         # returned untouched; a DateTime is rebuilt as one.
         when ::Date then value.instance_of?(::Date) ? value : ::Date.new(value.year, value.mon, value.mday)

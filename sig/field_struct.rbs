@@ -586,7 +586,13 @@ module FieldStruct
     #   end
     def deconstruct: () -> ::Array[Object]
 
-    def json_value: (untyped value, ?untyped field_options) -> untyped
+    def json_value: (untyped value, ?untyped field) -> untyped
+
+    # A declared +format:+ is now stored as written, so a preset name has to be
+    # expanded before strftime sees it — and only the field's own type knows
+    # its preset table. With no declared format (an :array of dates, a :value
+    # field holding one) the answer is ISO-8601, as it has always been.
+    def temporal_json_value: (untyped value, untyped field) -> untyped
 
     def apply_defaults: () -> untyped
 
@@ -1167,6 +1173,17 @@ module FieldStruct
       # _@return_ — possibly-modified options to store on the Field
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
+      # Resolve a declared +format:+ into the form coercion and rendering use.
+      # 
+      # Declared options are kept exactly as the user wrote them — see
+      # {TimeFormatResolver} for why — so a Symbol preset name has to be
+      # expanded somewhere, and the type owning the preset table is the only
+      # thing that can do it. This default serves types with no preset table:
+      # a String passes through, a Symbol is refused.
+      # 
+      # _@param_ `format` — the format as declared
+      def self.resolve_format: ((::String | ::Symbol)? format) -> ::String?
+
       # Coerce an input value into the type's domain.
       # 
       # The contract here is intentionally loose — subclasses override with
@@ -1226,6 +1243,16 @@ module FieldStruct
       # string at field-declaration time; other forms pass through.
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
+      # Resolve a declared +format:+ (a Symbol preset name or a strftime
+      # String) into the String that {#coerce} and JSON rendering actually
+      # use. Declarations are stored exactly as written, so this is where a
+      # preset name becomes usable. See {TimeFormatResolver}.
+      # 
+      # _@param_ `format` — the format as declared
+      # 
+      # _@return_ — +nil+ when the field declares no format
+      def self.resolve_format: ((::String | ::Symbol)? format) -> ::String?
+
       # Dispatch is on explicit stdlib classes, never on a +respond_to?+ probe
       # against the value. ActiveSupport defines +String#to_date+, so a probe
       # that is false on plain Ruby is TRUE under Rails, and the type would take
@@ -1269,6 +1296,16 @@ module FieldStruct
       # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
       # string at field-declaration time; other forms pass through.
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
+
+      # Resolve a declared +format:+ (a Symbol preset name or a strftime
+      # String) into the String that {#coerce} and JSON rendering actually
+      # use. Declarations are stored exactly as written, so this is where a
+      # preset name becomes usable. See {TimeFormatResolver}.
+      # 
+      # _@param_ `format` — the format as declared
+      # 
+      # _@return_ — +nil+ when the field declares no format
+      def self.resolve_format: ((::String | ::Symbol)? format) -> ::String?
 
       # Dispatch is on explicit stdlib classes, never on a +respond_to?+ probe
       # against the value. ActiveSupport defines +String#to_time+, and it
@@ -1669,6 +1706,16 @@ module FieldStruct
       # string at field-declaration time; other forms pass through.
       def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
 
+      # Resolve a declared +format:+ (a Symbol preset name or a strftime
+      # String) into the String that {#coerce} and JSON rendering actually
+      # use. Declarations are stored exactly as written, so this is where a
+      # preset name becomes usable. See {TimeFormatResolver}.
+      # 
+      # _@param_ `format` — the format as declared
+      # 
+      # _@return_ — +nil+ when the field declares no format
+      def self.resolve_format: ((::String | ::Symbol)? format) -> ::String?
+
       # Dispatch is on explicit stdlib classes, never on a +respond_to?+ probe
       # against the value: ActiveSupport defines +String#to_datetime+, so a
       # probe that is false on plain Ruby is TRUE under Rails.
@@ -1759,10 +1806,34 @@ module FieldStruct
     # Each of those types calls +TimeFormatResolver.call(options, presets)+
     # from its +resolve_options+ class method.
     # 
-    # Symbol +format:+ values are looked up in the type's presets table;
-    # String values pass through. Anything else raises ArgumentError.
+    # A declared +format:+ is VALIDATED at declaration time and kept exactly as
+    # the user wrote it; it is resolved to a strftime string later, at coerce
+    # and render time, by {.resolve}.
+    # 
+    # Keeping the declaration is the point. The Symbol used to be overwritten
+    # with the strftime String it expands to, which destroyed the only fact a
+    # documentation generator actually wants — that the field is +:iso8601+,
+    # not some anonymous String of percent-escapes. Recovering the name by
+    # reverse-mapping the String worked only while no two presets shared a
+    # value, which is luck rather than a contract.
     module TimeFormatResolver
-      def self.call: (untyped options, untyped presets) -> untyped
+      # Validate a declared +format:+ and return the options unchanged.
+      # 
+      # _@param_ `options` — the per-field options as written
+      # 
+      # _@param_ `presets` — the type's preset table
+      # 
+      # _@return_ — +options+, unmodified
+      def self.call: (::Hash[::Symbol, Object] options, ::Hash[::Symbol, ::String] presets) -> ::Hash[::Symbol, Object]
+
+      # Resolve a declared +format:+ to a strftime/strptime String.
+      # 
+      # _@param_ `format` — as declared
+      # 
+      # _@param_ `presets` — the type's preset table
+      # 
+      # _@return_ — +nil+ when no format is declared
+      def self.resolve: ((::String | ::Symbol)? format, ::Hash[::Symbol, ::String] presets) -> ::String?
     end
   end
 

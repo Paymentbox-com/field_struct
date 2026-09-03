@@ -695,7 +695,7 @@ module FieldStruct
       attributes.each_with_object({}) do |(field_name, value), out|
         key = mapping.key?(field_name) ? mapping[field_name].to_sym : field_name
         field = self.class.metadata[field_name]
-        out[key] = json_value(value, field&.options || {})
+        out[key] = json_value(value, field)
       end
     end
 
@@ -781,20 +781,29 @@ module FieldStruct
 
     private
 
-    def json_value(value, field_options = {})
+    def json_value(value, field = nil)
       case value
       when nil, true, false, ::String, ::Integer, ::Float then value
       when ::Symbol then value.to_s
       when ::BigDecimal then value.to_s('F')
-      when ::DateTime, ::Date, ::Time
-        fmt = field_options[:format]
-        fmt ? value.strftime(fmt) : value.iso8601
-      when ::Array then value.map { |element| json_value(element, field_options) }
-      when ::Hash then value.transform_values { |v| json_value(v, field_options) }
+      when ::DateTime, ::Date, ::Time then temporal_json_value(value, field)
+      when ::Array then value.map { |element| json_value(element, field) }
+      when ::Hash then value.transform_values { |v| json_value(v, field) }
       when FieldStruct::Base then value.as_json
       else
         value.respond_to?(:as_json) ? value.as_json : value
       end
+    end
+
+    # A declared +format:+ is now stored as written, so a preset name has to be
+    # expanded before strftime sees it — and only the field's own type knows
+    # its preset table. With no declared format (an :array of dates, a :value
+    # field holding one) the answer is ISO-8601, as it has always been.
+    def temporal_json_value(value, field)
+      format = field&.options&.[](:format)
+      return value.iso8601 if format.nil?
+
+      value.strftime(field.type_instance.class.resolve_format(format))
     end
 
     def apply_defaults

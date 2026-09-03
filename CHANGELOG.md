@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **A declared `format:` is kept exactly as written.** `format: :iso8601` used to be overwritten at declaration time with the strftime String it expands to, so `metadata.to_h[:at][:options][:format]` reported `"%Y-%m-%dT%H:%M:%S%z"` and the preset *name* — the one fact a documentation or schema generator actually wants — was gone. Recovering it by reverse-mapping the String back to a name worked only while no two presets shared a value: luck, not a contract. The declaration now survives (`:iso8601` stays `:iso8601`, a hand-written String stays that String) and resolution to a strftime format happens at coerce and render time instead, via the new `Types::Base.resolve_format` and `TimeFormatResolver.resolve`. Parsing, serialization and round-tripping are unchanged; an unknown preset name still raises at declaration, not at first use.
+
 ### Fixed
 
 - **`in:` with a Range is a bounds check again.** Validation asked `Range#include?`, which *enumerates* a non-numeric range instead of comparing endpoints. For a `Date` range that was only wasteful — 365 successor steps to answer one comparison. For a **`DateTime` range it was wrong**: the range steps by whole days, so any value not landing exactly on midnight was reported invalid inside a range that plainly contained it. `(DateTime.new(2026,1,1)..DateTime.new(2026,12,31)).include?(DateTime.new(2026,7,3,10,30))` is `false`; `cover?` is `true`. Ranges now use `cover?`; an `Array` remains a membership test. No string-range behaviour changes, because the DSL refuses `in:` on String fields outright.

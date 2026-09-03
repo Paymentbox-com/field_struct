@@ -1236,8 +1236,12 @@ module FieldStruct
       # leaves the type using ISO-8601 in/out
       def self.default_format: () -> ::String?
 
-      # _@return_ — named presets for the +format:+ option
-      def self.presets: () -> ::Hash[::Symbol, ::String]
+      # Named presets for the +format:+ option.
+      # 
+      # +:iso8601+ is an {Rfc3339Format} rather than a strftime String: the
+      # contract cannot be written as one (see that class). The display presets
+      # stay strftime-based — they are for humans, not wire formats.
+      def self.presets: () -> ::Hash[::Symbol, Object]
 
       # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
       # string at field-declaration time; other forms pass through.
@@ -1290,8 +1294,13 @@ module FieldStruct
 
       def self.default_format: () -> ::String?
 
-      # _@return_ — named presets for the +format:+ option
-      def self.presets: () -> ::Hash[::Symbol, ::String]
+      # Named presets for the +format:+ option.
+      # 
+      # +:iso8601+ is an {Rfc3339Format} rather than a strftime String: +%z+
+      # renders +\+0000+, which RFC 3339 rejects, and no strftime string can
+      # express optional fractional seconds. The interchange and display
+      # presets stay strftime-based.
+      def self.presets: () -> ::Hash[::Symbol, Object]
 
       # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
       # string at field-declaration time; other forms pass through.
@@ -1699,8 +1708,13 @@ module FieldStruct
       # leaves the type using ISO-8601 in/out
       def self.default_format: () -> ::String?
 
-      # _@return_ — named presets for the +format:+ option
-      def self.presets: () -> ::Hash[::Symbol, ::String]
+      # Named presets for the +format:+ option.
+      # 
+      # +:iso8601+ is an {Rfc3339Format} rather than a strftime String: +%z+
+      # renders +\+0000+, which RFC 3339 rejects, and no strftime string can
+      # express optional fractional seconds. The interchange and display
+      # presets stay strftime-based.
+      def self.presets: () -> ::Hash[::Symbol, Object]
 
       # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
       # string at field-declaration time; other forms pass through.
@@ -1762,6 +1776,89 @@ module FieldStruct
 
       # _@return_ — the top-level +::BigDecimal+ class
       def ruby_type: () -> Class
+    end
+
+    # RFC 3339 — the profile of ISO 8601 that "ISO-8601" means in an API
+    # contract, and what JSON Schema's +date-time+ refers to. This is what the
+    # +:iso8601+ preset resolves to for {Date}, {Time} and {DateTime}.
+    # 
+    # FieldStruct parses and renders it itself, for two reasons.
+    # 
+    # **It cannot be written as a strftime string.** +%z+ renders +\+0000+,
+    # which RFC 3339 rejects — so the preset named +iso8601+ used to emit a
+    # value its own documented format would refuse. And no strftime string can
+    # express "optional fractional seconds", which most JSON APIs emit.
+    # 
+    # **The stdlib helpers disagree with each other.** Routing +Time+ through
+    # +Time.iso8601+ and +DateTime+ through +DateTime.iso8601+ would give the
+    # same declared preset two different contracts:
+    # 
+    #     Time.iso8601('2026-02-30T10:30:00Z')      # => 2026-03-02 10:30 UTC
+    #     DateTime.iso8601('2026-02-30T10:30:00Z')  # => refused
+    #     Time.iso8601('2026-07-03T10:30Z')         # => refused
+    #     DateTime.iso8601('2026-07-03T10:30Z')     # => accepted
+    #     DateTime.iso8601('10:30:00Z')             # => TODAY at 10:30
+    # 
+    # +Time.iso8601+ reading 30 February as 2 March is the exact
+    # silently-wrong-day defect this release exists to remove, so it cannot be
+    # the thing that implements the strict preset.
+    # 
+    # The pattern is deliberately narrow: fixed-width fields, a mandatory
+    # offset, and no week dates, ordinal dates or basic (unseparated) forms.
+    # That narrowness is the point — it is what lets a caller replace a
+    # hand-rolled +/\A\d{4}-\d{2}-\d{2}\z/+ with a declared format.
+    class Rfc3339Format
+      # _@return_ — the date-only form, for {Types::Date}
+      def self.date: () -> Rfc3339Format
+
+      # _@return_ — the timestamp form, for {Types::Time} and {Types::DateTime}
+      def self.timestamp: () -> Rfc3339Format
+
+      # _@param_ `kind` — +:date+ or +:timestamp+
+      def initialize: (::Symbol kind) -> void
+
+      # _@return_ — the preset name this format implements
+      def name: () -> ::Symbol
+
+      # The accepted shape, as a regular expression whose source is also valid
+      # as an ECMA pattern — so a schema or documentation generator can publish
+      # the enforced contract rather than a prose approximation of it.
+      def pattern: () -> ::Regexp
+
+      # _@return_ — the format's name, for error messages and inspection
+      def to_s: () -> ::String
+
+      # Parse a String into date/time fragments.
+      # 
+      # _@param_ `value` — the raw string
+      # 
+      # _@return_ — +:year+, +:mon+, +:mday+ and, for a
+      # timestamp, +:hour+, +:min+, +:sec+, +:sec_fraction+, +:offset+
+      def parse: (::String value) -> ::Hash[::Symbol, Object]
+
+      # Render a coerced value back to RFC 3339.
+      # 
+      # _@param_ `value` — the coerced value
+      def render: ((::Date | ::Time | ::DateTime) value) -> ::String
+
+      def date_parts: (untyped match) -> ::Hash[::Symbol, ::Integer]
+
+      def timestamp_parts: (untyped match) -> ::Hash[::Symbol, Object]
+
+      # _@return_ — seconds after the whole second, exact
+      def fraction_from: (untyped text) -> ::Rational
+
+      # _@return_ — seconds east of UTC
+      def offset_from: (untyped text) -> ::Integer
+
+      # _@return_ — +".123"+, or empty when the value is on a whole second
+      def fraction_of: (untyped value) -> ::String
+
+      # _@return_ — +"Z"+ for UTC, otherwise +"+HH:MM"+
+      def offset_of: (untyped value) -> ::String
+
+      # _@return_ — +:date+ or +:timestamp+
+      attr_reader kind: ::Symbol
     end
 
     # Generic preset resolution for a single named option on a single

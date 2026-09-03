@@ -31,10 +31,16 @@ module FieldStruct
         nil
       end
 
-      # @return [Hash{::Symbol=>::String}] named presets for the +format:+ option
+      # Named presets for the +format:+ option.
+      #
+      # +:iso8601+ is an {Rfc3339Format} rather than a strftime String: the
+      # contract cannot be written as one (see that class). The display presets
+      # stay strftime-based — they are for humans, not wire formats.
+      #
+      # @return [Hash{::Symbol=>Object}]
       def self.presets
         {
-          iso8601: '%Y-%m-%d',
+          iso8601: Rfc3339Format.date,
           us: '%m/%d/%Y',
           eu: '%d/%m/%Y'
         }
@@ -113,6 +119,11 @@ module FieldStruct
         # Validated first, then handed to the stdlib parser: the checks decide
         # what is ACCEPTABLE, the stdlib still decides what the value IS, so
         # the two can't drift apart. See {TemporalParser} for the three rules.
+        if format.is_a?(Rfc3339Format)
+          parts = format.parse(value)
+          return ::Date.new(parts[:year], parts[:mon], parts[:mday])
+        end
+
         if format
           TemporalParser.strptime_parts(value, format)
           return ::Date.strptime(value, format)

@@ -30,10 +30,17 @@ module FieldStruct
         nil
       end
 
-      # @return [Hash{::Symbol=>::String}] named presets for the +format:+ option
+      # Named presets for the +format:+ option.
+      #
+      # +:iso8601+ is an {Rfc3339Format} rather than a strftime String: +%z+
+      # renders +\+0000+, which RFC 3339 rejects, and no strftime string can
+      # express optional fractional seconds. The interchange and display
+      # presets stay strftime-based.
+      #
+      # @return [Hash{::Symbol=>Object}]
       def self.presets
         {
-          iso8601: '%Y-%m-%dT%H:%M:%S%z',
+          iso8601: Rfc3339Format.timestamp,
           rfc2822: '%a, %d %b %Y %H:%M:%S %z',
           db: '%Y-%m-%d %H:%M:%S'
         }
@@ -108,6 +115,12 @@ module FieldStruct
         # Validated first, then handed to the stdlib parser: the checks decide
         # what is ACCEPTABLE, the stdlib still decides what the value IS, so
         # the two can't drift apart. See {TemporalParser} for the three rules.
+        if format.is_a?(Rfc3339Format)
+          parts = format.parse(value)
+          return ::DateTime.new(parts[:year], parts[:mon], parts[:mday], parts[:hour], parts[:min],
+            parts[:sec] + parts[:sec_fraction], ::Kernel.Rational(parts[:offset], 86_400))
+        end
+
         if format
           TemporalParser.strptime_parts(value, format)
           return ::DateTime.strptime(value, format)

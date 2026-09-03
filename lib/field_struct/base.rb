@@ -803,7 +803,12 @@ module FieldStruct
       format = field&.options&.[](:format)
       return value.iso8601 if format.nil?
 
-      value.strftime(field.type_instance.class.resolve_format(format))
+      resolved = field.type_instance.class.resolve_format(format)
+      # A format FieldStruct implements itself renders itself; a strftime
+      # String is handed to strftime, as it always was.
+      return resolved.render(value) if resolved.is_a?(Types::Rfc3339Format)
+
+      value.strftime(resolved)
     end
 
     def apply_defaults

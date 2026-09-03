@@ -902,6 +902,27 @@ module FieldStruct
     # _@return_ — one +describe+ line for a field
     def describe_field: (untyped field) -> String
 
+    # What this field actually declares, as written.
+    # 
+    # Without this, +describe+ answered only "what COULD go in this field" —
+    # the type's option vocabulary — and a field declaring
+    # +format: :iso8601, enum: %w[USD EUR]+ rendered identically to one
+    # declaring nothing at all. The option schema belongs to the type; this
+    # belongs to the field.
+    # 
+    # _@return_ — +nil+ when the field declares no options
+    def declared_options_summary: (untyped field) -> String?
+
+    # _@return_ — a declared option value, rendered for a human. Type
+    # values (an Array field's +of_type:+) show their bare type name rather
+    # than a quoted string, so the line reads like the declaration it
+    # describes.
+    def declared_option_repr: (untyped value) -> String
+
+    # _@return_ — the type's native option vocabulary, or +nil+ when
+    # the type declares none
+    def accepts_summary: (untyped type_class) -> String?
+
     # _@return_ — the type's native options as +name(shapes)+, required
     # ones starred, presets appended — empty when the type has none
     def native_options_summary: (untyped type_class) -> String

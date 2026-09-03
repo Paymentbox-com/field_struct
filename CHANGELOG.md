@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`describe` now shows what a field declares, not only what its type accepts.** It rendered the *type's* option vocabulary and nothing else, so a field declaring `format: :iso8601, enum: %w[USD EUR]` printed identically to one declaring nothing at all — the schema belongs to the type, and the declaration belongs to the field. Both are now on the line, declaration first:
+
+  ```
+  on (Date, required) — format: :iso8601 — accepts format (String | Symbol; presets: iso8601, us, eu), in (Array | Range)
+  ```
+
+  Options left at `nil` are omitted, so a temporal field with no declared format does not advertise the `format: nil` that `apply_default_format` puts there internally.
+
+
 - **The `:iso8601` preset is now RFC 3339, in and out.** It was a strftime string, and that had it emitting a value its own documented format would reject: `%z` renders `+0000`, while RFC 3339 — which is what JSON Schema's `date-time` means — requires `+00:00` or `Z`. It also refused fractional seconds, which most JSON APIs emit, because no strftime string can express "optional fractional seconds".
 
   FieldStruct now parses and renders the preset itself, via `Types::Rfc3339Format`. It is deliberately **not** `Time.iso8601` / `DateTime.iso8601`: those two disagree with each other on nearly every edge, and `Time.iso8601('2026-02-30T10:30:00Z')` returns **2 March** — the same silently-wrong-day defect this release exists to remove. A `:time` field and a `:datetime` field declaring the same preset now accept exactly the same strings, which was not previously true.

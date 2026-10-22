@@ -39,7 +39,7 @@ Gem::Specification.new do |spec|
         f.start_with?(*%w[bin/ test/ spec/ features/ .git .github appveyor Gemfile]) ||
         # Contributor-only: agent config and plugin manifest, the design
         # record, build/lint/type-check config.
-        f.start_with?(*%w[.claude CLAUDE.md docs/origin/ Rakefile rakelib/ Steepfile .rubocop .yardopts .rspec rbs_collection])
+        f.start_with?(*%w[.claude CLAUDE.md docs/origin/ gemfiles/ Rakefile rakelib/ Steepfile .rubocop .yardopts .rspec rbs_collection])
     end
   end
   spec.bindir = 'exe'

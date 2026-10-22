@@ -35,8 +35,11 @@ jobs:
       run: bundle exec rbs collection install
     - name: Run the default task
       run: bundle exec rake
-    - name: Type signature guards (staleness + grammar)
-      run: bundle exec rake sigs:check sigs:validate
+    # sigs:check also fails on a sord [OMIT]/[DUCK] warning missing from (or
+    # stale in) rakelib/sig_guards/sord_allowlist.txt; sigs:untyped holds sig/
+    # to the committed untyped ceiling. Both only let sig/ get more typed.
+    - name: Type signature guards (staleness, allowlist, grammar, untyped ceiling)
+      run: bundle exec rake sigs:check sigs:validate sigs:untyped
 
   # The gem advertises Ruby >= 3.0 (its runtime deps support it), but the dev
   # toolchain above can't run that low. This job proves the *library* works on
@@ -114,6 +117,34 @@ jobs:
         bundler-cache: true
     - name: Run the library specs against an ActiveSupport host
       run: bundle exec rspec
+
+  # Report-only Steep. Steep 2.x / rbs 4.x need Ruby >= 3.3, so they live in
+  # gemfiles/types.gemfile rather than the main Gemfile (which must install on
+  # the 3.2 lane). This job prints the problem count and NEVER fails the build:
+  # sig/ is gated by the rake guards above, not by Steep. It is deliberately
+  # left out of `ci`'s needs.
+  types:
+    runs-on: ubuntu-latest
+    name: Steep (report only)
+    continue-on-error: true
+    env:
+      BUNDLE_GEMFILE: gemfiles/types.gemfile
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.4'
+        bundler-cache: true
+    - name: steep check (report only)
+      run: |
+        status=0
+        bundle exec steep check > steep.out 2>&1 || status=$?
+        cat steep.out
+        summary=$(grep -E '^(Detected [0-9]+ problems|No type error detected)' steep.out || echo "steep check did not report a count (exit ${status})")
+        echo "${summary}"
+        echo "Steep (report only): ${summary}" >> "$GITHUB_STEP_SUMMARY"
 
   # One stable check name for branch protection: it passes only when every
   # job above passed, so the required check survives matrix changes.

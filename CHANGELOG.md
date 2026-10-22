@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Tooling / CI
+
+- **`sig/` can only get more typed.** Three guards, no Steep gate:
+  - `rake sigs:untyped` (CI, `release:check`) counts non-comment `untyped` in `sig/` against a committed ceiling (`rakelib/sig_guards/untyped_ceiling.txt`, 215). Above it fails; below it also fails until the ceiling is lowered, so the slack can't be spent later.
+  - `sigs:generate` / `sigs:check` fail on a Sord `[OMIT]` / `[DUCK]` warning missing from `rakelib/sig_guards/sord_allowlist.txt` (155 entries, keyed without file:line), and on an entry Sord no longer emits, so the list only shrinks.
+  - `sigs:validate` runs `rbs validate` over the whole `sig/` directory, not just the generated file.
+- **Sord runs without `--replace-errors-with-untyped`.** The output is byte-identical today; an unresolvable YARD type now lands in the sig as its own name (which `rbs validate` rejects) instead of a quiet `untyped`, on top of the existing generation-time guard.
+- **Report-only Steep lane.** A `types` job on Ruby 3.4 runs `steep check` (Steep 2.1 / rbs 4.2 via `gemfiles/types.gemfile`, since both need Ruby >= 3.3) and prints the problem count. It never fails the build and is not part of the required `ci` check.
+
 ## [0.11.0] - 2026-10-22
 
 Correctness and safer input. A number field holds a finite number of its own

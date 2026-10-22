@@ -103,9 +103,12 @@ module FieldStruct
   #   returns the coerced value. Loose input the type would coerce
   #   (+user.age = "30"+) is valid Ruby but a type error to Steep — cast or
   #   coerce at the boundary.
-  # * **Generic arguments** are filled in: arrays as +::Array[Element]+,
-  #   unions as +(A | B)+ (a boolean member as +bool+), nested structs by
-  #   qualified name. A custom type whose +ruby_type+ is a bare generic
+  # * **Generic arguments** are filled in: arrays as +::Array[Element]+
+  #   (a scalar element as +Element?+, since a valid instance can hold nil
+  #   elements; a nested element stays non-nil, since nil makes it invalid),
+  #   unions as +(A | B)+ (a boolean member as +bool+, a member's own
+  #   {Types::Base#rbs_type} first), nested structs by qualified name; an
+  #   anonymous nested class raises +ArgumentError+. A custom type whose +ruby_type+ is a bare generic
   #   class (+::Hash+) gets +untyped+ arguments unless it declares
   #   {Types::Base#rbs_type}.
   # * **Anything-valued fields** (+:value+, or a union with a +:value+
@@ -174,6 +177,12 @@ module FieldStruct
     # _@return_ — +nil+ when there is no override
     def self.override_expression: (String? rbs) -> String?
 
+    # _@param_ `rbs` — a stripped RBS type expression
+    # 
+    # _@return_ — whether one parenthesized group spans all of +rbs+
+    # (optionally followed by +?+), so wrapping it again adds nothing
+    def self.wrapped?: (String rbs) -> bool
+
     # _@param_ `base` — an RBS type expression
     # 
     # _@return_ — +base+ made nullable, unless it already admits +nil+
@@ -186,6 +195,13 @@ module FieldStruct
     # 
     # _@param_ `options`
     def self.expression_for: (Types::Base type_instance, ::Hash[Symbol, Object?] options) -> String
+
+    # A union as its members' types, each member's own +rbs_type+ first.
+    # 
+    # _@param_ `union`
+    # 
+    # _@return_ — +untyped+ when any member is
+    def self.union_expression: (Types::Union union) -> String
 
     # _@param_ `classes` — a {Types::Base#ruby_type}, as a list
     # 

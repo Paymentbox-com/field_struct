@@ -18,6 +18,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - **Writers are typed `(T? value) -> T?`** (were `(untyped value) -> untyped`). The runtime setter accepts `nil` and returns the coerced value. Assigning loose input the type would coerce (`user.age = "30"`) still works in Ruby but is now a Steep error.
 - **Output opens with a comment header** saying the types describe a *valid* instance — an invalid one (unset required field, `:keep_raw` failure holding raw input) can hold other values.
+- **Array elements of a scalar type are nullable** (`of: :string` → `::Array[::String?]`): `["x", nil]` passes validation, so the old `::Array[::String]` was false. Nested elements stay non-nil (a nil one fails validation). A union's members use their own `rbs_type`, and an anonymous nested class raises `ArgumentError` instead of emitting `::?`.
 - **Generic arguments are always present.** A custom type whose `ruby_type` is a bare generic class (`::Hash`, `::Array`, `::Range`) emits `::Hash[untyped, untyped]` and so on, instead of a bare `::Hash`, which `rbs validate` rejects.
 - **Unions render a boolean member as `bool`** (`(::String | bool)`, was `(::String | ::TrueClass | ::FalseClass)`), and a union with a `:value` member collapses to `untyped`.
 - **Optional `:value` fields are `untyped`, not `untyped?`.**

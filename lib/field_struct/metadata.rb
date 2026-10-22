@@ -237,7 +237,7 @@ module FieldStruct
     # @param field [Field]
     # @return [Hash{Symbol=>Object, nil}]
     def field_schema(field)
-      {
+      schema = {
         type: short_name(field.type),
         ruby_type: ruby_type_repr(field.type_instance.ruby_type),
         required: field.required?,
@@ -245,6 +245,8 @@ module FieldStruct
         options: field.options.transform_values { |value| schema_value(value) },
         description: field.description
       }
+      # Only when set, so the schema of a field without one is unchanged.
+      field.rbs_type ? schema.merge(rbs_type: field.rbs_type) : schema
     end
 
     # A single class, or +A | B+ for a multi-class ruby_type (boolean, union).

@@ -106,9 +106,29 @@ RSpec.describe FieldStruct::RBS do
       expect(rbs).to include('attr_reader amount: ::BigDecimal?')
     end
 
-    it 'parametrizes array fields with their element type' do
+    # A valid instance can hold nil scalar elements (["x", nil] passes
+    # validation); a nil nested element makes it invalid, so those stay non-nil.
+    it 'parametrizes array fields with a nullable scalar element type' do
       klass = struct('Post') { optional :tags, :array, of: :string }
-      expect(described_class.generate(klass)).to include('attr_reader tags: ::Array[::String]?')
+      expect(described_class.generate(klass)).to include('attr_reader tags: ::Array[::String?]?')
+    end
+
+    it 'refuses a nested or element class with no name' do
+      anon = Class.new(FieldStruct::Base) { required :x, :string }
+      klass = struct('Holder') { optional :n, anon }
+
+      expect { described_class.generate(klass) }.to raise_error(ArgumentError, /anonymous/)
+    end
+
+    it "uses a union member's rbs_type" do
+      shash = Class.new(FieldStruct::Types::Base) do
+        def coerce(value, **) = value
+        def ruby_type = Hash
+        def rbs_type = '::Hash[::Symbol, ::String]'
+      end
+      klass = struct('Mixed') { optional :v, :union, of: [shash, :integer] }
+
+      expect(described_class.generate(klass)).to include('attr_reader v: (::Hash[::Symbol, ::String] | ::Integer)?')
     end
 
     it 'emits union members joined with |' do
@@ -230,7 +250,7 @@ RSpec.describe FieldStruct::RBS do
     it "returns a field's RBS type, nullable when the field is optional" do
       expect(described_class.type_for(klass.metadata[:id])).to eq('::String')
       expect(described_class.type_for(klass.metadata[:weight])).to eq('::BigDecimal?')
-      expect(described_class.type_for(klass.metadata[:parcels])).to eq('::Array[::Integer]?')
+      expect(described_class.type_for(klass.metadata[:parcels])).to eq('::Array[::Integer?]?')
     end
 
     it 'returns the bare type with nullable: false' do
@@ -261,6 +281,16 @@ RSpec.describe FieldStruct::RBS do
 
       expect(rbs).to include('attr_reader scope: ::ActiveRecord::Relation')
       expect(rbs).to include('def scope=: (::ActiveRecord::Relation? value) -> ::ActiveRecord::Relation?')
+    end
+
+    it 'is not wrapped again when it is already a nullable group' do
+      klass = struct('Grouped') { optional :id, :value, rbs_type: '(::Integer | ::String)?' }
+      expect(described_class.generate(klass)).to include('attr_reader id: (::Integer | ::String)?')
+    end
+
+    it 'shows in the metadata schema' do
+      klass = struct('Listed') { optional :scope, :value, rbs_type: '::Object' }
+      expect(klass.metadata.to_h[:scope]).to include(rbs_type: '::Object')
     end
 
     it 'is parenthesized before ? when it is a union' do

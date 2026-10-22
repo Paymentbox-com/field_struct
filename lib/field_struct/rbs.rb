@@ -39,9 +39,12 @@ module FieldStruct
   #   returns the coerced value. Loose input the type would coerce
   #   (+user.age = "30"+) is valid Ruby but a type error to Steep — cast or
   #   coerce at the boundary.
-  # * **Generic arguments** are filled in: arrays as +::Array[Element]+,
-  #   unions as +(A | B)+ (a boolean member as +bool+), nested structs by
-  #   qualified name. A custom type whose +ruby_type+ is a bare generic
+  # * **Generic arguments** are filled in: arrays as +::Array[Element]+
+  #   (a scalar element as +Element?+, since a valid instance can hold nil
+  #   elements; a nested element stays non-nil, since nil makes it invalid),
+  #   unions as +(A | B)+ (a boolean member as +bool+, a member's own
+  #   {Types::Base#rbs_type} first), nested structs by qualified name; an
+  #   anonymous nested class raises +ArgumentError+. A custom type whose +ruby_type+ is a bare generic
   #   class (+::Hash+) gets +untyped+ arguments unless it declares
   #   {Types::Base#rbs_type}.
   # * **Anything-valued fields** (+:value+, or a union with a +:value+
@@ -169,9 +172,27 @@ module FieldStruct
       return nil if rbs.nil?
 
       rbs = rbs.strip
+      return rbs if wrapped?(rbs)
+
       rbs.match?(/[|&^]/) ? "(#{rbs})" : rbs
     end
     private_class_method :override_expression
+
+    # @param rbs [String] a stripped RBS type expression
+    # @return [Boolean] whether one parenthesized group spans all of +rbs+
+    #   (optionally followed by +?+), so wrapping it again adds nothing
+    def self.wrapped?(rbs)
+      return false unless rbs.start_with?('(')
+
+      depth = 0
+      rbs.each_char.with_index do |char, index|
+        depth += 1 if char == '('
+        depth -= 1 if char == ')'
+        return rbs[(index + 1)..].then { |rest| rest.empty? || rest == '?' } if depth.zero?
+      end
+      false
+    end
+    private_class_method :wrapped?
 
     # @param base [String] an RBS type expression
     # @return [String] +base+ made nullable, unless it already admits +nil+
@@ -190,6 +211,7 @@ module FieldStruct
     # @return [String]
     def self.expression_for(type_instance, options)
       return "::Array[#{element_type(options[:of_type])}]" if type_instance.is_a?(FieldStruct::Types::Array)
+      return union_expression(type_instance) if type_instance.is_a?(FieldStruct::Types::Union)
 
       ruby_type = type_instance.ruby_type
       classes = ruby_type.is_a?(::Array) ? ruby_type : [ruby_type]
@@ -199,6 +221,19 @@ module FieldStruct
       mapped.one? ? mapped.first : "(#{mapped.join(" | ")})"
     end
     private_class_method :expression_for
+
+    # A union as its members' types, each member's own +rbs_type+ first.
+    #
+    # @param union [Types::Union]
+    # @return [String] +untyped+ when any member is
+    def self.union_expression(union)
+      members = union.member_types.map { |member| override_expression(member.rbs_type) || expression_for(member, {}) }
+      return 'untyped' if members.include?('untyped')
+
+      members = members.uniq
+      members.one? ? members.first : "(#{members.join(" | ")})"
+    end
+    private_class_method :union_expression
 
     # @param classes [Array<Class>] a {Types::Base#ruby_type}, as a list
     # @return [Array<String>] one RBS type per class, with +TrueClass+ /
@@ -219,7 +254,10 @@ module FieldStruct
       return 'untyped' if of_type.nil?
 
       instance = of_type.is_a?(::Class) ? of_type.new : of_type
-      override_expression(instance.rbs_type) || expression_for(instance, {})
+      expression = override_expression(instance.rbs_type) || expression_for(instance, {})
+      # A valid instance may hold nil scalar elements; a nil nested element
+      # fails validation, so nested elements stay non-nil.
+      instance.is_a?(FieldStruct::Types::Nested) ? expression : optional(expression)
     end
     private_class_method :element_type
 
@@ -228,6 +266,7 @@ module FieldStruct
     #   a generic class), or +untyped+ for the value type's +::Object+
     def self.class_to_rbs(klass)
       return 'untyped' if klass == ::Object
+      raise ArgumentError, 'FieldStruct::RBS cannot name an anonymous class; assign it to a constant' if klass.name.nil?
 
       arity = GENERIC_ARITY[klass]
       return "::#{klass.name}" unless arity

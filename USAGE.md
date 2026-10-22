@@ -387,7 +387,7 @@ puts FieldStruct::RBS.generate(Order)
 - **Writer** is `(T? value) -> T?` — the setter takes `nil` and returns the coerced
   value. Loose input it would coerce (`user.age = "30"` on an `:integer` field) runs
   fine but is a Steep error; coerce at the boundary.
-- **Generics are filled in:** `::Array[::LineItem]`, unions `(A | B)` (boolean →
+- **Generics are filled in:** `::Array[::LineItem]` (a scalar element is nullable: `of: :string` → `::Array[::String?]`, because `["x", nil]` is valid), unions `(A | B)` (boolean →
   `bool`), nested structs by qualified name. A custom type whose `ruby_type` is a bare
   generic (`::Hash`) emits `::Hash[untyped, untyped]` unless the type defines
   `rbs_type` (`def rbs_type = '::Hash[::Symbol, ::String]'`).

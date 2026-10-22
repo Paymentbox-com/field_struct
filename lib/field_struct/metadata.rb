@@ -64,7 +64,7 @@ module FieldStruct
     # When a block is given this falls back to +Enumerable#to_h+ (mapping
     # each {Field} to a pair), preserving existing callers.
     #
-    # @return [Hash{Symbol=>Hash{Symbol=>Object}}] field name → schema, or
+    # @return [Hash{Symbol=>Hash{Symbol=>Object, nil}}] field name → schema, or
     #   the block-mapped pairs when a block is supplied
     def to_h(&block)
       return super if block
@@ -237,7 +237,7 @@ module FieldStruct
     # @param field [Field]
     # @return [Hash{Symbol=>Object, nil}]
     def field_schema(field)
-      {
+      schema = {
         type: short_name(field.type),
         ruby_type: ruby_type_repr(field.type_instance.ruby_type),
         required: field.required?,
@@ -245,6 +245,8 @@ module FieldStruct
         options: field.options.transform_values { |value| schema_value(value) },
         description: field.description
       }
+      # Only when set, so the schema of a field without one is unchanged.
+      field.rbs_type ? schema.merge(rbs_type: field.rbs_type) : schema
     end
 
     # A single class, or +A | B+ for a multi-class ruby_type (boolean, union).

@@ -165,6 +165,8 @@ module FieldStruct
       #   {Types::Nested})
       # @param options [Object, nil] each keyword option's value: +required:+
       #   (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol),
+      #   +description:+ / +desc:+ (String), +rbs_type:+ (String — an RBS type
+      #   expression {RBS.generate} emits for this field instead of the derived one),
       #   plus type-specific options (e.g. +format:+, +round:+, +of:+,
       #   +values:+, +enum:+, +in:+) — see each type's +coerce+ for the
       #   options it consumes
@@ -187,10 +189,13 @@ module FieldStruct
         coercion_policy = options.delete(:coercion_policy)
         validate_coercion_policy_override!(coercion_policy) if coercion_policy
         description = extract_description!(options)
+        rbs_type = options.delete(:rbs_type)
+        validate_rbs_type!(rbs_type) unless rbs_type.nil?
         field = Field.new(
           name: name, type: type_class, type_instance: type_instance,
           required: required, default: default,
-          coercion_policy: coercion_policy, description: description, **options
+          coercion_policy: coercion_policy, description: description,
+          rbs_type: rbs_type, **options
         )
         metadata.add(field)
         define_field_accessors(field)
@@ -486,7 +491,7 @@ module FieldStruct
       # type-option check skips them.
       #
       # @return [Array<Symbol>]
-      UNIVERSAL_FIELD_OPTIONS = %i[required default coercion_policy description desc].freeze
+      UNIVERSAL_FIELD_OPTIONS = %i[required default coercion_policy description desc rbs_type].freeze
       private_constant :UNIVERSAL_FIELD_OPTIONS
 
       # Three-way option check (design invariant 7): validate native, pass
@@ -608,6 +613,16 @@ module FieldStruct
 
         raise ArgumentError, "unknown coercion policy #{value.inspect} " \
                              "(expected one of #{VALID_COERCION_POLICIES.inspect})"
+      end
+
+      # @param value [Object] the declared +rbs_type:+
+      # @return [void]
+      # @raise [ArgumentError] unless +value+ is a non-blank String
+      def validate_rbs_type!(value)
+        return if value.is_a?(::String) && !value.strip.empty?
+
+        raise ArgumentError, 'rbs_type: must be a non-empty String of RBS (e.g. ' \
+                             "rbs_type: '::ActiveRecord::Relation'), got #{value.inspect}"
       end
 
       # @param field [Field]
@@ -744,8 +759,7 @@ module FieldStruct
       self
     end
 
-    # @return [Hash{Symbol=>Object}] a fresh hash of current attribute values
-    # @return [Hash{Symbol=>Object}] a fresh hash of current attribute values
+    # @return [Hash{Symbol=>Object, nil}] a fresh hash of current attribute values
     #   keyed by canonical field name. For format-aware export (with the
     #   declared +:json+ mapping applied), see {#as_json} / {#to_json}.
     def attributes
@@ -800,13 +814,13 @@ module FieldStruct
       [self.class, attributes].hash
     end
 
-    # @return [Hash{Symbol=>Object}] alias of {#attributes}
+    # @return [Hash{Symbol=>Object, nil}] alias of {#attributes}
     def to_h
       attributes
     end
 
     # @param _options [Object] unused — accepted for ActiveSupport-style symmetry
-    # @return [Hash{Symbol=>Object}] a JSON-ready hash with the
+    # @return [Hash{Symbol=>Object, nil}] a JSON-ready hash with the
     #   +:json+ serialize mapping applied. Date/Time/DateTime convert
     #   to ISO-8601 strings, BigDecimal to its plain-form string,
     #   Symbol to String. Arrays recurse. Nested FieldStructs walk
@@ -874,7 +888,7 @@ module FieldStruct
     #
     # @param keys [Array<Symbol>, nil] keys the pattern requested, or
     #   +nil+ for the +**rest+ pattern (every declared field)
-    # @return [Hash{Symbol=>Object}]
+    # @return [Hash{Symbol=>Object, nil}]
     def deconstruct_keys(keys)
       return attributes if keys.nil?
 
@@ -895,7 +909,7 @@ module FieldStruct
     #     Math.hypot(x, y)
     #   end
     #
-    # @return [Array<Object>]
+    # @return [Array<Object, nil>]
     def deconstruct
       attributes.values
     end

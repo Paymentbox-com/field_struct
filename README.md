@@ -428,6 +428,7 @@ user.to_json
 - `to_h` and `attributes` always return canonical names — only `to_json` / `as_json` / `from_json` consult the mapping.
 - Each mapping key must be a declared field; an unknown key raises `ArgumentError` at class load. Declare fields first, then `serialize`.
 - The mapping is inherited by subclasses; redeclaring on a subclass replaces it (last-write-wins).
+- Nested FieldStructs apply their own mapping — including struct members of a `:union`. `from_json` tries the union's members in declared order, reverse-mapping the object through each struct member's mapping, so give struct members `unknown_attributes :raise` if the union must tell them apart.
 - Multiple formats can coexist on the same class (`serialize :json, ...` + `serialize :csv, ...`). Only `:json` is wired in-gem; CSV / XML / Avro support is left for downstream gems that read `Klass.metadata.serializations[:their_name]`.
 - Nested FieldStructs and arrays of nested propagate naturally — each level uses its own serialize mapping.
 

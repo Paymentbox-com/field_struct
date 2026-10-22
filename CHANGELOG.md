@@ -24,6 +24,7 @@ read the same way regardless of how the host process is configured.
 
 ### Fixed
 
+- **`from_json` reverse-maps `serialize :json` names for struct members of a `:union`.** It reverse-mapped nested structs and arrays of them, but handed a union's object over with its external keys, so a struct member saw `{"cardNumber" => ...}` instead of `card_number:` and `Payment.from_json(payment.to_json)` came back invalid — breaking the README's round-trip promise. Members are now tried in declared order, as the union's own coercion does, with each struct member reverse-mapping through its own mapping; the first that accepts the object wins.
 - **The field setter treats `RangeError` as a coercion failure.** `FloatDomainError` (one of its subclasses) and Complex-to-real conversion (`Complex(1, 2)` into `:integer` or `:float`) used to raise out of `.new`; they are now handled by `coercion_policy`, including when a custom type raises them.
 
 ## [0.10.0] - 2026-09-03

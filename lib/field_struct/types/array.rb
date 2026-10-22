@@ -8,15 +8,35 @@ module FieldStruct
     # type named by the +:of+ DSL option (resolved at field-declaration
     # time and stashed as +options[:of_type]+ — a class, not a symbol).
     #
+    # An optional +:element+ Hash carries the element type's own options
+    # (+strict:+, +base:+, +format:+, …), passed to every element's coerce:
+    #
+    #   optional :ids, :array, of: :integer, element: {strict: true, base: 16}
+    #
+    # A refused element is reported with its index — +element at index 2: …+.
+    #
     # Missing: +nil+ or empty array. ruby_type: +::Array+.
     class Array < Base
       # Native options: a required +of:+ naming the element type — a
       # registered Symbol or a Class (a +Types::Base+ or +FieldStruct::Base+
-      # subclass).
+      # subclass) — and an +element:+ Hash of that element type's options.
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.own_option_schema
-        {of: option(type: [::Symbol, ::Class], required: true)}
+        {
+          of: option(type: [::Symbol, ::Class], required: true),
+          element: option(type: [::Hash])
+        }
+      end
+
+      # The element type class behind an +of_type+ option, whether it holds
+      # a class (+:integer+ → {Types::Integer}) or a built instance (a
+      # {Types::Nested}). Its +option_schema+ is what +element:+ accepts.
+      #
+      # @param of_type [Class, Types::Base] an array field's +:of_type+ option
+      # @return [Class<Types::Base>] a {Types::Base} subclass
+      def self.element_class(of_type)
+        of_type.is_a?(::Class) ? of_type : of_type.class
       end
 
       # @param value [::Array<Object, nil>, nil] anything else raises TypeError
@@ -26,17 +46,30 @@ module FieldStruct
       #   stashes this when the user writes +of: :string+ / +of: SomeStruct+.
       #   Required at the type level; nil here means the type was called
       #   directly without DSL help.
+      # @param element [::Hash{::Symbol => Object, nil}, nil] the element
+      #   type's options, passed to every element's coerce (the DSL's
+      #   +element:+, already validated against the element type's schema)
       # @return [::Array<Object, nil>, nil] each element coerced by +of_type+
       # @raise [TypeError] when input is non-nil and not an Array
       # @raise [ArgumentError] when +of_type+ is missing
-      # @raise [StandardError] whatever the element type raises on a bad element
-      def coerce(value, of_type: nil, **)
+      # @raise [StandardError] whatever the element type raises on a bad
+      #   element; an ArgumentError, TypeError or RangeError keeps its class
+      #   and gains an +element at index N: +  prefix
+      def coerce(value, of_type: nil, element: nil, **)
         return nil if value.nil?
         raise ::TypeError, "expected Array, got #{value.class}" unless value.is_a?(::Array)
         raise ArgumentError, 'array coerce requires of_type:' if of_type.nil?
 
         element_type = element_type_for(of_type)
-        value.map { |element| element_type.coerce(element) }
+        element_options = element || {}
+        value.each_with_index.map do |item, index|
+          element_type.coerce(item, **element_options)
+        rescue ArgumentError, ::TypeError, ::RangeError => e
+          # Exception#exception keeps the class without calling a custom
+          # initializer; the index, never the element, is added. The cause
+          # chain stays what it was, rather than gaining the unprefixed copy.
+          raise e.exception("element at index #{index}: #{e.message}"), cause: e.cause
+        end
       end
 
       # @param value [Object]

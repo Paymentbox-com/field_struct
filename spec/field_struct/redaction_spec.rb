@@ -33,6 +33,15 @@ RSpec.describe 'Error messages never echo input values' do
     FieldStruct::Types::Union => {of: %i[integer boolean]}
   }.freeze
   variants = {
+    # Each element goes through its type with the element: options, and a
+    # refused one is reported by index.
+    FieldStruct::Types::Array => [{element: {strict: true}}, {element: {base: 16}}, {element: {in: 1..9}},
+                                  {of: :string, element: {strict: true, format: /\A\d+\z/}},
+                                  {of: :boolean, element: {values: :english}},
+                                  {of: :date, element: {format: :us}},
+                                  {of: :time, element: {zone: '-06:00', format: :db}},
+                                  {of: :datetime, element: {format: :rfc2822}},
+                                  {of: :decimal, element: {round: 2}}],
     FieldStruct::Types::String => [{strict: true}],
     FieldStruct::Types::Integer => [{strict: true}, {base: 16}],
     FieldStruct::Types::Boolean => [{values: :english}],

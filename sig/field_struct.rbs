@@ -365,6 +365,20 @@ module FieldStruct
     # {.canonicalize_serialized_hash}.
     def self.canonicalize_serialized_value: (untyped value, untyped field) -> untyped
 
+    # Which external names apply depends on which member the Hash is for,
+    # so try the members in declared order, as {Types::Union#coerce} does:
+    # a struct member gets the Hash reverse-mapped through its own
+    # +serialize :json+ mapping, and the first member that accepts wins. A
+    # winning struct is returned built (the union's coerce passes it
+    # through to that member); a winning non-struct member gets the Hash
+    # unchanged. When nothing accepts it, the Hash goes on as-is and the
+    # setter's +coercion_policy+ handles the failure.
+    # 
+    # _@param_ `hash` — parsed JSON object for a union field
+    # 
+    # _@param_ `union`
+    def self.canonicalize_serialized_union_hash: (::Hash[untyped, untyped] hash, Types::Union union) -> (Base | ::Hash[untyped, untyped])
+
     def self.namespace_field_types: () -> untyped
 
     def self.resolve_array_options: (untyped type_class, untyped options) -> untyped

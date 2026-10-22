@@ -345,6 +345,8 @@ module FieldStruct
 
         if value.is_a?(::Hash) && field.type <= FieldStruct::Types::Nested
           field.type_instance.struct_class.canonicalize_serialized_hash(value)
+        elsif value.is_a?(::Hash) && field.type <= FieldStruct::Types::Union
+          canonicalize_serialized_union_hash(value, field.type_instance)
         elsif value.is_a?(::Array) && field.type <= FieldStruct::Types::Array
           of_type = field.options[:of_type]
           if of_type.is_a?(FieldStruct::Types::Nested)
@@ -356,6 +358,33 @@ module FieldStruct
         else
           value
         end
+      end
+
+      # Which external names apply depends on which member the Hash is for,
+      # so try the members in declared order, as {Types::Union#coerce} does:
+      # a struct member gets the Hash reverse-mapped through its own
+      # +serialize :json+ mapping, and the first member that accepts wins. A
+      # winning struct is returned built (the union's coerce passes it
+      # through to that member); a winning non-struct member gets the Hash
+      # unchanged. When nothing accepts it, the Hash goes on as-is and the
+      # setter's +coercion_policy+ handles the failure.
+      #
+      # @api private
+      # @param hash [Hash] parsed JSON object for a union field
+      # @param union [Types::Union]
+      # @return [Base, Hash]
+      def canonicalize_serialized_union_hash(hash, union)
+        union.member_types.each do |member|
+          if member.is_a?(FieldStruct::Types::Nested)
+            return member.coerce(member.struct_class.canonicalize_serialized_hash(hash))
+          end
+
+          member.coerce(hash)
+          return hash
+        rescue *FieldStruct::Types::Union::RESCUABLE
+          next
+        end
+        hash
       end
 
       private

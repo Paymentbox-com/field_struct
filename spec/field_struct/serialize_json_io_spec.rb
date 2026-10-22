@@ -194,6 +194,80 @@ RSpec.describe FieldStruct::Base, 'serialize :json wiring' do
     end
   end
 
+  describe 'unions of nested FieldStructs with serialize :json' do
+    # unknown_attributes :raise lets the union tell the members apart: a
+    # member handed the other member's keys raises, so the next one is tried.
+    let(:card) do
+      Class.new(described_class) do
+        unknown_attributes :raise
+        required :card_number, :string
+        serialize :json, card_number: 'cardNumber'
+      end
+    end
+    let(:bank) do
+      Class.new(described_class) do
+        unknown_attributes :raise
+        required :account_number, :string
+        serialize :json, account_number: 'accountNumber'
+      end
+    end
+    let(:payment) do
+      members = [card, bank]
+      Class.new(described_class) do
+        required :source, :union, of: members
+      end
+    end
+
+    it 'reverse-maps the first member' do
+      instance = payment.from_json('{"source":{"cardNumber":"4242"}}')
+      expect(instance.source).to eq(card.new(card_number: '4242'))
+      expect(instance).to be_valid
+    end
+
+    it 'reverse-maps a later member with its own mapping' do
+      instance = payment.from_json('{"source":{"accountNumber":"99"}}')
+      expect(instance.source).to eq(bank.new(account_number: '99'))
+      expect(instance).to be_valid
+    end
+
+    it 'round-trips either member through to_json / from_json' do
+      [card.new(card_number: '4242'), bank.new(account_number: '99')].each do |source|
+        original = payment.new(source: source)
+        expect(payment.from_json(original.to_json)).to eq(original)
+      end
+    end
+
+    it 'reverse-maps a struct member alongside a scalar member' do
+      nested = card
+      loose = Class.new(described_class) { required :payload, :union, of: [nested, :boolean] }
+      original = loose.new(payload: card.new(card_number: '1'))
+
+      expect(loose.from_json(original.to_json)).to eq(original)
+      expect(loose.from_json('{"payload":true}').payload).to be(true)
+    end
+
+    it 'moves past an earlier scalar member that rejects the Hash' do
+      nested = card
+      klass = Class.new(described_class) { required :payload, :union, of: [:integer, nested] }
+      original = klass.new(payload: card.new(card_number: '1'))
+
+      expect(klass.from_json(original.to_json)).to eq(original)
+    end
+
+    it 'keeps declared order: an earlier non-struct member that accepts the Hash wins' do
+      nested = card
+      klass = Class.new(described_class) { required :payload, :union, of: [:value, nested] }
+
+      expect(klass.from_json('{"payload":{"cardNumber":"1"}}').payload).to eq('cardNumber' => '1')
+    end
+
+    it 'leaves the failure to coercion_policy when no member matches' do
+      instance = payment.from_json('{"source":{"iban":"DE00"}}')
+      expect(instance).not_to be_valid
+      expect(instance.errors[:source].first).to start_with('could not be coerced')
+    end
+  end
+
   describe 'to_h and attributes stay canonical regardless of serialize :json' do
     let(:klass) do
       Class.new(described_class) do

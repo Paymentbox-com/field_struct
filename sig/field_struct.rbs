@@ -494,6 +494,30 @@ module FieldStruct
     # into +of_type:+; otherwise +options+ unchanged
     def self.resolve_array_options: (singleton(Types::Base) type_class, ::Hash[Symbol, Object?] options) -> ::Hash[Symbol, Object?]
 
+    # Check an array field's +element:+ options against the element type's
+    # own schema, exactly as a scalar field of that type is checked, and
+    # store them resolved and frozen. An empty or absent +element:+ leaves
+    # no +:element+ key, so an array without one is unchanged.
+    # 
+    # _@param_ `name` — the field name, for error messages
+    # 
+    # _@param_ `options` — the array field's resolved options
+    # 
+    # _@return_ — +options+ with +:element+ resolved
+    def self.resolve_element_options: ((Symbol | String) name, ::Hash[Symbol, Object?] options) -> ::Hash[Symbol, Object?]
+
+    # _@param_ `element_class` — the array's element type
+    # 
+    # _@param_ `element` — the declared +element:+ options
+    # 
+    # _@return_ — +element+, every key native to +element_class+
+    def self.element_options_checked: (singleton(Types::Base) element_class, ::Hash[Symbol, Object?] element) -> ::Hash[Symbol, Object?]
+
+    # _@param_ `word`
+    # 
+    # _@return_ — +"an"+ before a vowel, otherwise +"a"+
+    def self.article: (String word) -> String
+
     # _@param_ `type_class`
     # 
     # _@param_ `options` — the field's declared options
@@ -802,13 +826,24 @@ module FieldStruct
 
     # A declared +format:+ is now stored as written, so a preset name has to be
     # expanded before strftime sees it — and only the field's own type knows
-    # its preset table. With no declared format (an :array of dates, a :value
-    # field holding one) the answer is ISO-8601, as it has always been.
+    # its preset table. An :array field's elements use the +format:+ in its
+    # +element:+ options, read through the element type, so +from_json+ reads
+    # back what +to_json+ wrote. With no declared format (an :array without
+    # one, a :value field holding a date) the answer is ISO-8601, as it has
+    # always been.
     # 
     # _@param_ `value`
     # 
     # _@param_ `field`
     def temporal_json_value: ((::Date | ::Time | ::DateTime) value, Field? field) -> String
+
+    # _@param_ `field`
+    # 
+    # _@return_ — the
+    # options holding the +format:+ for this field's temporal values and
+    # the type class that resolves it — an array's +element:+ options and
+    # element type, or the field's own
+    def temporal_format_source: (Field? field) -> ([::Hash[Symbol, Object?], Class] | [NilClass, Class] | [NilClass, NilClass])
 
     def apply_defaults: () -> void
 
@@ -826,6 +861,22 @@ module FieldStruct
     # 
     # _@param_ `value` — a present (non-missing) coerced value
     def field_value_invalid?: (Field field, Object? value) -> bool
+
+    # Whether +value+ breaks a +format:+ Regexp, +enum:+ or +in:+ in +options+.
+    # 
+    # _@param_ `options` — a field's options, or an array field's +element:+ options
+    # 
+    # _@param_ `value` — a present coerced value
+    def outside_options?: (::Hash[Symbol, Object?] options, Object? value) -> bool
+
+    # _@param_ `field`
+    # 
+    # _@param_ `value` — a present coerced value
+    # 
+    # _@return_ — the index of the first non-nil element that
+    # breaks the array field's +element:+ +format:+ / +enum:+ / +in:+, or
+    # +nil+ when there is none (or the field declares no +element:+)
+    def invalid_element_index: (Field field, Object? value) -> Integer?
 
     # `in:` with a Range means a BOUNDS check, so ask the Range for its bounds.
     # 
@@ -1199,6 +1250,15 @@ module FieldStruct
     # than a quoted string, so the line reads like the declaration it
     # describes.
     def declared_option_repr: (Object? value) -> String
+
+    # What an array field's +element:+ may hold — its element type's native
+    # options — so the line answers "what can I pass to each element" too.
+    # 
+    # _@param_ `field`
+    # 
+    # _@return_ — +nil+ for a non-array field, or an element type
+    # with no options (a nested struct)
+    def element_accepts_summary: (Field field) -> String?
 
     # _@param_ `type_class`
     # 
@@ -1809,19 +1869,37 @@ module FieldStruct
     # type named by the +:of+ DSL option (resolved at field-declaration
     # time and stashed as +options[:of_type]+ — a class, not a symbol).
     # 
+    # An optional +:element+ Hash carries the element type's own options
+    # (+strict:+, +base:+, +format:+, …), passed to every element's coerce:
+    # 
+    #   optional :ids, :array, of: :integer, element: {strict: true, base: 16}
+    # 
+    # A refused element is reported with its index — +element at index 2: …+.
+    # 
     # Missing: +nil+ or empty array. ruby_type: +::Array+.
     class Array < FieldStruct::Types::Base
       # Native options: a required +of:+ naming the element type — a
       # registered Symbol or a Class (a +Types::Base+ or +FieldStruct::Base+
-      # subclass).
+      # subclass) — and an +element:+ Hash of that element type's options.
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
+
+      # The element type class behind an +of_type+ option, whether it holds
+      # a class (+:integer+ → {Types::Integer}) or a built instance (a
+      # {Types::Nested}). Its +option_schema+ is what +element:+ accepts.
+      # 
+      # _@param_ `of_type` — an array field's +:of_type+ option
+      # 
+      # _@return_ — a {Types::Base} subclass
+      def self.element_class: ((Class | Types::Base) of_type) -> singleton(Types::Base)
 
       # _@param_ `value` — anything else raises TypeError
       # 
       # _@param_ `of_type` — the element type — a Types::Base subclass for stock types, or an already-built instance for parameterized types like {Types::Nested}. The DSL stashes this when the user writes +of: :string+ / +of: SomeStruct+. Required at the type level; nil here means the type was called directly without DSL help.
       # 
+      # _@param_ `element` — the element type's options, passed to every element's coerce (the DSL's +element:+, already validated against the element type's schema)
+      # 
       # _@return_ — each element coerced by +of_type+
-      def coerce: (::Array[Object?]? value, ?of_type: (Class | Types::Base)?) -> ::Array[Object?]?
+      def coerce: (::Array[Object?]? value, ?of_type: (Class | Types::Base)?, ?element: ::Hash[::Symbol, Object?]?) -> ::Array[Object?]?
 
       # _@param_ `value`
       # 

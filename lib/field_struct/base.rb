@@ -185,6 +185,7 @@ module FieldStruct
         options = apply_default_format(type_class, options)
         options = type_class.resolve_options(options)
         validate_options!(type_class, options)
+        options = resolve_element_options(name, options) if type_class <= FieldStruct::Types::Array
         required = options.delete(:required) { false }
         default = options.delete(:default)
         coercion_policy = options.delete(:coercion_policy)
@@ -458,8 +459,62 @@ module FieldStruct
 
         rest = options.dup
         element_class, element_instance = resolve_type_arg(rest.delete(:of))
-        rest[:of_type] = element_instance || element_class
-        rest
+        # of_type first, so to_h / describe read like the declaration.
+        {of_type: element_instance || element_class}.merge(rest)
+      end
+
+      # Check an array field's +element:+ options against the element type's
+      # own schema, exactly as a scalar field of that type is checked, and
+      # store them resolved and frozen. An empty or absent +element:+ leaves
+      # no +:element+ key, so an array without one is unchanged.
+      #
+      # @param name [Symbol, String] the field name, for error messages
+      # @param options [Hash{Symbol=>Object, nil}] the array field's resolved options
+      # @return [Hash{Symbol=>Object, nil}] +options+ with +:element+ resolved
+      # @raise [ArgumentError] prefixed +in element: of array field :name,+
+      #   when an element option is not one the element type accepts, has
+      #   the wrong shape, or is refused by the element type's resolver
+      def resolve_element_options(name, options)
+        element = options[:element]
+        return options.except(:element) if element.nil? || element.empty?
+
+        element_class = FieldStruct::Types::Array.element_class(options[:of_type])
+        resolved = element_class.resolve_options(element_options_checked(element_class, element))
+        validate_options!(element_class, resolved)
+        options.merge(element: resolved.freeze)
+      rescue ArgumentError => e
+        raise ArgumentError, "in element: of array field :#{name}, #{e.message}"
+      end
+
+      # @param element_class [Class<Types::Base>] the array's element type
+      # @param element [Hash{Symbol=>Object, nil}] the declared +element:+ options
+      # @return [Hash{Symbol=>Object, nil}] +element+, every key native to +element_class+
+      # @raise [ArgumentError] on a key that isn't one of +element_class+'s
+      #   options, or when the element type is an Array or Union
+      def element_options_checked(element_class, element)
+        if element_class <= FieldStruct::Types::Array || element_class <= FieldStruct::Types::Union
+          raise ArgumentError, "element options are not supported for #{short_type_name(element_class)} elements"
+        end
+
+        schema = element_class.option_schema
+        element.each_key do |key|
+          next if schema.key?(key)
+
+          if UNIVERSAL_FIELD_OPTIONS.include?(key)
+            raise ArgumentError, "#{key}: is a field option, not an element option. Declare it on the field itself."
+          end
+
+          type = short_type_name(element_class)
+          accepts = schema.empty? ? 'accepts no options' : "accepts: #{schema.keys.join(", ")}"
+          raise ArgumentError, "#{key}: is not #{article(type)} #{type} option. #{type} #{accepts}."
+        end
+        element
+      end
+
+      # @param word [String]
+      # @return [String] +"an"+ before a vowel, otherwise +"a"+
+      def article(word)
+        word.match?(/\A[AEIOU]/i) ? 'an' : 'a'
       end
 
       # @param type_class [Class<Types::Union>]
@@ -1041,22 +1096,38 @@ module FieldStruct
 
     # A declared +format:+ is now stored as written, so a preset name has to be
     # expanded before strftime sees it — and only the field's own type knows
-    # its preset table. With no declared format (an :array of dates, a :value
-    # field holding one) the answer is ISO-8601, as it has always been.
+    # its preset table. An :array field's elements use the +format:+ in its
+    # +element:+ options, read through the element type, so +from_json+ reads
+    # back what +to_json+ wrote. With no declared format (an :array without
+    # one, a :value field holding a date) the answer is ISO-8601, as it has
+    # always been.
     #
     # @param value [::Date, ::Time, ::DateTime]
     # @param field [Field, nil]
     # @return [String]
     def temporal_json_value(value, field)
-      format = field&.options&.[](:format)
-      return value.iso8601 if format.nil?
+      options, type_class = temporal_format_source(field)
+      format = options&.[](:format)
+      return value.iso8601 if format.nil? || type_class.nil?
 
-      resolved = field.type_instance.class.resolve_format(format)
+      resolved = type_class.resolve_format(format)
       # A format FieldStruct implements itself renders itself; a strftime
       # String is handed to strftime, as it always was.
       return resolved.render(value) if resolved.is_a?(Types::Rfc3339Format)
 
       value.strftime(resolved)
+    end
+
+    # @param field [Field, nil]
+    # @return [Array(Hash{Symbol=>Object, nil}, Class), Array(nil, Class), Array(nil, nil)] the
+    #   options holding the +format:+ for this field's temporal values and
+    #   the type class that resolves it — an array's +element:+ options and
+    #   element type, or the field's own
+    def temporal_format_source(field)
+      return [nil, nil] if field.nil?
+      return [field.options, field.type_instance.class] unless field.type <= Types::Array
+
+      [field.options[:element], Types::Array.element_class(field.options[:of_type])]
     end
 
     # @return [void]
@@ -1100,19 +1171,44 @@ module FieldStruct
         return
       end
 
-      errors.add(field.name, 'is invalid') if field_value_invalid?(field, value)
+      if field_value_invalid?(field, value)
+        errors.add(field.name, 'is invalid')
+      elsif (index = invalid_element_index(field, value))
+        errors.add(field.name, "element at index #{index} is invalid")
+      end
     end
 
     # @param field [Field]
     # @param value [Object, nil] a present (non-missing) coerced value
     # @return [Boolean]
     def field_value_invalid?(field, value)
-      fmt = field.options[:format]
-      return true if fmt.is_a?(::Regexp) && !fmt.match?(value)
-      return true if field.options[:enum] && !field.options[:enum].include?(value)
-      return true if field.options[:in] && !within_allowed?(field.options[:in], value)
+      outside_options?(field.options, value) || nested_invalid?(value)
+    end
 
-      nested_invalid?(value)
+    # Whether +value+ breaks a +format:+ Regexp, +enum:+ or +in:+ in +options+.
+    #
+    # @param options [Hash{Symbol=>Object, nil}] a field's options, or an
+    #   array field's +element:+ options
+    # @param value [Object, nil] a present coerced value
+    # @return [Boolean]
+    def outside_options?(options, value)
+      fmt = options[:format]
+      return true if fmt.is_a?(::Regexp) && !fmt.match?(value)
+      return true if options[:enum] && !options[:enum].include?(value)
+
+      !options[:in].nil? && !within_allowed?(options[:in], value)
+    end
+
+    # @param field [Field]
+    # @param value [Object, nil] a present coerced value
+    # @return [Integer, nil] the index of the first non-nil element that
+    #   breaks the array field's +element:+ +format:+ / +enum:+ / +in:+, or
+    #   +nil+ when there is none (or the field declares no +element:+)
+    def invalid_element_index(field, value)
+      element_options = field.options[:element]
+      return nil unless element_options && value.is_a?(::Array)
+
+      value.index { |item| !item.nil? && outside_options?(element_options, item) }
     end
 
     # `in:` with a Range means a BOUNDS check, so ask the Range for its bounds.

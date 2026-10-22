@@ -156,6 +156,9 @@ module FieldStruct
         "Nested(#{value.struct_class.name || "AnonymousFieldStruct"})"
       when FieldStruct::Types::Base
         value.class.name.to_s.split('::').last
+      # Spelled out rather than Hash#inspect, whose format changed in Ruby 3.4.
+      when ::Hash
+        "{#{value.map { |key, item| "#{key}: #{option_repr(item)}" }.join(", ")}}"
       else
         value.inspect
       end

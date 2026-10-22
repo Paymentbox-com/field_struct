@@ -153,7 +153,7 @@ RSpec.describe 'zone: option' do
     end
     answers = under_each_zone do
       record = epoch.new(at: '1792656000', stamp: '1792656000')
-      [described(record.at), record.at.to_i, described(record.stamp), record.stamp.to_time.to_i]
+      [described(record.at), record.at.to_i, described(record.stamp), record.stamp.strftime('%s').to_i]
     end
     expect(answers.uniq).to eq([[[Time, 2026, 10, 22, 2, 0, 0, -21_600], 1_792_656_000,
                                  [DateTime, 2026, 10, 22, 2, 0, 0, -21_600], 1_792_656_000]])

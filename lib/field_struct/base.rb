@@ -22,6 +22,20 @@ module FieldStruct
     VALID_COERCION_POLICIES = %i[keep_raw replace raise].freeze
     # Accepted values for the +unknown_attributes+ macro.
     VALID_UNKNOWN_POLICIES = %i[ignore raise].freeze
+    # Field names {.field} refuses because Base itself calls a method of
+    # that name on its own instances — a field would define a reader that
+    # shadows it (+field :errors+ broke validation, +field :hash+ broke
+    # equality). Curated, not +instance_methods+: names Base never calls on
+    # itself (+:method+, +:name+, +:type+) stay legal. {Scaffold::RESERVED}
+    # renames these too.
+    RESERVED_FIELD_NAMES = %i[
+      errors attributes attribute_names assign_attributes
+      as_json to_json to_h to_model model_name inspect hash class
+      send public_send freeze instance_variable_set initialize initialize_copy raise
+      deconstruct deconstruct_keys
+      json_value temporal_json_value apply_defaults run_cross_field_validators
+      validate_field apply_coercion_policy record_coercion_failure
+    ].freeze
     UNSET = Object.new.freeze
     private_constant :UNSET
 
@@ -153,6 +167,7 @@ module FieldStruct
       #   fields rather than just the most recently added one). The
       #   added Field is still available as +metadata[name]+.
       def field(name, type_arg, **options)
+        refuse_reserved_name!(name)
         type_class, type_instance = resolve_type_arg(type_arg)
         if type_class <= FieldStruct::Types::Union
           type_instance, options = build_union_instance(type_class, options)
@@ -487,6 +502,16 @@ module FieldStruct
       #   +"FieldStruct::Types::Integer"+) for readable messages
       def short_type_name(type_class)
         type_class.name.to_s.split('::').last
+      end
+
+      def refuse_reserved_name!(name)
+        sym = name.to_sym
+        return unless RESERVED_FIELD_NAMES.include?(sym)
+
+        raise ArgumentError,
+          "field :#{sym} is reserved: FieldStruct::Base relies on ##{sym}, and a field " \
+          'would shadow it. Pick another name; serialize :json can keep the external key ' \
+          "(e.g. serialize :json, #{sym}_field: '#{sym}')."
       end
 
       def validate_serialize_mapping!(name, mapping)

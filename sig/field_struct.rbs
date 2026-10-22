@@ -418,6 +418,8 @@ module FieldStruct
     # +"FieldStruct::Types::Integer"+) for readable messages
     def self.short_type_name: (untyped type_class) -> String
 
+    def self.refuse_reserved_name!: (untyped name) -> untyped
+
     def self.validate_serialize_mapping!: (untyped name, untyped mapping) -> untyped
 
     def self.validate_coercion_policy_override!: (untyped value) -> untyped
@@ -1103,6 +1105,7 @@ module FieldStruct
 
     def self.scalar_kind: (untyped value) -> untyped
 
+    # +serialize+ refuses undeclared fields, so the mapping goes after them.
     def self.build_class: (untyped name, untyped mappings, untyped lines) -> untyped
 
     def self.decorate: (untyped declaration, *untyped comment_parts) -> untyped

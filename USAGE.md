@@ -303,6 +303,58 @@ end
 - **Inheritance:** all four macros inherit to subclasses; a child overrides by re-declaring, and the override never mutates the parent. `coercion_policy`/`unknown_attributes` override to any value; `immutable!`/`frozen!` are **one-way** — a child can add them but can't un-set an inherited one (no `mutable!`/`unfrozen!`).
 - `validate` runs at `valid?` (and at construct if any exist); convention is `errors.add(:base, ...)`; `errors[:base]` is cleared each `valid?` run.
 
+### Payment and API boundaries: `unknown_attributes :raise`
+
+At a trust boundary (a payment request, a webhook, a partner API body) declare
+`unknown_attributes :raise`. The default, `:ignore`, drops keys it doesn't know
+without telling you. So a misspelled key (`"ammount"`) or a renamed field upstream
+leaves a field unset, and a field you haven't modelled yet (`"cvv"`) goes away without
+a trace. With `:raise`, `new` / `from_json` / `assign_attributes` / `with` fail with an
+`UnknownAttributeError` whose `keys` name the extras (names only, never values).
+
+- **Declare it on every struct that reads input**, nested ones too. It is inherited
+  by *subclasses*, not by structs a field nests: a nested class without it still
+  drops its own unknown keys. The nested error propagates out of the parent's
+  `new` rather than going through the parent's `coercion_policy`.
+- **`from_json` reverse-maps `serialize :json` names first**, so external names
+  (`"amountDecimal"`) are known keys there. Passing them to `new` raises, because
+  `new` takes canonical names.
+- Keep `:ignore` where extra keys are expected and harmless, e.g. a struct reading
+  a few fields out of a large third-party payload.
+
+<!-- doctest -->
+```ruby
+class Card < FieldStruct::Base
+  unknown_attributes :raise
+  required :last4, :string
+end
+
+class Charge < FieldStruct::Base
+  unknown_attributes :raise
+  required :amount, :decimal
+  required :card,   Card
+  serialize :json, amount: 'amountDecimal'
+end
+
+Charge.from_json('{"amountDecimal":"9.99","card":{"last4":"4242"}}').valid?   # => true
+
+typo = begin
+  Charge.from_json('{"ammount":"9.99","card":{"last4":"4242"}}')
+rescue FieldStruct::UnknownAttributeError => e
+  e
+end
+typo.keys      # => [:ammount]
+typo.message   # "unknown attribute(s) for Charge: :ammount"
+
+nested = begin
+  Charge.from_json('{"amountDecimal":"9.99","card":{"last4":"4242","cvv":"123"}}')
+rescue FieldStruct::UnknownAttributeError => e
+  e
+end
+nested.keys    # => [:cvv]
+nested.message # "unknown attribute(s) for Card: :cvv"
+```
+
 ---
 
 ## Instance surface
@@ -382,6 +434,59 @@ messages pass through unprefixed).
 - **Validity is separate from construction.** A field can hold `nil`/raw even when
   required — see coercion policy below. Always gate on `valid?`, don't assume a
   required reader is non-nil.
+
+### Validity is computed on assignment (shallow `valid?` staleness)
+
+A field's errors are written when *that field* is assigned, and `valid?` only reads
+them (it reruns cross-field `validate` blocks, nothing else). A parent records an
+invalid nested struct or array element when the nested value is assigned. **It
+doesn't watch it afterwards.** Mutating a nested struct, or an array element, in
+place leaves the parent's errors as they were, in both directions:
+
+- the parent stays `valid?` after a nested field is broken in place, and
+- stays invalid after a nested problem is fixed in place.
+
+Pushing onto an array in place (`record.tags << 5`) also skips coercion: the raw
+value is stored as-is.
+
+**Workaround: assign the field again** (or use `with`/`assign_attributes`, which go
+through the setter). That reruns coercion and validation for that field.
+
+<!-- doctest -->
+```ruby
+class Address < FieldStruct::Base
+  required :city, :string
+end
+
+class Person < FieldStruct::Base
+  required :address, Address
+  optional :tags,    :array, of: :string
+end
+
+person = Person.new(address: { city: 'Provo' })
+person.address.city = nil         # mutate the nested struct in place
+person.address.valid?             # => false
+# Stale: the parent never saw the change.
+person.valid?                     # => true
+
+person.address = person.address   # re-assign: the setter re-validates
+person.valid?                     # => false
+person.errors[:address]           # => ['is invalid']
+
+person.address.city = 'Provo'     # fixed in place...
+# ...and stale the other way.
+person.valid?                     # => false
+person.with(address: person.address).valid?   # => true
+
+person.tags = ['a']
+person.tags << 5                  # in-place push: no coercion
+person.tags                       # => ['a', 5]
+person.tags = person.tags         # re-assign coerces each element
+person.tags                       # => ['a', '5']
+```
+
+For a nested struct you mutate often, keep it `immutable!` (or `frozen!`) and use
+`with` to change it. Then the only way to change it goes through a setter.
 
 ### Coercion failure policy
 
@@ -625,5 +730,9 @@ the README "Type signatures" section for a Rake-task wiring example.
   naming it; name the field something else and map the external key with
   `serialize :json, errors_field: 'errors'`. `method`, `name`, `type` stay legal.
 - Unknown input keys are dropped by default (`unknown_attributes :ignore`); set
-  `:raise` to reject them with `UnknownAttributeError`.
+  `:raise` to reject them with `UnknownAttributeError` — recommended at payment/API
+  boundaries, on each struct (see [above](#payment-and-api-boundaries-unknown_attributes-raise)).
+- **Validity is computed on assignment.** In-place mutation of a nested struct or an
+  array element doesn't refresh the parent's errors; re-assign the field (see
+  [staleness](#validity-is-computed-on-assignment-shallow-valid-staleness)).
 - Uses **Oj** for JSON (`Oj.load`/`Oj.dump`), not the stdlib JSON.

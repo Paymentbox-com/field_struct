@@ -383,6 +383,18 @@ RBS for nested/element classes too so `::Address` references resolve. See the RE
   float/decimal; `base:` → integer; `values:` → boolean. Misapplying raises `ArgumentError` at declaration.
 - `description:`/`desc:` is documentation only — absent from `attributes`, `as_json`,
   and pattern-match keys.
+- **Input is a Hash, or anything with `to_hash`** (e.g. a permitted
+  `ActionController::Parameters`). `new(nil)` is the same as `new`; any other
+  shape (`new([])`, `new("x")`, `assign_attributes(nil)`) raises `ArgumentError`
+  naming the class it got.
+- **`dup` / `clone` copy the errors too** — the copy starts with the original's
+  messages but owns them, so changing one's top-level fields never changes the
+  other's `valid?`. The copy is shallow: nested structs are shared.
+- **Some field names are reserved** — the ones `Base` calls on its own instances
+  (`errors`, `attributes`, `hash`, `class`, `send`, `to_h`, `inspect`, … — see
+  `FieldStruct::Base::RESERVED_FIELD_NAMES`). Declaring one raises `ArgumentError`
+  naming it; name the field something else and map the external key with
+  `serialize :json, errors_field: 'errors'`. `method`, `name`, `type` stay legal.
 - Unknown input keys are dropped by default (`unknown_attributes :ignore`); set
   `:raise` to reject them with `UnknownAttributeError`.
 - Uses **Oj** for JSON (`Oj.load`/`Oj.dump`), not the stdlib JSON.

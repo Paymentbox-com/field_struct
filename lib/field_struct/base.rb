@@ -167,6 +167,7 @@ module FieldStruct
       #   (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol),
       #   +description:+ / +desc:+ (String), +rbs_type:+ (String — an RBS type
       #   expression {RBS.generate} emits for this field instead of the derived one),
+      #   +sensitive:+ (Boolean — mask the value in +inspect+; see {Field#sensitive?}),
       #   plus type-specific options (e.g. +format:+, +round:+, +of:+,
       #   +values:+, +enum:+, +in:+) — see each type's +coerce+ for the
       #   options it consumes
@@ -191,11 +192,13 @@ module FieldStruct
         description = extract_description!(options)
         rbs_type = options.delete(:rbs_type)
         validate_rbs_type!(rbs_type) unless rbs_type.nil?
+        sensitive = options.delete(:sensitive) { false }
+        validate_sensitive!(sensitive)
         field = Field.new(
           name: name, type: type_class, type_instance: type_instance,
           required: required, default: default,
           coercion_policy: coercion_policy, description: description,
-          rbs_type: rbs_type, **options
+          rbs_type: rbs_type, sensitive: sensitive, **options
         )
         metadata.add(field)
         define_field_accessors(field)
@@ -310,8 +313,10 @@ module FieldStruct
       # so the full setter pipeline runs: coercion (strings re-coerce to
       # Date/Time/BigDecimal), nested Hash → Types::Nested instantiation,
       # +unknown_attributes+ policy, +coercion_policy+. Invalid JSON
-      # surfaces the underlying Oj parse error; a non-object root
-      # (+[...]+, +"hi"+, +42+) raises +ArgumentError+.
+      # raises the underlying Oj parse error's class (+EncodingError+ or a
+      # subclass) with its position but not the input, which Oj's own
+      # message quotes; a non-object root (+[...]+, +"hi"+, +42+) raises
+      # +ArgumentError+ naming its class.
       #
       # JSON numbers with a fraction or exponent parse as +BigDecimal+, never
       # through a Float, so a +:decimal+ field gets the exact digits sent.
@@ -321,14 +326,30 @@ module FieldStruct
       # @param json_string [String]
       # @return [Base]
       # @raise [ArgumentError] when the parsed root is not a JSON object
+      # @raise [EncodingError] when the input is not valid JSON
       def from_json(json_string)
-        parsed = Oj.load(json_string, mode: :compat, decimal_class: ::BigDecimal)
-        unless parsed.is_a?(::Hash)
-          raise ArgumentError,
-            "from_json expects a JSON object root, got #{parsed.class}: #{parsed.inspect}"
-        end
+        parsed = parse_json(json_string)
+        raise ArgumentError, "from_json expects a JSON object root, got #{parsed.class}" unless parsed.is_a?(::Hash)
 
         new(canonicalize_serialized_hash(parsed))
+      end
+
+      # Oj quotes the whole input in its parse-error message, and that input
+      # may be payments data. Re-raise the same class with Oj's description
+      # and position only, and without the original as +cause+ (which error
+      # reporters print).
+      #
+      # @api private
+      # @param json_string [String]
+      # @return [Object, nil] the parsed JSON value
+      # @raise [EncodingError] when the input is not valid JSON
+      def parse_json(json_string)
+        Oj.load(json_string, mode: :compat, decimal_class: ::BigDecimal)
+      rescue ::EncodingError => e
+        description = e.message[/\A[^(\[]*/].to_s.strip
+        position = e.message[/line \d+, column \d+/]
+        detail = [description, position && "at #{position}"].compact.reject(&:empty?).join(' ')
+        raise e.class, "from_json could not parse its input as JSON (#{detail})", e.backtrace, cause: nil
       end
 
       # Walk a parsed JSON hash (string-keyed, possibly with external
@@ -491,7 +512,7 @@ module FieldStruct
       # type-option check skips them.
       #
       # @return [Array<Symbol>]
-      UNIVERSAL_FIELD_OPTIONS = %i[required default coercion_policy description desc rbs_type].freeze
+      UNIVERSAL_FIELD_OPTIONS = %i[required default coercion_policy description desc rbs_type sensitive].freeze
       private_constant :UNIVERSAL_FIELD_OPTIONS
 
       # Three-way option check (design invariant 7): validate native, pass
@@ -623,6 +644,15 @@ module FieldStruct
 
         raise ArgumentError, 'rbs_type: must be a non-empty String of RBS (e.g. ' \
                              "rbs_type: '::ActiveRecord::Relation'), got #{value.inspect}"
+      end
+
+      # @param value [Object] the declared +sensitive:+
+      # @return [void]
+      # @raise [ArgumentError] unless +value+ is +true+ or +false+
+      def validate_sensitive!(value)
+        return if [true, false].include?(value)
+
+        raise ArgumentError, "sensitive: must be true or false, got #{value.class}"
       end
 
       # @param field [Field]
@@ -847,9 +877,16 @@ module FieldStruct
     # (design invariant 7). This reads the current {#errors}; it does not
     # re-run validation, so printing an instance never mutates it.
     #
+    # A +sensitive: true+ field renders {FieldStruct::FILTERED} in place of
+    # a non-nil value (+nil+ still shows, so a missing value stays visible).
+    # +pp+ goes through here too.
+    #
     # @return [String]
     def inspect
-      pairs = attributes.map { |name, value| "#{name}: #{value.inspect}" }.join(', ')
+      pairs = self.class.metadata.map do |field|
+        value = public_send(field.name)
+        "#{field.name}: #{field.sensitive? && !value.nil? ? FieldStruct::FILTERED : value.inspect}"
+      end.join(', ')
       body = "#{self.class.name || "AnonymousFieldStruct"} #{pairs}"
       current = errors.to_h
       unless current.empty?
@@ -1085,7 +1122,7 @@ module FieldStruct
         nil
       when :raise
         raise CoercionError.new(
-          "could not coerce #{raw_value.inspect} for #{field.name}: #{error.message}",
+          "could not coerce #{raw_value.class} input for #{field.name}: #{error.message}",
           field_name: field.name,
           original: error
         )

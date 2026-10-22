@@ -72,7 +72,7 @@ module FieldStruct
         begin
           ::Kernel.Float(value)
         rescue ::ArgumentError, ::RangeError
-          raise ArgumentError, "Float fields could not read a #{value.class} as a number"
+          raise ArgumentError, "Float fields could not read a #{value.class} as a number", cause: nil
         end
       end
     end

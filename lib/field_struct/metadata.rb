@@ -171,7 +171,9 @@ module FieldStruct
     # @param field [Field]
     # @return [String] one +describe+ line for a field
     def describe_field(field)
-      label = "  #{field.name} (#{short_name(field.type)}, #{field.required? ? "required" : "optional"})"
+      flags = [short_name(field.type), field.required? ? 'required' : 'optional']
+      flags << 'sensitive' if field.sensitive?
+      label = "  #{field.name} (#{flags.join(", ")})"
       parts = [label, declared_options_summary(field), accepts_summary(field.type)].compact
 
       parts.join(' — ')
@@ -246,7 +248,9 @@ module FieldStruct
         description: field.description
       }
       # Only when set, so the schema of a field without one is unchanged.
-      field.rbs_type ? schema.merge(rbs_type: field.rbs_type) : schema
+      schema[:rbs_type] = field.rbs_type if field.rbs_type
+      schema[:sensitive] = true if field.sensitive?
+      schema
     end
 
     # A single class, or +A | B+ for a multi-class ruby_type (boolean, union).

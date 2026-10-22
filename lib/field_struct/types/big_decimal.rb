@@ -71,7 +71,7 @@ module FieldStruct
       def parse(value)
         ::Kernel.BigDecimal(value.to_s)
       rescue ::ArgumentError
-        raise ArgumentError, "BigDecimal fields could not read a #{value.class} as a number"
+        raise ArgumentError, "BigDecimal fields could not read a #{value.class} as a number", cause: nil
       end
     end
   end

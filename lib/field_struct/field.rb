@@ -62,10 +62,11 @@ module FieldStruct
     #   field; for documentation purposes only
     # @param rbs_type [String, nil] RBS type expression overriding the
     #   derived one in generated signatures (see {#rbs_type})
+    # @param sensitive [Boolean] mask the value in {Base#inspect} (see {#sensitive?})
     # @param options [Object, nil] extra keyword type/field options
     #   forwarded to coerce (e.g. +format:+, +of_type:+, +round:+,
     #   +values:+, +enum:+, +in:+)
-    def initialize(name:, type:, type_instance: nil, required: false, default: nil, coercion_policy: nil, description: nil, rbs_type: nil, **options)
+    def initialize(name:, type:, type_instance: nil, required: false, default: nil, coercion_policy: nil, description: nil, rbs_type: nil, sensitive: false, **options)
       @name = name.to_sym
       @type = type
       @required = required
@@ -75,12 +76,25 @@ module FieldStruct
       @coercion_policy = coercion_policy
       @description = description
       @rbs_type = rbs_type
+      @sensitive = sensitive
       freeze
     end
 
     # @return [Boolean]
     def required?
       @required
+    end
+
+    # Whether the field holds data that must not reach a log — a card
+    # number, a CVV, a token. {Base#inspect} (and so +pp+) renders
+    # {FieldStruct::FILTERED} in place of a non-nil value. Data paths —
+    # the reader, +attributes+, +to_h+, +as_json+, +to_json+, pattern
+    # matching — return the real value, so round-trips stay exact.
+    # Declared with the +sensitive:+ field option.
+    #
+    # @return [Boolean]
+    def sensitive?
+      @sensitive
     end
 
     # @return [String, nil] shorter alias of {#description}
@@ -95,6 +109,7 @@ module FieldStruct
     def inspect
       parts = [@name.inspect, type_repr]
       parts << 'required' if @required
+      parts << 'sensitive' if @sensitive
       parts << "default=#{@default.inspect}" unless @default.nil?
       parts << "coercion_policy=#{@coercion_policy.inspect}" if @coercion_policy
       parts << "description=#{@description.inspect}" if @description

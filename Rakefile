@@ -7,6 +7,7 @@ require 'rspec/core/rake_task'
 RSpec::Core::RakeTask.new(:spec)
 
 require 'rubocop/rake_task'
+require_relative 'rakelib/sig_guards'
 
 RuboCop::RakeTask.new
 
@@ -27,11 +28,11 @@ SORD_FIXUPS = [
   [/^    include Enumerable$/, '    include ::Enumerable[Field]']
 ].freeze
 
-# Sord exits 0 even when it can't resolve a referenced constant: it falls
-# back to +untyped+ (via --replace-errors-with-untyped) and only logs a
-# warning. That degradation is invisible to sigs:check — the committed file
-# already carries the +untyped+, so the diff stays clean — meaning a
-# regression would ship silently. Fail loudly instead.
+# Sord exits 0 even when it can't resolve a referenced constant: it only
+# logs a warning. With --replace-errors-with-untyped (no longer passed) it
+# wrote +untyped+, which sigs:check couldn't see once committed; without it
+# sord writes the unresolved name as-is (`rbs validate` then fails with
+# NoTypeFoundError). Either way, fail here, at generation, with the fix.
 #
 # The usual cause is a bare stdlib name in a YARD type written inside the
 # FieldStruct::Types namespace (e.g. +Symbol+ / +Array+ / +Hash+) resolving
@@ -42,10 +43,18 @@ def guard_sord_warnings!(output)
   return unless plain.include?('important warnings in the output file')
 
   details = plain.lines.grep(/wasn't able to be resolved|could not be/i).map(&:strip)
-  raise 'Sord could not resolve one or more YARD types — they silently became ' \
-        "`untyped`:\n  #{details.join("\n  ")}\n" \
+  raise 'Sord could not resolve one or more YARD types — the sig would carry a ' \
+        "placeholder instead of the type:\n  #{details.join("\n  ")}\n" \
         'Fix the YARD type, usually by fully-qualifying a stdlib constant ' \
         '(e.g. `::Symbol`, `::Array`, `::Hash`).'
+end
+
+# Every sord [OMIT]/[DUCK] warning must be in the committed allowlist, and
+# every allowlisted warning must still occur — see rakelib/sig_guards.rb.
+def guard_sord_allowlist!(output)
+  allowlist = SigGuards.parse_allowlist(File.read(SigGuards::SORD_ALLOWLIST_FILE))
+  failure = SigGuards.allowlist_failure(warnings: SigGuards.sord_warnings(output), allowlist: allowlist)
+  raise failure if failure
 end
 
 def sord_run(target)
@@ -56,12 +65,13 @@ def sord_run(target)
   stash = "#{SIG_FILE}.stashed-by-sord-rake"
   stashed = File.exist?(SIG_FILE) && File.rename(SIG_FILE, stash) && true
   ok = false
-  cmd = "bundle exec sord #{target} --rbs --no-sord-comments --skip-constants --replace-errors-with-untyped"
+  cmd = "bundle exec sord #{target} --rbs --no-sord-comments --skip-constants"
   output, status = Open3.capture2e(cmd)
   puts output
   raise "sord failed (exit #{status.exitstatus})" unless status.success?
 
   guard_sord_warnings!(output)
+  guard_sord_allowlist!(output)
   contents = File.read(target)
   SORD_FIXUPS.each { |pattern, replacement| contents.gsub!(pattern, replacement) }
   File.write(target, contents)
@@ -99,7 +109,17 @@ namespace :sigs do
     end
   end
 
-  desc 'Validate sig/field_struct.rbs against the RBS grammar'
+  desc 'Fail unless the non-comment `untyped` count in sig/ equals the committed ceiling (ratchets down only)'
+  task :untyped do
+    count = SigGuards.count_untyped(Dir['sig/**/*.rbs'])
+    ceiling = Integer(File.read(SigGuards::UNTYPED_CEILING_FILE).strip)
+    failure = SigGuards.untyped_failure(count: count, ceiling: ceiling)
+    abort failure if failure
+
+    puts "sig/ untyped: #{count} (ceiling #{ceiling})"
+  end
+
+  desc 'Validate every sig under sig/ against the RBS grammar and resolve its names'
   task :validate do
     # The rbs collection (stdlib date/time/bigdecimal sigs) must be present
     # for the fully-qualified ::Date / ::Time / ::DateTime / ::BigDecimal
@@ -107,7 +127,9 @@ namespace :sigs do
     # fresh checkout's `rake release:check` is self-contained; the lock and
     # installed sigs float with the (uncommitted) Gemfile.lock.
     sh 'bundle exec rbs collection install' unless File.exist?('rbs_collection.lock.yaml')
-    sh "bundle exec rbs -I #{SIG_FILE} validate"
+    # The whole directory, so hand-written sigs added beside the generated
+    # file are validated too.
+    sh 'bundle exec rbs -I sig validate'
   end
 end
 
@@ -131,5 +153,5 @@ end
 
 namespace :release do
   desc 'Run the full pre-release battery: specs, rubocop, sig check, docs build'
-  task check: %w[spec rubocop sigs:check sigs:validate docs:generate]
+  task check: %w[spec rubocop sigs:check sigs:validate sigs:untyped docs:generate]
 end

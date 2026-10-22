@@ -503,11 +503,14 @@ The gem ships with RBS signatures at `sig/field_struct.rbs`, generated from YARD
 
 ```bash
 bundle exec rake sigs:generate   # regenerate from current YARD
-bundle exec rake sigs:validate   # parse-check the committed sig file
+bundle exec rake sigs:validate   # rbs validate everything under sig/
 bundle exec rake sigs:check      # CI guard: error if sigs are stale
+bundle exec rake sigs:untyped    # CI guard: untyped count must equal the committed ceiling
 ```
 
 The generated file is committed to git. Improve YARD when you want to improve the sig — don't edit `sig/field_struct.rbs` by hand. Run `rake sigs:check` before pushing if you changed any YARD.
+
+The sig can only get more typed. `sigs:untyped` fails when the non-comment `untyped` count in `sig/` rises above `rakelib/sig_guards/untyped_ceiling.txt`, and also when it falls below it — lower the ceiling in the same PR. `sigs:generate` / `sigs:check` fail on any Sord `[OMIT]` (no YARD type) or `[DUCK]` warning not listed in `rakelib/sig_guards/sord_allowlist.txt`, and on a listed one Sord no longer emits, so the list only shrinks. A report-only `steep check` runs in CI (`gemfiles/types.gemfile`, Ruby >= 3.3); it never fails the build.
 
 Sord covers the **library** classes only. The per-field accessors that the `field` DSL defines on **your** subclasses (`user.name`, `user.age=`) don't exist until you declare the fields, so Sord can't see them — that's the other half of [D13](docs/origin/plan.md).
 

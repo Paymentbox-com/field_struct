@@ -81,8 +81,11 @@ module FieldStruct
       name = unique_name(class_name, used)
       total = samples.length
       mappings = {}
+      attrs = []
       lines = ordered_keys(samples).map do |key|
-        attr = safe_attr(key)
+        # Two keys can normalize to one name ("fooBar"/"foo_bar"); suffix the
+        # later one so neither value is lost.
+        attr = unique_name(safe_attr(key), attrs)
         mappings[attr] = key unless attr == key
         field_line(attr, observe(samples, key), total, classes, used)
       end

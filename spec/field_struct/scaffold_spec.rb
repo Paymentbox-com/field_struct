@@ -127,6 +127,14 @@ RSpec.describe FieldStruct::Scaffold do
       expect(instance.to_json).to eq('{"errors":"e","hash":"h","method":"card"}')
     end
 
+    it 'gives keys that normalize to the same name distinct fields' do
+      json = '{"errors":1,"errors_field":2,"fooBar":3,"foo_bar":4}'
+      klass = eval_scaffold(described_class.from_json(json)).const_get(:Generated)
+
+      expect(klass.attribute_names.uniq.size).to eq(4)
+      expect(klass.from_json(json).to_json).to eq(json)
+    end
+
     it 'shares the reserved field names with Base' do
       expect(described_class::RESERVED).to include(*FieldStruct::Base::RESERVED_FIELD_NAMES.map(&:to_s))
     end

@@ -31,7 +31,7 @@ module FieldStruct
     RESERVED_FIELD_NAMES = %i[
       errors attributes attribute_names assign_attributes
       as_json to_json to_h to_model model_name inspect hash class
-      send public_send freeze instance_variable_set initialize
+      send public_send freeze instance_variable_set initialize initialize_copy raise
       deconstruct deconstruct_keys
       json_value temporal_json_value apply_defaults run_cross_field_validators
       validate_field apply_coercion_policy record_coercion_failure

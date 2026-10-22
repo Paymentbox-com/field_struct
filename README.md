@@ -123,6 +123,7 @@ Person.new(name: 'Alice', address: {street: '1', city: 'NYC'}).address
 
 - Accepts nil / a struct instance / a Hash (`Address.new(hash)` happens automatically).
 - If the nested struct is invalid at assignment time, the parent gets `errors[:address] = ['is invalid']`. Drill into `parent.address.errors` for the per-field breakdown.
+- Validity is computed **on assignment**. Mutating a nested struct (or an array element) in place doesn't refresh the parent's errors; assign the field again, or use `with`, to re-validate. See [USAGE: shallow `valid?` staleness](USAGE.md#validity-is-computed-on-assignment-shallow-valid-staleness).
 - Inner construction errors (e.g. `FieldStruct::UnknownAttributeError` from a nested class with `unknown_attributes :raise`) propagate to the caller rather than being caught by the parent's `coercion_policy`.
 - `as_json` / `to_json` deep-walk nested structures.
 
@@ -181,8 +182,13 @@ class Order < FieldStruct::Base
   required :ship_by,      :date,     format: '%m/%d/%Y'        # explicit strftime/strptime
   required :customer_id,  :uuid,     format: :v4               # v4-only regex
   required :contact,      :email,    format: :strict           # stricter regex preset
+  required :cents,        :integer,  strict: true              # 12.7 refused, not truncated
+  required :starts_at,    :time,     zone: '-06:00'            # zone-less input read at -06:00
+  optional :ids,          :array,    of: :integer, element: {strict: true}  # options for each element
 end
 ```
+
+Two field options work on any type: `sensitive: true` shows `[FILTERED]` in `inspect` / `pp` while readers, `to_h` and `to_json` keep the real value, and error messages never echo input values at all (see [Log safety](USAGE.md#log-safety-error-messages-and-sensitive-fields)).
 
 What each type supports:
 
@@ -190,6 +196,9 @@ What each type supports:
 |---|---|---|---|
 | `:big_decimal` / `:decimal`, `:float` | `round:` | Integer (half up; result keeps the field's type) | — |
 | `:integer` | `base:` | Integer 2..36 (string radix; default 10) | — |
+| `:string` (and subtypes), `:integer` | `strict:` | Boolean — refuse loose input instead of `to_s` / truncating ([Strict coercion](USAGE.md#strict-coercion-strict-true)) | — |
+| `:array` | `element:` | Hash of the element type's own options, applied to each element ([Element options](USAGE.md#element-options-element)) | — |
+| `:time`, `:datetime` | `zone:` | `"UTC"` or `"±HH:MM"` — the offset for zone-less input ([Zones](USAGE.md#zones-zone)) | — |
 | `:boolean` | `values:` | `{truthy:, falsy:}` Hash, or Symbol | `:english_yes_no`, `:english`, `:numeric` |
 | `:date` | `format:` | strftime String, or Symbol | `:iso8601`, `:us`, `:eu` |
 | `:datetime`, `:time` | `format:` | strftime String, or Symbol | `:iso8601`, `:rfc2822`, `:db` |
@@ -309,6 +318,8 @@ end
 
 Strict.new(name: 'Alice', extra: 'x')  # raises FieldStruct::UnknownAttributeError
 ```
+
+Use `:raise` at payment and API boundaries, on every struct that reads input (nested classes don't inherit it from the struct that holds them). Otherwise a misspelled or renamed key is dropped without a word. See [USAGE: Payment and API boundaries](USAGE.md#payment-and-api-boundaries-unknown_attributes-raise).
 
 ### Inheritance
 
@@ -488,6 +499,7 @@ u.valid?           # / u.invalid?
 u.errors           # FieldStruct::Errors  ([] / add / clear / empty? / to_h / messages / full_messages)
 u.attributes       # / u.attribute_names
 u.assign_attributes(name: 'Bob')
+u.with(name: 'Carol')  # a NEW instance with name changed; u untouched (like Data#with)
 u.to_h             # alias of #attributes
 u.as_json          # JSON-ready hash (Date/Time -> ISO-8601, BigDecimal -> string)
 u.to_json          # via Oj
@@ -597,6 +609,22 @@ cp "$(bundle show field_struct)/skills/field-struct/SKILL.md" .claude/skills/fie
 
 Either way it triggers when you ask Claude to define, edit, or debug a `FieldStruct::Base` subclass. The skill points at [`USAGE.md`](USAGE.md) (also shipped) for the exhaustive reference.
 
+## Performance
+
+Indicative numbers from `bundle exec rake bench` (`benchmarks/run.rb`, no dependencies; `BENCH_SECONDS=n` sets the time per case). Ruby 4.0.7 on an Apple M4, FieldStruct 0.12.0 plus the 0.13.0 work on `develop` (through `element:`). Mean time per call. Inputs are already the right types, except that `from_json` parses a string:
+
+| case | µs/call | calls/sec |
+|---|---:|---:|
+| `new` (5 fields) | 8.1 | 124,000 |
+| `new` (5 fields, `strict: true`) | 8.2 | 122,000 |
+| `from_json` (5 fields) | 10.4 | 96,000 |
+| `to_json` (5 fields) | 2.3 | 445,000 |
+| `new` (nested struct) | 9.4 | 106,000 |
+| `new` (array of 100 integers) | 17.1 | 59,000 |
+| `new` (validation-heavy: `email`, `enum:`, `in:`, `format:`, 2 dates, a `validate` block) | 18.7 | 53,000 |
+
+`strict: true` costs nothing measurable. Every assignment runs coercion and validation, so the cost scales with the number of fields assigned rather than with the size of the class. Numbers vary with CPU and Ruby version. Compare runs on one machine.
+
 ## Development
 
 ```bash
@@ -605,6 +633,7 @@ bin/rspec                          # run specs
 COVERAGE=1 bin/rspec               # run specs with SimpleCov
 bundle exec rubocop                # lint
 bundle exec rake                   # all of the above
+bundle exec rake bench             # indicative benchmarks (not part of the default task)
 ```
 
 The plan-of-record for Phase 1 lives in [`docs/origin/plan.md`](docs/origin/plan.md).

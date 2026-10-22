@@ -10,7 +10,7 @@ RSpec.describe 'the packaged gem' do
   end
 
   it 'leaves out contributor-only files' do
-    expect(files.grep(%r{\A(\.claude|CLAUDE\.md|docs/origin/|gemfiles/|Rakefile|rakelib/|Steepfile|\.rubocop|\.yardopts|\.rspec|rbs_collection)}))
+    expect(files.grep(%r{\A(\.claude|CLAUDE\.md|docs/origin/|gemfiles/|benchmarks/|Rakefile|rakelib/|Steepfile|\.rubocop|\.yardopts|\.rspec|rbs_collection)}))
       .to be_empty
   end
 end

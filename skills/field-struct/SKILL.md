@@ -71,6 +71,11 @@ Steps when asked to build one:
    - `round:` → `:float`/`:decimal` (Integer places, half up; keeps the field's type)
    - `base:` → `:integer` (radix 2..36 for strings; default 10, so `"010"` is 10)
    - `values:` → `:boolean` (a `{truthy:, falsy:}` Hash or a preset Symbol)
+   - `strict:` → `:string` (and subtypes) / `:integer` (Boolean — refuse loose input instead of `to_s` / truncating)
+   - `zone:` → `:time`/`:datetime` (`"UTC"` or `"±HH:MM"` for zone-less strings; no IANA names)
+   - `sensitive:` → any type (mask the value in `inspect`)
+   - `element:` → `:array` (a Hash of the element type's own options, e.g.
+     `of: :integer, element: {strict: true}`; a bad element is reported by index)
 6. **Cross-field rules use `validate` + `errors.add(:base, …)`**, run at `valid?`.
    `errors[:base]` is cleared each `valid?`; per-field errors are owned by the setter.
    ```ruby
@@ -83,11 +88,19 @@ Steps when asked to build one:
    apply it forward, `Klass.from_json(str)` reverse-maps. Everything round-trips
    **except `:value`** (no type info to restore). Uses **Oj**, not stdlib JSON.
 8. **Unknown input keys are dropped by default** (`unknown_attributes :ignore`); set
-   `unknown_attributes :raise` on the class to reject them.
+   `unknown_attributes :raise` on the class to reject them. Do this at payment/API
+   boundaries, on **every** struct that reads input: nested classes don't inherit it
+   from the struct that holds them.
 9. **Messages never echo values** (payments data stays out of logs): errors and raised
    errors name the field, expected type and input *class*. `sensitive: true` (any
    type) shows `[FILTERED]` in `inspect`/`pp`; readers, `to_h`, `as_json`/`to_json`
    still return the real value.
+10. **Validity is computed on assignment.** Mutating a nested struct or array element
+    in place (`rec.address.city = nil`, `rec.tags << 5`) doesn't refresh the parent's
+    errors, and an in-place push isn't coerced. Assign the field again (or use
+    `rec.with(address: ...)`) to re-validate.
+11. **Immutable/frozen instances change by copy**: `rec.with(field: value)` returns a
+    new instance; changed fields run the setter pipeline. Shallow, like `dup`.
 
 ## Debugging an invalid instance
 

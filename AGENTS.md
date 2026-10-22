@@ -13,13 +13,14 @@ things most often gotten wrong. (For *contributing to the gem itself*, see
 - **[`README.md`](README.md)** — feature overview.
 - `skills/field-struct/SKILL.md` — the bundled Claude Code skill.
 
-## The five gotchas
+## The six gotchas
 
 1. **Setters are permissive** — `user.age = "30"` is valid (the type coerces). Don't "fix" it.
 2. **`required` ≠ non-nil at runtime** — an invalid instance can hold `nil`. Gate on `valid?`.
 3. **Whitespace-only strings count as missing** for `:string` and its subtypes.
 4. **`:array` needs `of:`; `:union` needs `of: [...]`** (≥2 members).
-5. **Option scoping**: `format:`→string/date-ish, `enum:`→string/symbol, `in:`→numeric/temporal, `round:`→float/decimal, `base:`→integer, `values:`→boolean. A misapplied known option raises at class load and names the types it applies to; an *unknown* option passes through onto the Field untouched (kept for downstream tooling). You don't have to memorize this table — ask the type (next section).
+5. **Option scoping**: `format:`→string/date-ish, `enum:`→string/symbol, `in:`→numeric/temporal, `round:`→float/decimal, `base:`→integer, `strict:`→string-shaped/integer, `zone:`→time/datetime, `values:`→boolean, `element:`→array (a Hash of the element type's options); `sensitive:` works on any type. A misapplied known option raises at class load and names the types it applies to; an *unknown* option passes through onto the Field untouched (kept for downstream tooling). You don't have to memorize this table — ask the type (next section).
+6. **`valid?` is computed on assignment, not on read.** Mutating a nested struct or an array element in place doesn't refresh the parent's errors. Assign the field again (or use `with`) to re-validate. See [USAGE](USAGE.md#validity-is-computed-on-assignment-shallow-valid-staleness).
 
 ## Fast paths
 
@@ -27,3 +28,5 @@ things most often gotten wrong. (For *contributing to the gem itself*, see
 - See a model's shape without reading source: `pp Klass.metadata.to_h` (structured), or `puts Klass.describe` (readable — fields, types, and what each accepts).
 - Ask a type what options it accepts (name, value shape, presets): `FieldStruct.types.lookup(:date).option_schema`.
 - Type your models for Steep/Solargraph: `FieldStruct::RBS.generate(Klass)`.
+- "Update" an immutable or frozen instance: `record.with(field: value)` returns a changed copy.
+- Payment/API input: `unknown_attributes :raise` on every struct that reads it, `strict: true` on money and id fields, `sensitive: true` on card data. See [USAGE](USAGE.md#payment-and-api-boundaries-unknown_attributes-raise).

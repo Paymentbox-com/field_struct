@@ -36,7 +36,7 @@ FieldStruct isn't on RubyGems yet. Add it to your Gemfile from GitHub,
 pinned to a release tag:
 
 ```ruby
-gem 'field_struct', git: 'https://github.com/Paymentbox-com/field_struct', tag: 'v0.12.0'
+gem 'field_struct', git: 'https://github.com/Paymentbox-com/field_struct', tag: 'v0.13.0'
 ```
 
 Requires Ruby 3.0+.
@@ -611,7 +611,7 @@ Either way it triggers when you ask Claude to define, edit, or debug a `FieldStr
 
 ## Performance
 
-Indicative numbers from `bundle exec rake bench` (`benchmarks/run.rb`, no dependencies; `BENCH_SECONDS=n` sets the time per case). Ruby 4.0.7 on an Apple M4, FieldStruct 0.12.0 plus the 0.13.0 work on `develop` (through `element:`). Mean time per call. Inputs are already the right types, except that `from_json` parses a string:
+Indicative numbers from `bundle exec rake bench` (`benchmarks/run.rb`, no dependencies; `BENCH_SECONDS=n` sets the time per case). Ruby 4.0.7 on an Apple M4, FieldStruct 0.13.0. Mean time per call. Inputs are already the right types, except that `from_json` parses a string:
 
 | case | µs/call | calls/sec |
 |---|---:|---:|
@@ -620,7 +620,7 @@ Indicative numbers from `bundle exec rake bench` (`benchmarks/run.rb`, no depend
 | `from_json` (5 fields) | 10.4 | 96,000 |
 | `to_json` (5 fields) | 2.3 | 445,000 |
 | `new` (nested struct) | 9.4 | 106,000 |
-| `new` (array of 100 integers) | 17.1 | 59,000 |
+| `new` (array of 100 integers) | 13.3 | 75,000 |
 | `new` (validation-heavy: `email`, `enum:`, `in:`, `format:`, 2 dates, a `validate` block) | 18.7 | 53,000 |
 
 `strict: true` costs nothing measurable. Every assignment runs coercion and validation, so the cost scales with the number of fields assigned rather than with the size of the class. Numbers vary with CPU and Ruby version. Compare runs on one machine.

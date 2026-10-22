@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-22
+
+Safer input and log safety. Opt-in `strict: true` on `:string` / `:integer`;
+error messages never echo a value and `sensitive: true` masks one in
+`inspect`; `zone:` reads zone-less times at a declared offset; `with(**changes)`
+copies with changes; array fields pass `element:` options to each element.
+Defaults are unchanged except the Breaking-ish items below — message wording,
+`:float` refusing hex strings, the element index in array errors, and `with` /
+`dup` becoming reserved field names.
+
 ### Added
 
 - **`strict: true` on `:string` and `:integer`** (opt-in, per field; defaults unchanged until 1.0). `optional :ref, :string, strict: true` accepts a String, Symbol, Integer or an object responding to `to_str`, and refuses a Hash, Array, boolean, Float/BigDecimal/Rational (whose `to_s` is `"0.12e2"`, `"1/2"`), Complex or any other object with a `TypeError` naming its class — by default those are stored as their `to_s` (`{a: 1}` → `"{a: 1}"`). `optional :cents, :integer, strict: true` accepts an Integer or a numeric equal to one (`12.0` → 12, `BigDecimal("12")`, `Rational(24, 2)`) and refuses `12.7` with an `ArgumentError` instead of truncating to 12; strings follow the default base-10 / `base:` rules unchanged, so `"12.0"` and `"1e3"` stay refused. Strict only narrows: an accepted value becomes exactly what the default would make of it. The string subtypes (`:immutable_string`, `:uuid`, `:url`, `:email`, `:binary`) inherit it. `strict:` must be a Boolean (`ArgumentError` at declaration otherwise) and raises on any other type, naming the types it applies to. See USAGE "Strict coercion".

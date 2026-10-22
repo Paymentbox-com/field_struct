@@ -6,8 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Numeric correctness: a number field holds a finite number of its own type,
-read the same way regardless of how the host process is configured.
+## [0.11.0] - 2026-10-22
+
+Correctness and safer input. A number field holds a finite number of its own
+type, read the same way regardless of how the host process is configured;
+`from_json` reads decimals exactly; input that isn't a Hash, and field names
+`Base` relies on, are refused up front.
 
 ### Breaking-ish (visible behaviour changes)
 
@@ -36,6 +40,22 @@ read the same way regardless of how the host process is configured.
 - **`Scaffold.from_json` output evaluates when keys need renaming.** It emitted `serialize :json, first_name: "firstName"` *before* the field lines, and `serialize` refuses undeclared fields, so the generated class raised `ArgumentError` the moment it was loaded. The mapping now follows the fields. Keys that normalize to the same name (`fooBar` and `foo_bar`, or `errors` and `errors_field`) get distinct fields (`foo_bar2`) instead of one silently overwriting the other.
 - **`from_json` reverse-maps `serialize :json` names for struct members of a `:union`.** It reverse-mapped nested structs and arrays of them, but handed a union's object over with its external keys, so a struct member saw `{"cardNumber" => ...}` instead of `card_number:` and `Payment.from_json(payment.to_json)` came back invalid — breaking the README's round-trip promise. Members are now tried in declared order, as the union's own coercion does, with each struct member reverse-mapping through its own mapping; the first that accepts the object wins.
 - **The field setter treats `RangeError` as a coercion failure.** `FloatDomainError` (one of its subclasses) and Complex-to-real conversion (`Complex(1, 2)` into `:integer` or `:float`) used to raise out of `.new`; they are now handled by `coercion_policy`, including when a custom type raises them.
+
+### Docs
+
+- **README corrections** (#8): `in:` with a Range is a bounds check via `cover?`,
+  and `:iso8601` round-trips as RFC 3339 rather than via `strptime`/`strftime`.
+- **Install from GitHub.** The README installs from a release tag; the gem is
+  not on RubyGems yet.
+
+### Tooling / CI
+
+- **Ruby 4.0 lane and one aggregate `ci` check.** The full battery now also
+  runs on Ruby 4.0, and a `ci` job passes only when every job passed;
+  `main` and `develop` require it.
+- **The packaged gem leaves out contributor-only files** (`.claude/`,
+  `.claude-plugin/`, `CLAUDE.md`, `docs/origin/`, build and lint config).
+- **The commit guard recognizes `git commit` by its command text** (#7).
 
 ## [0.10.0] - 2026-09-03
 

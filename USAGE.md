@@ -388,7 +388,8 @@ RBS for nested/element classes too so `::Address` references resolve. See the RE
   shape (`new([])`, `new("x")`, `assign_attributes(nil)`) raises `ArgumentError`
   naming the class it got.
 - **`dup` / `clone` copy the errors too** — the copy starts with the original's
-  messages but owns them, so changing one never changes the other's `valid?`.
+  messages but owns them, so changing one's top-level fields never changes the
+  other's `valid?`. The copy is shallow: nested structs are shared.
 - Unknown input keys are dropped by default (`unknown_attributes :ignore`); set
   `:raise` to reject them with `UnknownAttributeError`.
 - Uses **Oj** for JSON (`Oj.load`/`Oj.dump`), not the stdlib JSON.

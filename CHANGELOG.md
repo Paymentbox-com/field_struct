@@ -6,7 +6,25 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`rbs_type:` field option.** `optional :scope, :value, rbs_type: '::ActiveRecord::Relation'` makes `FieldStruct::RBS` emit that type for the field's reader and writer instead of the derived one. Signatures only — no effect on coercion or validation. Must be a non-blank String (`ArgumentError` at declaration otherwise); it is not parsed, since `rbs` is not a runtime dependency. Readable as `Field#rbs_type` and shown in `Field#inspect`; kept out of `Field#options`.
+- **`Types::Base#rbs_type` hook.** A custom type can return an RBS expression (`def rbs_type = '::Hash[::Symbol, ::String]'`) for every field of that type. Default `nil` (derive from `ruby_type`). A field's `rbs_type:` wins over it.
+- **`FieldStruct::RBS.type_for(field, nullable: nil) -> String`.** The per-field RBS type, exactly as `generate` emits it, for other generators. `nullable: nil` follows `!field.required?`.
+
+### Changed
+
+**Generated RBS changes for consumers.** Regenerating sigs for your own structs with `FieldStruct::RBS.generate` gives different output, and Steep may report new errors in code that relied on the old `untyped` writers:
+
+- **Writers are typed `(T? value) -> T?`** (were `(untyped value) -> untyped`). The runtime setter accepts `nil` and returns the coerced value. Assigning loose input the type would coerce (`user.age = "30"`) still works in Ruby but is now a Steep error.
+- **Output opens with a comment header** saying the types describe a *valid* instance — an invalid one (unset required field, `:keep_raw` failure holding raw input) can hold other values.
+- **Generic arguments are always present.** A custom type whose `ruby_type` is a bare generic class (`::Hash`, `::Array`, `::Range`) emits `::Hash[untyped, untyped]` and so on, instead of a bare `::Hash`, which `rbs validate` rejects.
+- **Unions render a boolean member as `bool`** (`(::String | bool)`, was `(::String | ::TrueClass | ::FalseClass)`), and a union with a `:value` member collapses to `untyped`.
+- **Optional `:value` fields are `untyped`, not `untyped?`.**
+
 ### Signatures
+
+- **Nil is admitted where the runtime returns it.** `Base#attributes`, `#to_h`, `#as_json` and `#deconstruct_keys` return `::Hash[Symbol, Object?]`, `#deconstruct` `::Array[Object?]`, `Field#options` is `::Hash[Symbol, Object?]` (e.g. `format: nil`), and `Metadata#to_h` is `::Hash[Symbol, ::Hash[Symbol, Object?]]` (`default: nil`, `description: nil`). They claimed non-nil values. No runtime change. Steep report-only count 190 → 189.
 
 - **Core types in `Types` name the core class.** `Types::String#coerce`, `Types::Symbol#coerce`, `Types::Integer#coerce` and `Types::Float#coerce` were typed with bare `String` / `Symbol` / `Integer` / `Float`, which RBS resolves to `FieldStruct::Types::String` etc. inside `module Types`. Their YARD now says `::String` and friends, so the sig says the value is a `::String`, not a type object.
 - **Keyword and rest splats are typed per value.** `**options` on `field` / `required` / `optional` / `Field.new` is `**Object` (was `**::Hash[Symbol, Object]`, which meant every option value had to be a Hash), `serialize`'s `**mapping` is `**(String | Symbol)`, and `validate`'s `*method_names` is `*Symbol` (was `*::Array[Symbol]`). No runtime change. `sigs:untyped` ceiling 215 → 212, sord allowlist 155 → 152.

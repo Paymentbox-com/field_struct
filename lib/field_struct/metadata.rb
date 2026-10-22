@@ -64,7 +64,7 @@ module FieldStruct
     # When a block is given this falls back to +Enumerable#to_h+ (mapping
     # each {Field} to a pair), preserving existing callers.
     #
-    # @return [Hash{Symbol=>Hash{Symbol=>Object}}] field name → schema, or
+    # @return [Hash{Symbol=>Hash{Symbol=>Object, nil}}] field name → schema, or
     #   the block-mapped pairs when a block is supplied
     def to_h(&block)
       return super if block

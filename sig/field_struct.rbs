@@ -471,8 +471,8 @@ module FieldStruct
     # declarations and config flow down the class chain.
     def self.inherited: (untyped subclass) -> untyped
 
-    # _@param_ `attrs` — input values, by symbol or string key
-    def initialize: (?::Hash[(Symbol | String), Object] attrs) -> void
+    # _@param_ `attrs` — input values, by symbol or string key. Anything responding to +to_hash+ (e.g. a permitted +ActionController::Parameters+) is converted first; +nil+ is treated as no input.
+    def initialize: (?(::Hash[(Symbol | String), Object] | _ToHash[untyped, untyped])? attrs) -> void
 
     # Bulk-update declared attributes from a hash. Routes each value
     # through the same setter pipeline used everywhere else — so coercion,
@@ -483,8 +483,8 @@ module FieldStruct
     # in an external naming convention, see {Base.serialize} and
     # {Base.from_json}.
     # 
-    # _@param_ `attrs`
-    def assign_attributes: (::Hash[(Symbol | String), Object] attrs) -> self
+    # _@param_ `attrs` — anything responding to +to_hash+ is converted first
+    def assign_attributes: ((::Hash[(Symbol | String), Object] | _ToHash[untyped, untyped]) attrs) -> self
 
     # _@return_ — a fresh hash of current attribute values
     # 
@@ -587,6 +587,15 @@ module FieldStruct
     #     Math.hypot(x, y)
     #   end
     def deconstruct: () -> ::Array[Object]
+
+    # Ruby hook behind +dup+ / +clone+: give the copy its own {Errors},
+    # seeded with the original's messages, so validating or reassigning
+    # one instance never changes the other's validity.
+    def initialize_copy: (untyped source) -> untyped
+
+    # Return +attrs+ as a Hash, converting via +to_hash+ when it isn't one.
+    # The message names the input's class, never its value.
+    def hash_input!: (untyped attrs, untyped method_label) -> untyped
 
     def json_value: (untyped value, ?untyped field) -> untyped
 
@@ -764,6 +773,10 @@ module FieldStruct
   # clears and rewrites a field's entry on every assignment.
   class Errors
     def initialize: () -> void
+
+    # Ruby hook behind +dup+ / +clone+: copy the message lists too, so
+    # adding to the copy never changes the original.
+    def initialize_copy: (untyped source) -> untyped
 
     # _@param_ `field_name`
     # 

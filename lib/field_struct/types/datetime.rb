@@ -14,13 +14,15 @@ module FieldStruct
     # (strftime via +as_json+).
     class DateTime < Base
       # Native options: a +format:+ strftime/strptime String (or Symbol
-      # preset; see {.presets}) and an +in:+ Array or Range of allowed values.
+      # preset; see {.presets}), an +in:+ Array or Range of allowed values,
+      # and a +zone:+ String (+"UTC"+ or +"±HH:MM"+; see {ZoneOption}).
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.own_option_schema
         {
           format: option(type: [::String, ::Symbol], presets: presets.keys),
-          in: option(type: [::Array, ::Range])
+          in: option(type: [::Array, ::Range]),
+          zone: option(type: [::String])
         }
       end
 
@@ -46,10 +48,14 @@ module FieldStruct
         }
       end
 
-      # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
-      # string at field-declaration time; other forms pass through.
+      # Validate a Symbol +format:+ preset (see {.presets}) and a +zone:+
+      # (see {ZoneOption}) at field-declaration time.
+      #
+      # @param options [::Hash{::Symbol => Object, nil}] the per-field options
+      # @return [::Hash{::Symbol => Object, nil}] the options, unchanged
+      # @raise [ArgumentError] on an unknown preset or an unreadable +zone:+
       def self.resolve_options(options)
-        TimeFormatResolver.call(options, presets)
+        ZoneOption.validate!('DateTime', TimeFormatResolver.call(options, presets))
       end
 
       # Resolve a declared +format:+ (a Symbol preset name or a strftime
@@ -78,19 +84,25 @@ module FieldStruct
       #   TimeWithZone) keeps its instant and offset. Anything else is refused.
       # @param format [::String, nil] strptime/strftime format; +nil+ uses
       #   {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
+      # @param zone [::String, nil] +"UTC"+ or +"±HH:MM"+: the offset for a
+      #   String that names none, and for a +Date+'s midnight. Input carrying
+      #   its own offset keeps it. +nil+ means UTC. See {ZoneOption}.
       # @return [::DateTime, nil]
       # @raise [ArgumentError] when a String cannot be parsed, or the value is
       #   not a String or a temporal object
-      def coerce(value, format: self.class.default_format, **)
+      def coerce(value, format: self.class.default_format, zone: nil, **)
         return nil if value.nil?
 
         fmt = self.class.resolve_format(format)
 
         case value
-        when ::String then parse_string(value, fmt)
+        when ::String then parse_string(value, fmt, zone)
         # ::DateTime before ::Date — DateTime is a subclass of Date.
         when ::DateTime then value
-        when ::Date then ::DateTime.new(value.year, value.mon, value.mday)
+        when ::Date
+          return datetime_from_time(ZoneOption.midnight(value, zone)) if zone
+
+          ::DateTime.new(value.year, value.mon, value.mday)
         # ActiveSupport::TimeWithZone matches here too (AS overrides Time.===)
         # and answers every reader this uses.
         when ::Time then datetime_from_time(value)
@@ -109,9 +121,10 @@ module FieldStruct
 
       # @param value [::String] the raw string
       # @param format [::String, nil] strptime format, when the field declares one
+      # @param zone [::String, nil] the field's +zone:+, if declared
       # @return [::DateTime]
       # @raise [ArgumentError] when the string cannot be read
-      def parse_string(value, format)
+      def parse_string(value, format, zone)
         # Validated first, then handed to the stdlib parser: the checks decide
         # what is ACCEPTABLE, the stdlib still decides what the value IS, so
         # the two can't drift apart. See {TemporalParser} for the three rules.
@@ -122,11 +135,15 @@ module FieldStruct
         end
 
         if format
-          TemporalParser.strptime_parts(value, format)
+          parts = TemporalParser.strptime_parts(value, format)
+          return datetime_from_time(ZoneOption.time_at(value, format, zone)) if zone && ZoneOption.zoneless?(parts)
+
           return ::DateTime.strptime(value, format)
         end
 
-        TemporalParser.parse_parts(value)
+        parts = TemporalParser.parse_parts(value)
+        return datetime_from_time(ZoneOption.time_at(value, nil, zone)) if zone && ZoneOption.zoneless?(parts)
+
         ::DateTime.parse(value)
       end
 

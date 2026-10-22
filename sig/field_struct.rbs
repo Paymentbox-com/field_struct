@@ -1709,7 +1709,8 @@ module FieldStruct
     # (strftime via +as_json+).
     class Time < FieldStruct::Types::Base
       # Native options: a +format:+ strftime/strptime String (or Symbol
-      # preset; see {.presets}) and an +in:+ Array or Range of allowed values.
+      # preset; see {.presets}), an +in:+ Array or Range of allowed values,
+      # and a +zone:+ String (+"UTC"+ or +"±HH:MM"+; see {ZoneOption}).
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       def self.default_format: () -> ::String?
@@ -1722,8 +1723,12 @@ module FieldStruct
       # presets stay strftime-based.
       def self.presets: () -> ::Hash[::Symbol, Object]
 
-      # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
-      # string at field-declaration time; other forms pass through.
+      # Validate a Symbol +format:+ preset (see {.presets}) and a +zone:+
+      # (see {ZoneOption}) at field-declaration time.
+      # 
+      # _@param_ `options` — the per-field options
+      # 
+      # _@return_ — the options, unchanged
       def self.resolve_options: (::Hash[::Symbol, Object?] options) -> ::Hash[::Symbol, Object?]
 
       # Resolve a declared +format:+ (a Symbol preset name or a strftime
@@ -1754,7 +1759,9 @@ module FieldStruct
       # _@param_ `value` — +nil+ → +nil+; a String is read through +strptime+ when a +format:+ is set and +Time.parse+ otherwise; a +Time+ passes through; a +DateTime+, +Date+ or Time-like value (ActiveSupport's TimeWithZone) is converted. Anything else is refused.
       # 
       # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      def coerce: ((::String | ::Time | ::Date | ::DateTime)? value, ?format: ::String?) -> ::Time?
+      # 
+      # _@param_ `zone` — +"UTC"+ or +"±HH:MM"+: the offset for a String that names none, and for a +Date+'s midnight. Input carrying its own offset keeps it. +nil+ means the process zone. See {ZoneOption}.
+      def coerce: ((::String | ::Time | ::Date | ::DateTime)? value, ?format: ::String?, ?zone: ::String?) -> ::Time?
 
       # _@return_ — the top-level +::Time+ class
       def ruby_type: () -> Class
@@ -1762,7 +1769,9 @@ module FieldStruct
       # _@param_ `value` — the raw string
       # 
       # _@param_ `format` — strptime format, when the field declares one
-      def parse_string: (::String value, ::String? format) -> ::Time
+      # 
+      # _@param_ `zone` — the field's +zone:+, if declared
+      def parse_string: (::String value, ::String? format, ::String? zone) -> ::Time
 
       # _@param_ `value` — the value to convert
       # 
@@ -2185,7 +2194,8 @@ module FieldStruct
     # (strftime via +as_json+).
     class DateTime < FieldStruct::Types::Base
       # Native options: a +format:+ strftime/strptime String (or Symbol
-      # preset; see {.presets}) and an +in:+ Array or Range of allowed values.
+      # preset; see {.presets}), an +in:+ Array or Range of allowed values,
+      # and a +zone:+ String (+"UTC"+ or +"±HH:MM"+; see {ZoneOption}).
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@return_ — field-level strftime/strptime format; +nil+
@@ -2200,8 +2210,12 @@ module FieldStruct
       # presets stay strftime-based.
       def self.presets: () -> ::Hash[::Symbol, Object]
 
-      # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
-      # string at field-declaration time; other forms pass through.
+      # Validate a Symbol +format:+ preset (see {.presets}) and a +zone:+
+      # (see {ZoneOption}) at field-declaration time.
+      # 
+      # _@param_ `options` — the per-field options
+      # 
+      # _@return_ — the options, unchanged
       def self.resolve_options: (::Hash[::Symbol, Object?] options) -> ::Hash[::Symbol, Object?]
 
       # Resolve a declared +format:+ (a Symbol preset name or a strftime
@@ -2224,7 +2238,9 @@ module FieldStruct
       # _@param_ `value` — +nil+ → +nil+; a String is read through +strptime+ when a +format:+ is set and +DateTime.parse+ otherwise; a +DateTime+ passes through; a +Date+ becomes midnight and a +Time+ (including ActiveSupport's TimeWithZone) keeps its instant and offset. Anything else is refused.
       # 
       # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      def coerce: ((::String | ::DateTime | ::Date | ::Time)? value, ?format: ::String?) -> ::DateTime?
+      # 
+      # _@param_ `zone` — +"UTC"+ or +"±HH:MM"+: the offset for a String that names none, and for a +Date+'s midnight. Input carrying its own offset keeps it. +nil+ means UTC. See {ZoneOption}.
+      def coerce: ((::String | ::DateTime | ::Date | ::Time)? value, ?format: ::String?, ?zone: ::String?) -> ::DateTime?
 
       # _@return_ — the top-level +::DateTime+ class
       def ruby_type: () -> Class
@@ -2232,7 +2248,9 @@ module FieldStruct
       # _@param_ `value` — the raw string
       # 
       # _@param_ `format` — strptime format, when the field declares one
-      def parse_string: (::String value, ::String? format) -> ::DateTime
+      # 
+      # _@param_ `zone` — the field's +zone:+, if declared
+      def parse_string: (::String value, ::String? format, ::String? zone) -> ::DateTime
 
       # _@param_ `value` — the value to convert
       # 
@@ -2263,6 +2281,73 @@ module FieldStruct
 
       # _@param_ `value` — a value that is neither a BigDecimal nor a Float
       def parse: (Object value) -> ::BigDecimal
+    end
+
+    # The +zone:+ option shared by {Time} and {DateTime}.
+    # 
+    # A zone-less string (+"2026-10-22 10:00"+) names a wall-clock time, not an
+    # instant: by default +:time+ reads it in the *process* zone and +:datetime+
+    # in UTC, so the same input meant different instants on different servers.
+    # +zone:+ supplies the missing offset, so it means one instant everywhere.
+    # 
+    # It only fills in an offset that is MISSING. A string with an offset, a
+    # +Time+, a +DateTime+ (and ActiveSupport's TimeWithZone) keep theirs; a
+    # +Date+, which has none, becomes midnight in the zone.
+    # 
+    # Accepted values are +"UTC"+ and fixed offsets +"±HH:MM"+. IANA names
+    # (+"America/Denver"+) are refused: the stdlib has no time zone database,
+    # and accepting them only when a host happens to load ActiveSupport would
+    # make a declaration valid in one process and invalid in another
+    # (invariant 7). A DST-aware zone is a different contract — a per-instant
+    # offset — and is left for a separate option.
+    module ZoneOption
+      OFFSET: ::Regexp
+
+      # Refuse a +zone:+ value FieldStruct cannot read, at declaration. A
+      # non-String is left for the option-shape check to report.
+      # 
+      # _@param_ `type_name` — the type's short name, for the message
+      # 
+      # _@param_ `options` — the per-field options
+      # 
+      # _@return_ — the options, unchanged
+      def self.validate!: (::String type_name, ::Hash[::Symbol, Object?] options) -> ::Hash[::Symbol, Object?]
+
+      # _@param_ `zone` — a declared +zone:+
+      # 
+      # _@return_ — seconds east of UTC, or +nil+ when +zone+ is
+      # not a value {.validate!} accepts
+      def self.offset_seconds: (::String zone) -> ::Integer?
+
+      # Whether parsed fragments leave the offset to +zone:+.
+      # 
+      # _@param_ `parts` — fragments from +Date._parse+ or +Date._strptime+
+      # 
+      # _@return_ — +true+ when the string named no offset at all
+      def self.zoneless?: (::Hash[::Symbol, Object] parts) -> bool
+
+      # Read a zone-less String as a wall-clock time at +zone+'s offset.
+      # 
+      # _@param_ `value` — a string {.zoneless?} accepted
+      # 
+      # _@param_ `format` — a resolved strptime format, or +nil+ for the no-format path (which has already required a whole day)
+      # 
+      # _@param_ `zone` — a declared +zone:+
+      # 
+      # _@return_ — at +zone+'s offset (+utc?+ for +"UTC"+)
+      def self.time_at: (::String value, ::String? format, ::String zone) -> ::Time
+
+      # _@param_ `value` — a plain Date
+      # 
+      # _@param_ `zone` — a declared +zone:+
+      # 
+      # _@return_ — midnight at +zone+'s offset
+      def self.midnight: (::Date value, ::String zone) -> ::Time
+
+      # _@param_ `seconds` — seconds east of UTC
+      # 
+      # _@return_ — +"+HH:MM"+ / +"-HH:MM"+
+      def self.offset_text: (::Integer seconds) -> ::String
     end
 
     # RFC 3339 — the profile of ISO 8601 that "ISO-8601" means in an API

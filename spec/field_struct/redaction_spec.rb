@@ -37,8 +37,10 @@ RSpec.describe 'Error messages never echo input values' do
     FieldStruct::Types::Integer => [{strict: true}, {base: 16}],
     FieldStruct::Types::Boolean => [{values: :english}],
     FieldStruct::Types::Date => [{format: :iso8601}, {format: :us}, {format: '%Y-%m-%d'}],
-    FieldStruct::Types::Time => [{format: :iso8601}, {format: :rfc2822}, {format: :db}, {format: '%H:%M:%S'}],
-    FieldStruct::Types::DateTime => [{format: :iso8601}, {format: :rfc2822}, {format: :db}]
+    FieldStruct::Types::Time => [{format: :iso8601}, {format: :rfc2822}, {format: :db}, {format: '%H:%M:%S'},
+                                 {zone: 'UTC'}, {zone: '-06:00', format: :db}, {zone: '+09:00', format: '%H:%M:%S'}],
+    FieldStruct::Types::DateTime => [{format: :iso8601}, {format: :rfc2822}, {format: :db},
+                                     {zone: 'UTC'}, {zone: '-06:00', format: :db}]
   }.freeze
 
   nested = Class.new(FieldStruct::Base) do

@@ -119,8 +119,10 @@ Boolean presets: `:english_yes_no`/`:english` (`true yes y on 1` / `false no n o
   Floats still truncate; `base:` only affects strings.
 - **NaN and ±Infinity are never valid.** `:integer`, `:float` and `:decimal` refuse
   them — as a Float, a BigDecimal, a String (`"NaN"`, `"Infinity"`) or JSON `1e400` —
-  as an ordinary coercion failure under the field's `coercion_policy`. Messages name
-  the input class, never the value.
+  as an ordinary coercion failure under the field's `coercion_policy`. A `:union`
+  refuses a non-finite Float/BigDecimal outright rather than letting a `:string`
+  member store `"NaN"`. The numeric types' messages name the input class, never the
+  value (a union's no-match error and `coercion_policy :raise` still echo it).
 - **`round:` keeps the field's type and rounds half up** (ties away from zero).
   `round: 0` returns a `Float` / `BigDecimal`, not an Integer, and `:decimal`
   ignores the process-global `BigDecimal.mode` — a host that sets banker's rounding

@@ -104,26 +104,110 @@ RSpec.describe FieldStruct::Base, 'non-finite numeric input' do
     end
   end
 
-  describe 'a custom type that raises FloatDomainError' do
-    it 'is handled by the coercion policy like any coercion failure' do
-      domain_type = Class.new(FieldStruct::Types::Base) do
-        def coerce(value, **)
-          value.to_f.to_i # Float::INFINITY.to_i raises FloatDomainError
-        end
-
-        def ruby_type
-          Integer
-        end
+  describe 'a union with a :string member' do
+    let(:union_klass) do
+      Class.new(described_class) do
+        optional :i, :union, of: %i[integer string]
+        optional :d, :union, of: %i[decimal string]
+        optional :s, :union, of: %i[string integer]
       end
-      registry = FieldStruct.new_registry { register :domainish, domain_type }
-      ns = Module.new
-      ns.define_singleton_method(:field_types) { registry }
-      stub_const('NonFiniteNs', ns)
-      record = Class.new(described_class)
-      stub_const('NonFiniteNs::Record', record)
-      record.class_eval { optional :v, :domainish }
+    end
 
-      expect(record.new(v: Float::INFINITY).errors[:v]).to include(/could not be coerced/)
+    it 'refuses Float::NAN rather than falling through to "NaN"' do
+      instance = union_klass.new(i: Float::NAN)
+      expect(instance).not_to be_valid
+      expect(instance.errors[:i]).to include(/could not be coerced/)
+    end
+
+    it 'refuses Float::INFINITY rather than falling through to "Infinity"' do
+      expect(union_klass.new(d: Float::INFINITY).errors[:d]).to include(/could not be coerced/)
+    end
+
+    it 'refuses a non-finite BigDecimal' do
+      expect(union_klass.new(i: BigDecimal('NaN')).errors[:i]).to include(/could not be coerced/)
+    end
+
+    it 'refuses JSON 1e400' do
+      instance = union_klass.from_json('{"i": 1e400}')
+      expect(instance).not_to be_valid
+      expect(instance.errors[:i]).to include(/could not be coerced/)
+    end
+
+    it 'refuses a non-finite number even when :string is the first member' do
+      expect(union_klass.new(s: -Float::INFINITY).errors[:s]).to include(/could not be coerced/)
+    end
+
+    it 'names the class in the message, never the value' do
+      message = union_klass.new(i: Float::NAN).errors[:i].first
+      expect(message).to include('Float')
+      expect(message).not_to include('NaN')
+    end
+
+    it 'still lets a finite Float through to its members' do
+      expect(union_klass.new(i: 3.9).i).to eq(3)
+    end
+  end
+
+  describe 'a Complex value' do
+    it 'records a coercion error on an :integer field instead of raising' do
+      expect(klass.new(n: Complex(1, 2)).errors[:n]).to include(/could not be coerced/)
+    end
+
+    it 'records a coercion error on a :float field instead of raising' do
+      expect(klass.new(f: Complex(1, 2)).errors[:f]).to include(/could not be coerced/)
+    end
+
+    it 'names the class in the message, never the value' do
+      [klass.new(n: Complex(1, 2)).errors[:n].first, klass.new(f: Complex(1, 2)).errors[:f].first].each do |message|
+        expect(message).to include('Complex')
+        expect(message).not_to include('1+2i')
+      end
+    end
+  end
+
+  describe 'messages from failed numeric parsing' do
+    it ':float names the class, never the value, for an unparseable String' do
+      %w[NaN Infinity abc].each do |raw|
+        message = klass.new(f: raw).errors[:f].first
+        expect(message).to include('String')
+        expect(message).not_to include(raw)
+      end
+    end
+
+    it ':decimal names the class, never the value, for an unparseable String' do
+      message = klass.new(d: 'abc').errors[:d].first
+      expect(message).to include('String')
+      expect(message).not_to include('abc')
+    end
+
+    it ':decimal names the class, never the value, for a Rational' do
+      instance = klass.new(d: Rational(1, 3))
+      expect(instance.errors[:d]).to include(/could not be coerced/)
+      expect(instance.errors[:d].first).to include('Rational')
+      expect(instance.errors[:d].first).not_to include('1/3')
+    end
+  end
+
+  describe 'a custom type that raises a RangeError' do
+    [
+      ['FloatDomainError', ->(value) { value.to_f.to_i }],
+      ['plain RangeError', ->(_value) { raise RangeError, 'out of range' }]
+    ].each do |label, body|
+      it "handles a #{label} through the coercion policy" do
+        range_type = Class.new(FieldStruct::Types::Base) do
+          define_method(:coerce) { |value, **| body.call(value) }
+          define_method(:ruby_type) { Integer }
+        end
+        registry = FieldStruct.new_registry { register :rangeish, range_type }
+        ns = Module.new
+        ns.define_singleton_method(:field_types) { registry }
+        stub_const('NonFiniteNs', ns)
+        record = Class.new(described_class)
+        stub_const('NonFiniteNs::Record', record)
+        record.class_eval { optional :v, :rangeish }
+
+        expect(record.new(v: Float::INFINITY).errors[:v]).to include(/could not be coerced/)
+      end
     end
   end
 end

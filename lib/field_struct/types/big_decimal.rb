@@ -35,7 +35,8 @@ module FieldStruct
       #   away from zero) whatever the global +BigDecimal.mode+; +nil+ leaves
       #   the value unrounded. The result is a BigDecimal even at +round: 0+.
       # @return [::BigDecimal, nil]
-      # @raise [ArgumentError] when a string cannot be parsed, or the value
+      # @raise [ArgumentError] when a value's string form cannot be parsed
+      #   (e.g. a non-numeric String, or a Rational's "1/3"), or the value
       #   is NaN or ±Infinity (as a Float, a BigDecimal, or a String like "NaN")
       def coerce(value, round: self.class.default_round, **)
         return nil if value.nil?
@@ -45,7 +46,7 @@ module FieldStruct
                  elsif value.is_a?(::Float)
                    ::Kernel.BigDecimal(value, ::Float::DIG)
                  else
-                   ::Kernel.BigDecimal(value.to_s)
+                   parse(value)
                  end
         # The class, never the value — see Types::Time#coerce.
         raise ArgumentError, "BigDecimal fields expect a finite number, got a non-finite #{value.class}" unless result.finite?
@@ -59,6 +60,18 @@ module FieldStruct
       # @return [Class] the top-level +::BigDecimal+ class
       def ruby_type
         ::BigDecimal
+      end
+
+      private
+
+      # @param value [Object] a value that is neither a BigDecimal nor a Float
+      # @return [::BigDecimal]
+      # @raise [ArgumentError] when its string form is not a number; the
+      #   message names the class, never the value (Kernel's echoes it)
+      def parse(value)
+        ::Kernel.BigDecimal(value.to_s)
+      rescue ::ArgumentError
+        raise ArgumentError, "BigDecimal fields could not read a #{value.class} as a number"
       end
     end
   end

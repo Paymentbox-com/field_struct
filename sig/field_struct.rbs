@@ -1476,6 +1476,9 @@ module FieldStruct
 
       # _@return_ — the top-level +::Float+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value` — a non-Float value
+      def parse: (Object value) -> ::Float
     end
 
     # Union type — a value that may be any of several types. Each
@@ -1814,6 +1817,9 @@ module FieldStruct
 
       # _@return_ — the top-level +::BigDecimal+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value` — a value that is neither a BigDecimal nor a Float
+      def parse: (Object value) -> ::BigDecimal
     end
 
     # RFC 3339 — the profile of ISO 8601 that "ISO-8601" means in an API

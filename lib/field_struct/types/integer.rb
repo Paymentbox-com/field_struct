@@ -49,7 +49,8 @@ module FieldStruct
       #   means 10
       # @return [Integer, nil] +nil+ for +nil+ input, otherwise the parsed integer
       # @raise [ArgumentError, TypeError] when the value cannot be coerced,
-      #   including a NaN or ±Infinity Numeric (Float, BigDecimal)
+      #   including a NaN or ±Infinity Numeric (Float, BigDecimal) and a
+      #   Complex with an imaginary part
       def coerce(value, base: 10, **)
         return nil if value.nil?
         return value if value.is_a?(::Integer)
@@ -59,7 +60,12 @@ module FieldStruct
           raise ArgumentError, "Integer fields expect a finite number, got a non-finite #{value.class}"
         end
 
-        ::Kernel.Integer(value)
+        begin
+          ::Kernel.Integer(value)
+        rescue ::RangeError
+          # A Complex with an imaginary part; Kernel's message echoes the value.
+          raise ArgumentError, "Integer fields could not read a #{value.class} as a number"
+        end
       end
 
       # @return [Class] the top-level +::Integer+ class

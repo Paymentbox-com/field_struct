@@ -14,7 +14,9 @@ read the same way regardless of how the host process is configured.
 - **`:integer` strings parse in base 10.** `Kernel#Integer` with no radix honours Ruby literal prefixes, so `"010"` became 8 and `"0x1A"` / `"0b11"` were accepted as hex and binary. Now `"010"` is 10, `"007"` is 7, and prefixed strings are refused. Whitespace and digit underscores still parse (`" 42 "`, `"1_000"`). Floats still truncate; Integers pass through.
 - **`round: 0` returns a `BigDecimal` / `Float`, not an `Integer`.** `:decimal` and `:float` fields with `round: 0` used to hold an Integer; they now keep the field's type (`BigDecimal('4')`, `4.0`).
 - **`:decimal` rounding ignores the global `BigDecimal.mode`.** It followed the process-wide rounding mode, so a host calling `BigDecimal.mode(BigDecimal::ROUND_MODE, :banker)` turned `12.345` at `round: 2` into `12.34`. Rounding is now pinned half up (ties away from zero) per call, for `:float` too.
-- **NaN and ±Infinity are refused.** `:float` and `:decimal` stored them as valid values (`:decimal` accepted `"NaN"` and emitted `"NaN"` in JSON); `:integer` raised `FloatDomainError` out of `.new` and `from_json('{"n": 1e400}')`. All three now treat a non-finite value — Float, BigDecimal, String or JSON `1e400` — as an ordinary coercion failure under the field's `coercion_policy`, with a message that names the input class and never echoes the value.
+- **NaN and ±Infinity are refused.** `:float` and `:decimal` stored them as valid values (`:decimal` accepted `"NaN"` and emitted `"NaN"` in JSON); `:integer` raised `FloatDomainError` out of `.new` and `from_json('{"n": 1e400}')`. All three now treat a non-finite value — Float, BigDecimal, String or JSON `1e400` — as an ordinary coercion failure under the field's `coercion_policy`. A `:union` refuses a non-finite Float or BigDecimal outright, before any member sees it, so `of: [:integer, :string]` no longer falls through to storing `"NaN"` / `"Infinity"` as a valid String.
+- **`:integer`, `:float` and `:decimal` coercion messages name the input class, never the value.** That covers the new non-finite refusals and the parse failures these types re-raise from `Kernel#Integer` / `#Float` / `#BigDecimal`, whose own messages echoed the input (`invalid value for Float(): "NaN"`, a Rational's `"1/3"`). It is not yet true everywhere: the field error a `:union` records when no member matches, and the `CoercionError` raised under `coercion_policy :raise`, still include the raw value.
+- **`base:` is now a reserved option name, like `round:`.** FieldStruct treats every option some registered type declares as its own. So a custom type that reads `base:` from its `coerce` kwargs without declaring it in `own_option_schema` used to receive it as a pass-through option (`optional :x, :my_type, base: 16` worked), and now raises at declaration: `base: option does not apply to MyType fields. It applies to: Integer.` That is how `round:` already behaves. The fix is to declare it: `def self.own_option_schema = {base: option(type: [::Integer])}`. For the same reason, a foreign `base:` on any other built-in type (e.g. `optional :code, :string, base: 16`, kept as metadata for downstream tooling) now raises instead of being stored on the Field.
 
 ### Added
 
@@ -22,7 +24,7 @@ read the same way regardless of how the host process is configured.
 
 ### Fixed
 
-- **The field setter treats `FloatDomainError` as a coercion failure**, so a custom type that hits one is handled by `coercion_policy` instead of raising out of `.new`.
+- **The field setter treats `RangeError` as a coercion failure.** `FloatDomainError` (one of its subclasses) and Complex-to-real conversion (`Complex(1, 2)` into `:integer` or `:float`) used to raise out of `.new`; they are now handled by `coercion_policy`, including when a custom type raises them.
 
 ## [0.10.0] - 2026-09-03
 

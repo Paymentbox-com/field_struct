@@ -75,6 +75,42 @@ RSpec.describe 'field option validation' do
       end
     end
 
+    # base: is a reserved FieldStruct option exactly like round:. A custom
+    # type that reads either one must declare it in own_option_schema.
+    context 'with a custom type' do
+      def define_record(type_class, **options)
+        registry = FieldStruct.new_registry { register :custom, type_class }
+        ns = Module.new
+        ns.define_singleton_method(:field_types) { registry }
+        stub_const('BaseOptionNs', ns)
+        record = Class.new(FieldStruct::Base)
+        stub_const('BaseOptionNs::Record', record)
+        record.class_eval { optional :x, :custom, **options }
+        record
+      end
+
+      let(:reader) do
+        Class.new(FieldStruct::Types::Base) do
+          def coerce(value, base: 10, round: nil, **) = value.to_s.to_i(base) + (round || 0)
+          def ruby_type = Integer
+        end
+      end
+
+      it 'refuses an undeclared base: just as it refuses an undeclared round:' do
+        expect { define_record(reader, base: 16) }
+          .to raise_error(ArgumentError, /base: option does not apply to .*applies to: .*Integer/)
+        expect { define_record(reader, round: 2) }
+          .to raise_error(ArgumentError, /round: option does not apply to .*applies to: .*Float/)
+      end
+
+      it 'accepts base: once the type declares it in own_option_schema' do
+        declaring = Class.new(reader) do
+          def self.own_option_schema = {base: option(type: [Integer])}
+        end
+        expect(define_record(declaring, base: 16).new(x: 'ff').x).to eq(255)
+      end
+    end
+
     it 'is refused on a non-integer type, naming :integer' do
       expect do
         Class.new(FieldStruct::Base) { field :code, :string, base: 16 }

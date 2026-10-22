@@ -1808,8 +1808,12 @@ module FieldStruct
     end
 
     # Float type. Coerces via +Kernel#Float+, which parses numeric strings
-    # strictly and rejects anything non-numeric.
+    # strictly and rejects anything non-numeric. Strings are base 10, as for
+    # {Types::Integer}: a hex string like "0x1A", which +Kernel#Float+ would
+    # read as 26.0, is refused.
     class Float < FieldStruct::Types::Base
+      HEX_PREFIX: ::Regexp
+
       # Native options: a +round:+ Integer precision and an +in:+ Array or
       # Range of allowed values.
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
@@ -1817,7 +1821,7 @@ module FieldStruct
       # _@return_ — field-level rounding precision; +nil+ disables.
       def self.default_round: () -> ::Integer?
 
-      # _@param_ `value` — +nil+ → +nil+; everything else flows through +Kernel#Float+ — strict on string parsing, rejects non-numeric strings, Symbols, Booleans, Arrays.
+      # _@param_ `value` — +nil+ → +nil+; everything else flows through +Kernel#Float+ — strict on string parsing, rejects non-numeric strings, Symbols, Booleans, Arrays, and hex strings ("0x1A").
       # 
       # _@param_ `round` — decimal places, rounding half up (ties away from zero); +nil+ leaves the value unrounded. The result is a Float even at +round: 0+.
       # 
@@ -1968,17 +1972,22 @@ module FieldStruct
     end
 
     # String type. Coerces any non-nil value via +to_s+; treats nil, empty,
-    # and whitespace-only strings as missing.
+    # and whitespace-only strings as missing. A field declared +strict: true+
+    # accepts only scalars (String, Symbol, a finite real Numeric) and objects
+    # responding to +to_str+, so a Hash or Array is refused rather than stored
+    # as its +inspect+ text.
     class String < FieldStruct::Types::Base
       # Native options: a +format:+ Regexp (or Symbol preset, used by the
-      # +:uuid+ / +:url+ / +:email+ subtypes) and an +enum:+ Array of
-      # allowed values.
+      # +:uuid+ / +:url+ / +:email+ subtypes), an +enum:+ Array of
+      # allowed values, and a +strict:+ Boolean.
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@param_ `value` — anything stringable (everything in Ruby responds to +to_s+); +nil+ stays +nil+
       # 
+      # _@param_ `strict` — when true, refuse anything but a String, Symbol, finite real Numeric or +to_str+ object. Strict never changes what an accepted value becomes — it is still +value.to_s+.
+      # 
       # _@return_ — +nil+ when input is +nil+, otherwise +value.to_s+
-      def coerce: (_ToS? value) -> ::String?
+      def coerce: (_ToS? value, ?strict: bool?) -> ::String?
 
       # Missing if nil, empty, or whitespace-only.
       # 
@@ -1987,6 +1996,9 @@ module FieldStruct
 
       # _@return_ — the top-level +::String+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value` — a non-nil value
+      def refuse_non_scalar!: (Object value) -> void
     end
 
     # Symbol type. Accepts an existing +Symbol+ or a +String+. Anything else
@@ -2058,13 +2070,15 @@ module FieldStruct
     # +base:+, so "010" is ten (not octal eight) and "0x1A" is refused rather
     # than read as hex. Float-shaped strings like "3.14" raise rather than
     # silently truncate. Float numerics, by contrast, are truncated — that
-    # matches +Kernel#Integer+'s own behavior on numeric input.
+    # matches +Kernel#Integer+'s own behavior on numeric input — unless the
+    # field declares +strict: true+, which refuses any non-integral value.
     class Integer < FieldStruct::Types::Base
       BASES: ::Range[::Integer]
       MAX_DECIMAL_DIGITS: ::Integer
 
-      # Native options: an +in:+ Array or Range of allowed values, and a
-      # +base:+ Integer radix (2..36) for string input.
+      # Native options: an +in:+ Array or Range of allowed values, a
+      # +base:+ Integer radix (2..36) for string input, and a +strict:+
+      # Boolean.
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # Refuse a +base:+ outside 2..36 at field-declaration time. A
@@ -2079,14 +2093,21 @@ module FieldStruct
       # 
       # _@param_ `base` — radix (2..36) for String input; +nil+ means 10
       # 
+      # _@param_ `strict` — when true, refuse a value that is not a whole number (+12.7+, a +Time+) instead of truncating it; an integral one (+12.0+) still becomes its Integer
+      # 
       # _@return_ — +nil+ for +nil+ input, otherwise the parsed integer
-      def coerce: ((::Integer | Numeric | ::String)? value, ?base: ::Integer?) -> ::Integer?
+      def coerce: ((::Integer | Numeric | ::String)? value, ?base: ::Integer?, ?strict: bool?) -> ::Integer?
 
       # _@return_ — the top-level +::Integer+ class
       def ruby_type: () -> Class
 
       # _@param_ `value`
       def refuse_huge_decimal!: (Object value) -> void
+
+      # _@param_ `value` — the input, already read by +Kernel#Integer+
+      # 
+      # _@param_ `whole` — what +Kernel#Integer+ made of it
+      def refuse_inexact!: (Object value, ::Integer whole) -> void
 
       # _@param_ `value`
       # 

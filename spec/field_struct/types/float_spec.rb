@@ -43,6 +43,35 @@ RSpec.describe FieldStruct::Types::Float do
     end
   end
 
+  describe 'parsing a string in base 10 only' do
+    it 'refuses a hex prefix, as :integer does' do
+      %w[0x1A 0X1a -0x1A +0x10 0x1p3].each do |string|
+        expect { type.coerce(string) }.to raise_error(ArgumentError)
+      end
+      expect { type.coerce(' 0x1A ') }.to raise_error(ArgumentError)
+    end
+
+    it 'still refuses binary and octal prefixes' do
+      %w[0b101 0o17 0B1 0O7].each do |string|
+        expect { type.coerce(string) }.to raise_error(ArgumentError)
+      end
+    end
+
+    it 'keeps every other Kernel#Float string form' do
+      {'1_000.5' => 1000.5, ' 2.5 ' => 2.5, '1e3' => 1000.0, '017' => 17.0,
+       '.5' => 0.5, '5.' => 5.0, '-0.25' => -0.25, '0' => 0.0}.each do |string, expected|
+        expect(type.coerce(string)).to eq(expected)
+      end
+    end
+
+    it 'names the class in the message, never the value' do
+      expect { type.coerce('0x1A') }.to raise_error(ArgumentError, /base-10/) { |error|
+        expect(error.message).to include('String')
+        expect(error.message).not_to include('0x1A')
+      }
+    end
+  end
+
   describe 'reporting missing values' do
     context 'when value is nil' do
       it 'is missing' do

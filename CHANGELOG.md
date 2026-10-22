@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`strict: true` on `:string` and `:integer`** (opt-in, per field; defaults unchanged until 1.0). `optional :ref, :string, strict: true` accepts a String, Symbol, finite real Numeric or an object responding to `to_str`, and refuses a Hash, Array, boolean, Complex or any other object with a `TypeError` naming its class — by default those are stored as their `to_s` (`{a: 1}` → `"{a: 1}"`). `optional :cents, :integer, strict: true` accepts an Integer or a numeric equal to one (`12.0` → 12, `BigDecimal("12")`, `Rational(24, 2)`) and refuses `12.7` with an `ArgumentError` instead of truncating to 12; strings follow the default base-10 / `base:` rules unchanged, so `"12.0"` and `"1e3"` stay refused. Strict only narrows: an accepted value becomes exactly what the default would make of it. The string subtypes (`:immutable_string`, `:uuid`, `:url`, `:email`, `:binary`) inherit it. `strict:` must be a Boolean (`ArgumentError` at declaration otherwise) and raises on any other type, naming the types it applies to. See USAGE "Strict coercion".
+
+### Breaking-ish (visible behaviour changes)
+
+- **`:float` refuses hex strings.** `"0x1A"` was read as 26.0 (`Kernel.Float` accepts hex) while `:integer` has refused it since 0.11; both are now base 10. A hex string — with or without sign or surrounding whitespace, including hex-float `"0x1p3"` — is an ordinary coercion failure (`Float fields expect a base-10 number, got a String that is not one`). Binary/octal prefixes were already refused; `"1_000.5"`, `" 2.5 "`, `"1e3"`, `".5"` and `"017"` (→ 17.0) read as before.
+
 ## [0.12.0] - 2026-10-22
 
 Valid, guarded RBS. The gem's own signatures go from 215 `untyped` to 5 and

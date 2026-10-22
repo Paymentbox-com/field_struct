@@ -32,20 +32,20 @@ as `nil`). "Missing" is what counts as absent for presence checks.
 
 | Name | Ruby type | Coerces from | Type options | Missing when |
 |------|-----------|--------------|--------------|--------------|
-| `:string` | `String` | `value.to_s` | `format:`, `enum:` | nil / empty / whitespace-only |
-| `:immutable_string` | `String` (frozen) | `to_s`, then frozen dup | `format:`, `enum:` | nil / empty / whitespace |
-| `:integer` | `Integer` | strings in base 10 (`"010"` → 10; `"0x1A"`/`"3.14"` raise), or `base:`; floats truncate | `in:`, `base:` | nil |
-| `:float` | `Float` | `Kernel.Float` (strict; NaN/±Infinity refused) | `round:`, `in:` | nil |
+| `:string` | `String` | `value.to_s` (`strict: true`: scalars and `to_str` only) | `format:`, `enum:`, `strict:` | nil / empty / whitespace-only |
+| `:immutable_string` | `String` (frozen) | `to_s`, then frozen dup | `format:`, `enum:`, `strict:` | nil / empty / whitespace |
+| `:integer` | `Integer` | strings in base 10 (`"010"` → 10; `"0x1A"`/`"3.14"` raise), or `base:`; floats truncate (`strict: true`: refused unless whole) | `in:`, `base:`, `strict:` | nil |
+| `:float` | `Float` | `Kernel.Float` (strict; base-10 strings only — `"0x1A"` raises; NaN/±Infinity refused) | `round:`, `in:` | nil |
 | `:big_decimal` (alias `:decimal`) | `BigDecimal` | BigDecimal/Integer/Float/numeric string (NaN/±Infinity refused) | `round:`, `in:` | nil |
 | `:boolean` | `true`/`false` | `true`/`false`, `1`/`0`, truthy/falsy strings | `values:` | nil |
 | `:date` | `Date` | `Date`, `DateTime`/`Time` (narrowed), String | `format:`, `in:` | nil |
 | `:time` | `Time` | `Time`, `Date`/`DateTime` (from components), String | `format:`, `in:` | nil |
 | `:datetime` | `DateTime` | `DateTime`, `Date`/`Time` (from components), String | `format:`, `in:` | nil |
 | `:symbol` | `Symbol` | `Symbol`, `String#to_sym` (else `TypeError`) | `enum:` | nil |
-| `:uuid` | `String` | `to_s` | `format:` (`:any_version`/`:v4`/`:v7`), `enum:` | nil / empty / whitespace |
-| `:url` | `String` | `to_s` | `format:` (`:http`/`:https_only`/`:any_scheme`), `enum:` | nil / empty / whitespace |
-| `:email` | `String` | `to_s` | `format:` (`:permissive`/`:default`/`:strict`), `enum:` | nil / empty / whitespace |
-| `:binary` | `String` (ASCII-8BIT) | `to_s`, forced to binary encoding | — | nil / empty (**whitespace bytes are kept**) |
+| `:uuid` | `String` | `to_s` | `format:` (`:any_version`/`:v4`/`:v7`), `enum:`, `strict:` | nil / empty / whitespace |
+| `:url` | `String` | `to_s` | `format:` (`:http`/`:https_only`/`:any_scheme`), `enum:`, `strict:` | nil / empty / whitespace |
+| `:email` | `String` | `to_s` | `format:` (`:permissive`/`:default`/`:strict`), `enum:`, `strict:` | nil / empty / whitespace |
+| `:binary` | `String` (ASCII-8BIT) | `to_s`, forced to binary encoding | `strict:` | nil / empty (**whitespace bytes are kept**) |
 | `:value` | `Object` (untyped) | pass-through, no coercion | — | nil |
 | `:array` | `Array` | each element coerced through `of:` | `of:` (**required**) | nil / empty |
 | `:union` | first matching member | tries each member type | `of:` (**Array, ≥2**) | nil |
@@ -95,7 +95,8 @@ end
 
 Type-specific options: `format:` (string-shaped + date/time/datetime — a regex or a
 strftime string or a preset Symbol), `round:` (float/decimal — Integer places),
-`base:` (integer — radix 2..36 for string input, default 10),
+`base:` (integer — radix 2..36 for string input, default 10), `strict:` (string-shaped
+and integer — Boolean; see [Strict coercion](#strict-coercion-strict-true)),
 `values:` (boolean — a `{truthy:, falsy:}` Hash or a preset Symbol), `of:` (array
 element type / union member array), `enum:` (string-like — Array of allowed values),
 `in:` (numeric/temporal — Array or Range).
@@ -118,6 +119,9 @@ Boolean presets: `:english_yes_no`/`:english` (`true yes y on 1` / `false no n o
   Declare `base:` (2..36, checked at class load) for another radix:
   `field :code, :integer, base: 16` reads `"1A"` as 26. Integers pass through and
   Floats still truncate; `base:` only affects strings.
+- **Float strings are base 10 too.** `"0x1A"` (which `Kernel.Float` reads as 26.0)
+  is refused, like `"0b101"` and `"0o17"`. Every other `Kernel.Float` form still
+  reads: `"1_000.5"`, `" 2.5 "`, `"1e3"`, `".5"`, `"017"` (→ 17.0).
 - **NaN and ±Infinity are never valid.** `:integer`, `:float` and `:decimal` refuse
   them — as a Float, a BigDecimal, a String (`"NaN"`, `"Infinity"`) or JSON `1e400` —
   as an ordinary coercion failure under the field's `coercion_policy`. A `:union`
@@ -128,6 +132,53 @@ Boolean presets: `:english_yes_no`/`:english` (`true yes y on 1` / `false no n o
   `round: 0` returns a `Float` / `BigDecimal`, not an Integer, and `:decimal`
   ignores the process-global `BigDecimal.mode` — a host that sets banker's rounding
   still gets `12.345` → `12.35` at `round: 2`.
+
+### Strict coercion (`strict: true`)
+
+The defaults are lenient on purpose — they match what ActiveModel does, so a Rails
+client sees the same values. A field that must not accept "close enough" (amounts,
+account numbers) can opt in per field with `strict: true`. Strict only *narrows*:
+anything it accepts becomes exactly what the default would make of it.
+
+| Input | `:string` | `:string, strict: true` | `:integer` | `:integer, strict: true` |
+|-------|-----------|-------------------------|------------|--------------------------|
+| `"abc"` / `"42"` | `"abc"` / `"42"` | same | — / 42 | — / 42 |
+| `:abc` | `"abc"` | `"abc"` | `TypeError` | `TypeError` |
+| `42` / `12.0` / `BigDecimal("12.0")` | `"42"` / `"12.0"` / `"0.12e2"` | same | 42 / 12 / 12 | 42 / 12 / 12 |
+| `12.7` / `Rational(25, 2)` | `"12.7"` / `"25/2"` | same | 12 (truncated) | `ArgumentError` |
+| `"12.7"` / `"12.0"` / `"1e3"` / `"0x1A"` | as-is | as-is | `ArgumentError` | `ArgumentError` |
+| object with `to_str` | `to_s` | `to_s` | read as its `to_str` string | read as its `to_str` string |
+| `{a: 1}` / `[1]` / `true` / `Time` / `Object.new` | their `to_s` | `TypeError` | `TypeError` (a `Time` reads as its epoch) | `TypeError` (a `Time` → `ArgumentError`) |
+| `Float::NAN` / `Infinity` | `"NaN"` / `"Infinity"` | `TypeError` | `ArgumentError` | `ArgumentError` |
+
+- **`:string` strict** accepts a String, a Symbol, a finite real Numeric (Integer,
+  Float, BigDecimal, Rational) and anything responding to `to_str`. Numerics count
+  as scalars because a JSON payload often carries an identifier as a number
+  (`"account": 12345`) and its decimal text is unambiguous. Booleans, Hashes,
+  Arrays, Complex and other objects are refused — their `to_s` is a rendering, not
+  a value. It applies to the string subtypes too (`:immutable_string`, `:uuid`,
+  `:url`, `:email`, `:binary`).
+- **`:integer` strict** accepts a value only when it *is* a whole number: an
+  Integer, or a numeric equal to its integer (`12.0`, `BigDecimal("12")`,
+  `Rational(24, 2)`). Strings follow the default rules exactly — integer digits in
+  base 10 or `base:` — so a float-shaped string like `"12.0"` or `"1e3"` is refused
+  in both modes.
+- Refusals are ordinary coercion failures under the field's `coercion_policy`, and
+  their messages name the input class, never the value.
+- `strict:` must be `true`/`false` (checked at declaration); on any other type it
+  raises `strict: option does not apply to Float fields. It applies to: String, ImmutableString, Integer, …`
+
+<!-- doctest -->
+```ruby
+class Charge < FieldStruct::Base
+  required :reference, :string,  strict: true
+  required :cents,     :integer, strict: true
+end
+
+Charge.new(reference: :ord_1, cents: 1250.0).cents   # => 1250
+Charge.new(reference: { id: 1 }, cents: 1).valid?     # => false
+Charge.new(reference: 'ord_1', cents: 12.5).valid?    # => false
+```
 
 ### The temporal contract
 
@@ -431,7 +482,7 @@ the README "Type signatures" section for a Rake-task wiring example.
 - `:array` requires `of:`; `:union` requires `of: [...]` with ≥2 members.
 - Option scoping: `format:` → string-shaped + date/time/datetime; `enum:` →
   string/symbol; `in:` → integer/float/decimal/date/time/datetime; `round:` →
-  float/decimal; `base:` → integer; `values:` → boolean. Misapplying raises `ArgumentError` at declaration.
+  float/decimal; `base:` → integer; `strict:` → string-shaped/integer; `values:` → boolean. Misapplying raises `ArgumentError` at declaration.
 - `description:`/`desc:` is documentation only — absent from `attributes`, `as_json`,
   and pattern-match keys.
 - **Input is a Hash, or anything with `to_hash`** (e.g. a permitted

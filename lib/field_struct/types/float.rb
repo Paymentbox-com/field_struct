@@ -28,11 +28,15 @@ module FieldStruct
       #   rejects non-numeric strings, Symbols, Booleans, Arrays.
       # @param round [::Integer, nil] decimal places; +nil+ leaves the value unrounded
       # @return [Float, nil] +nil+ for +nil+ input, otherwise the parsed float
-      # @raise [ArgumentError, TypeError] when the value cannot be coerced
+      # @raise [ArgumentError, TypeError] when the value cannot be coerced,
+      #   or coerces to NaN or ±Infinity (including a String like "1e400")
       def coerce(value, round: self.class.default_round, **)
         return nil if value.nil?
 
         result = value.is_a?(::Float) ? value : ::Kernel.Float(value)
+        # The class, never the value — see Types::Time#coerce.
+        raise ArgumentError, "Float fields expect a finite number, got a non-finite #{value.class}" unless result.finite?
+
         round ? result.round(round) : result
       end
 

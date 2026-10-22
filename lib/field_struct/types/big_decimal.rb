@@ -34,7 +34,8 @@ module FieldStruct
       # @param round [::Integer, nil] decimal places; +nil+ leaves the
       #   value unrounded
       # @return [::BigDecimal, nil]
-      # @raise [ArgumentError] when a string cannot be parsed
+      # @raise [ArgumentError] when a string cannot be parsed, or the value
+      #   is NaN or ±Infinity (as a Float, a BigDecimal, or a String like "NaN")
       def coerce(value, round: self.class.default_round, **)
         return nil if value.nil?
 
@@ -45,6 +46,8 @@ module FieldStruct
                  else
                    ::Kernel.BigDecimal(value.to_s)
                  end
+        # The class, never the value — see Types::Time#coerce.
+        raise ArgumentError, "BigDecimal fields expect a finite number, got a non-finite #{value.class}" unless result.finite?
 
         round ? result.round(round) : result
       end

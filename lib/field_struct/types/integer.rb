@@ -22,10 +22,15 @@ module FieldStruct
       #   float-shaped strings ("3.14") and non-digit strings raise
       #   ArgumentError, Symbols/Booleans/Arrays raise TypeError.
       # @return [Integer, nil] +nil+ for +nil+ input, otherwise the parsed integer
-      # @raise [ArgumentError, TypeError] when the value cannot be coerced
+      # @raise [ArgumentError, TypeError] when the value cannot be coerced,
+      #   including a NaN or ±Infinity Numeric (Float, BigDecimal)
       def coerce(value, **)
         return nil if value.nil?
         return value if value.is_a?(::Integer)
+        if value.is_a?(::Numeric) && !value.finite?
+          # The class, never the value — see Types::Time#coerce.
+          raise ArgumentError, "Integer fields expect a finite number, got a non-finite #{value.class}"
+        end
 
         ::Kernel.Integer(value)
       end

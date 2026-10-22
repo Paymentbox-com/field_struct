@@ -515,7 +515,9 @@ module FieldStruct
 
           begin
             coerced = field.type_instance.coerce(value, **field.options)
-          rescue ArgumentError, TypeError => e
+          # FloatDomainError (a RangeError) is what Float#to_i / Integer()
+          # raise on NaN or Infinity — a coercion failure like any other.
+          rescue ArgumentError, TypeError, FloatDomainError => e
             return apply_coercion_policy(field, value, e)
           end
 

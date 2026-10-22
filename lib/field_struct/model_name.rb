@@ -39,6 +39,8 @@ module FieldStruct
 
     private
 
+    # @param str [String] a bare class name
+    # @return [String] its snake_case form
     def camel_to_snake(str)
       str.gsub(/([a-z\d])([A-Z])/, '\\1_\\2').gsub(/([A-Z]+)([A-Z][a-z])/, '\\1_\\2').downcase
     end

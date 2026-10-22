@@ -22,6 +22,8 @@ module FieldStruct
     class Union < Base
       # Member-coercion errors caught so the next member can be tried; other
       # exceptions (e.g. +NoMethodError+) propagate as real bugs.
+      #
+      # @return [::Array<Class<::StandardError>>]
       RESCUABLE = [ArgumentError, TypeError, FieldStruct::Error].freeze
 
       # Native options: a required +of:+ Array of member types (the DSL

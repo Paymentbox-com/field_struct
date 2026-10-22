@@ -45,7 +45,7 @@ module FieldStruct
     #
     # @yield [field]
     # @yieldparam field [Field]
-    # @return [Enumerator] when no block is given
+    # @return [Enumerator<Field>] when no block is given
     def each(&block)
       @fields.each_value(&block)
     end
@@ -94,6 +94,8 @@ module FieldStruct
       @serializations[name.to_sym] || EMPTY_SERIALIZATION
     end
 
+    # The identity mapping {#serialization} returns for an undeclared format.
+    # @return [Hash{Symbol=>String}]
     EMPTY_SERIALIZATION = {}.freeze
     private_constant :EMPTY_SERIALIZATION
 
@@ -166,6 +168,7 @@ module FieldStruct
 
     private
 
+    # @param field [Field]
     # @return [String] one +describe+ line for a field
     def describe_field(field)
       label = "  #{field.name} (#{short_name(field.type)}, #{field.required? ? "required" : "optional"})"
@@ -182,6 +185,7 @@ module FieldStruct
     # declaring nothing at all. The option schema belongs to the type; this
     # belongs to the field.
     #
+    # @param field [Field]
     # @return [String, nil] +nil+ when the field declares no options
     def declared_options_summary(field)
       # Every temporal field carries `format: nil` from apply_default_format,
@@ -196,6 +200,7 @@ module FieldStruct
     #   values (an Array field's +of_type:+) show their bare type name rather
     #   than a quoted string, so the line reads like the declaration it
     #   describes.
+    # @param value [Object, nil] a declared option value
     def declared_option_repr(value)
       case value
       when FieldStruct::Types::Nested then "Nested(#{short_name(value.struct_class)})"
@@ -207,6 +212,7 @@ module FieldStruct
 
     # @return [String, nil] the type's native option vocabulary, or +nil+ when
     #   the type declares none
+    # @param type_class [Class<Types::Base>]
     def accepts_summary(type_class)
       accepts = native_options_summary(type_class)
       accepts.empty? ? nil : "accepts #{accepts}"
@@ -214,6 +220,7 @@ module FieldStruct
 
     # @return [String] the type's native options as +name(shapes)+, required
     #   ones starred, presets appended — empty when the type has none
+    # @param type_class [Class<Types::Base>]
     def native_options_summary(type_class)
       return '' unless type_class.respond_to?(:option_schema)
 
@@ -226,6 +233,9 @@ module FieldStruct
     end
 
     # Render one field as a primitive-only schema Hash for {#to_h}.
+    #
+    # @param field [Field]
+    # @return [Hash{Symbol=>Object, nil}]
     def field_schema(field)
       {
         type: short_name(field.type),
@@ -238,6 +248,9 @@ module FieldStruct
     end
 
     # A single class, or +A | B+ for a multi-class ruby_type (boolean, union).
+    #
+    # @param ruby_type [Class, Array<Class>] a type's {Types::Base#ruby_type}
+    # @return [String]
     def ruby_type_repr(ruby_type)
       Array(ruby_type).map(&:name).join(' | ')
     end
@@ -245,6 +258,9 @@ module FieldStruct
     # Reduce an option/default value to something printable: short class
     # names for type references, +"<callable>"+ for procs, recursion into
     # Array/Hash, everything else as-is.
+    #
+    # @param value [Object, nil] an option or default value
+    # @return [Object, nil]
     def schema_value(value)
       case value
       when nil, true, false, ::Numeric, ::String, ::Symbol, ::Regexp, ::Range then value
@@ -257,6 +273,8 @@ module FieldStruct
       end
     end
 
+    # @param klass [Module]
+    # @return [String] the last segment of the class name
     def short_name(klass)
       klass.name.to_s.split('::').last
     end

@@ -43,6 +43,8 @@ module FieldStruct
   # elements) appear as qualified names (+::Address+) — generate RBS for those
   # classes too so the references resolve.
   module RBS
+    # The pair a +:boolean+ field's +ruby_type+ returns, rendered as +bool+.
+    # @return [Array<Class>]
     BOOL_CLASSES = [TrueClass, FalseClass].freeze
     private_constant :BOOL_CLASSES
 

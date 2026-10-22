@@ -19,9 +19,9 @@ module FieldStruct
     module TimeFormatResolver
       # Validate a declared +format:+ and return the options unchanged.
       #
-      # @param options [::Hash{::Symbol => Object}] the per-field options as written
+      # @param options [::Hash{::Symbol => Object, nil}] the per-field options as written
       # @param presets [::Hash{::Symbol => ::String}] the type's preset table
-      # @return [::Hash{::Symbol => Object}] +options+, unmodified
+      # @return [::Hash{::Symbol => Object, nil}] +options+, unmodified
       # @raise [ArgumentError] when +format:+ is the wrong shape, or names a
       #   preset the type does not have — at declaration time, not at first use
       def self.call(options, presets)

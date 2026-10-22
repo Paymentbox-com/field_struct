@@ -11,6 +11,7 @@ module FieldStruct
     # matches +Kernel#Integer+'s own behavior on numeric input.
     class Integer < Base
       # The radixes +Kernel#Integer+ accepts for a +base:+ option.
+      # @return [::Range<::Integer>]
       BASES = (2..36)
 
       # Native options: an +in:+ Array or Range of allowed values, and a
@@ -27,8 +28,8 @@ module FieldStruct
       # Refuse a +base:+ outside 2..36 at field-declaration time. A
       # non-Integer +base:+ is left for the option-shape check to report.
       #
-      # @param options [Hash] the per-field options hash
-      # @return [Hash] the options, unchanged
+      # @param options [::Hash{::Symbol => Object, nil}] the per-field options hash
+      # @return [::Hash{::Symbol => Object, nil}] the options, unchanged
       # @raise [ArgumentError] when +base:+ is an Integer outside 2..36
       def self.resolve_options(options)
         base = options[:base]
@@ -74,6 +75,8 @@ module FieldStruct
       # is 11 bytes, but its Integer takes seconds to build, so untrusted JSON
       # could burn CPU. The same limit as Python's int/str conversion
       # (CVE-2020-10735).
+      #
+      # @return [::Integer]
       MAX_DECIMAL_DIGITS = 4300
 
       # @return [Class] the top-level +::Integer+ class

@@ -45,7 +45,7 @@ module FieldStruct
     #   +type.new+ wouldn't be enough to capture the parameterization. When
     #   nil, +type.new+ is called.
     # @param required [Boolean]
-    # @param default [Object, #call, nil] literal default value, or a
+    # @param default [Object, nil] literal default value, or a
     #   parameterless callable (Proc/Lambda/Method) that returns one.
     #   Callables are invoked once per instance during apply_defaults.
     # @param coercion_policy [:keep_raw, :replace, :raise, nil] override
@@ -53,7 +53,7 @@ module FieldStruct
     #   "use whatever the class says"
     # @param description [String, nil] human-readable description of the
     #   field; for documentation purposes only
-    # @param options [Object] extra keyword type/field options
+    # @param options [Object, nil] extra keyword type/field options
     #   forwarded to coerce (e.g. +format:+, +of_type:+, +round:+,
     #   +values:+, +enum:+, +in:+)
     def initialize(name:, type:, type_instance: nil, required: false, default: nil, coercion_policy: nil, description: nil, **options)
@@ -103,6 +103,7 @@ module FieldStruct
 
     private
 
+    # @return [String] the type's short name, or +Nested(...)+ / +Union(...)+
     def type_repr
       base = @type.name.to_s.split('::').last
       if @type <= FieldStruct::Types::Nested
@@ -118,6 +119,9 @@ module FieldStruct
     # Render an option's value in inspect output. Type-class values
     # (e.g. +:of_type+ on an Array field) get their basename instead
     # of the full +FieldStruct::Types::String+ class.inspect.
+    #
+    # @param value [Object, nil] an option value
+    # @return [String]
     def option_repr(value)
       case value
       when ::Class

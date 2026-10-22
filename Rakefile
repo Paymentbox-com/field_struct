@@ -65,7 +65,7 @@ def sord_run(target)
   stash = "#{SIG_FILE}.stashed-by-sord-rake"
   stashed = File.exist?(SIG_FILE) && File.rename(SIG_FILE, stash) && true
   ok = false
-  cmd = "bundle exec sord #{target} --rbs --no-sord-comments --skip-constants"
+  cmd = "bundle exec sord #{target} --rbs --no-sord-comments"
   output, status = Open3.capture2e(cmd)
   puts output
   raise "sord failed (exit #{status.exitstatus})" unless status.success?

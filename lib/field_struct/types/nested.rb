@@ -43,7 +43,7 @@ module FieldStruct
       # structural rejections of the nested record's input, not parent-
       # shape coercion failures.
       #
-      # @param value [FieldStruct::Base, Hash, nil] +nil+ → +nil+; an
+      # @param value [FieldStruct::Base, ::Hash{::Symbol, ::String => Object, nil}, nil] +nil+ → +nil+; an
       #   instance of {#struct_class} (or subclass) → passthrough; a
       #   +Hash+ → constructs via +struct_class.new(hash)+. Anything
       #   else raises TypeError.

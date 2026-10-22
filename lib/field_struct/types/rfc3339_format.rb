@@ -36,11 +36,14 @@ module FieldStruct
     # hand-rolled +/\A\d{4}-\d{2}-\d{2}\z/+ with a declared format.
     class Rfc3339Format
       # Full-width calendar date. No sign, no week or ordinal forms.
+      # @return [::Regexp]
       DATE = /\A(\d{4})-(\d{2})-(\d{2})\z/
 
       # Date, +T+, time to whole seconds, optional fraction, mandatory offset.
       # +±hhmm+ (no colon) is accepted on input because that is what FieldStruct
       # v0.9.0 emitted, and its own output has to keep parsing.
+      #
+      # @return [::Regexp]
       TIMESTAMP = /\A(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(\.\d+)?([Zz]|[+-]\d{2}:?\d{2})\z/
 
       # @return [Rfc3339Format] the date-only form, for {Types::Date}
@@ -112,6 +115,7 @@ module FieldStruct
 
       private
 
+      # @param match [::MatchData] a {DATE} match
       # @return [::Hash{::Symbol => ::Integer}]
       def date_parts(match)
         year, month, day = match.captures.map { |capture| Integer(capture, 10) }
@@ -120,6 +124,7 @@ module FieldStruct
         {year: year, mon: month, mday: day}
       end
 
+      # @param match [::MatchData] a {TIMESTAMP} match
       # @return [::Hash{::Symbol => Object}]
       def timestamp_parts(match)
         year, month, day, hour, minute, second = match.captures[0, 6].map { |c| Integer(c, 10) }
@@ -137,6 +142,7 @@ module FieldStruct
         }
       end
 
+      # @param text [::String, nil] the +.digits+ capture, if any
       # @return [::Rational] seconds after the whole second, exact
       def fraction_from(text)
         return 0r if text.nil?
@@ -151,6 +157,7 @@ module FieldStruct
       #   +DateTime.new+ accepts it and silently drops it to +00:00. A preset
       #   that means two different things depending on the field's type is the
       #   defect this class exists to avoid.
+      # @param text [::String] the offset capture: +Z+ or +±hh:mm+ / +±hhmm+
       def offset_from(text)
         return 0 if text.casecmp('Z').zero?
 
@@ -163,6 +170,7 @@ module FieldStruct
         sign * ((hours * 3600) + (minutes * 60))
       end
 
+      # @param value [::Time, ::DateTime]
       # @return [::String] +".123"+, or empty when the value is on a whole second
       def fraction_of(value)
         subsec = value.is_a?(::Time) ? value.subsec : value.sec_fraction
@@ -174,6 +182,7 @@ module FieldStruct
         ".#{digits}"
       end
 
+      # @param value [::Time, ::DateTime]
       # @return [::String] +"Z"+ for UTC, otherwise +"+HH:MM"+
       def offset_of(value)
         seconds = value.is_a?(::Time) ? value.utc_offset : (value.offset * 86_400).to_i

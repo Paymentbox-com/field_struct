@@ -5,8 +5,14 @@ require_relative 'base'
 module FieldStruct
   module Types
     # Float type. Coerces via +Kernel#Float+, which parses numeric strings
-    # strictly and rejects anything non-numeric.
+    # strictly and rejects anything non-numeric. Strings are base 10, as for
+    # {Types::Integer}: a hex string like "0x1A", which +Kernel#Float+ would
+    # read as 26.0, is refused.
     class Float < Base
+      # A string +Kernel#Float+ would read as hex: optional whitespace and
+      # sign, then +0x+. (Binary and octal prefixes it already refuses.)
+      # @return [::Regexp]
+      HEX_PREFIX = /\A\s*[+-]?0x/i
       # Native options: a +round:+ Integer precision and an +in:+ Array or
       # Range of allowed values.
       #
@@ -25,7 +31,8 @@ module FieldStruct
 
       # @param value [Numeric, ::String, nil] +nil+ → +nil+; everything
       #   else flows through +Kernel#Float+ — strict on string parsing,
-      #   rejects non-numeric strings, Symbols, Booleans, Arrays.
+      #   rejects non-numeric strings, Symbols, Booleans, Arrays, and
+      #   hex strings ("0x1A").
       # @param round [::Integer, nil] decimal places, rounding half up (ties
       #   away from zero); +nil+ leaves the value unrounded. The result is a
       #   Float even at +round: 0+.
@@ -54,12 +61,19 @@ module FieldStruct
 
       # @param value [Object] a non-Float value
       # @return [::Float]
-      # @raise [ArgumentError] when +Kernel#Float+ refuses it; the message
-      #   names the class, never the value (Kernel's own message echoes it)
+      # @raise [ArgumentError] when it is a hex string or +Kernel#Float+
+      #   refuses it; the message names the class, never the value
+      #   (Kernel's own message echoes it)
       def parse(value)
-        ::Kernel.Float(value)
-      rescue ::ArgumentError, ::RangeError
-        raise ArgumentError, "Float fields could not read a #{value.class} as a number"
+        if value.is_a?(::String) && HEX_PREFIX.match?(value)
+          raise ArgumentError, 'Float fields expect a base-10 number, got a String that is not one'
+        end
+
+        begin
+          ::Kernel.Float(value)
+        rescue ::ArgumentError, ::RangeError
+          raise ArgumentError, "Float fields could not read a #{value.class} as a number", cause: nil
+        end
       end
     end
   end

@@ -24,9 +24,9 @@ RSpec.describe 'Types option_schema' do
 
   describe 'merging and memoization' do
     it 'merges own_option_schema down the class chain' do
-      # UUID adds nothing of its own beyond format; enum comes from String.
+      # UUID adds nothing of its own beyond format; enum and strict come from String.
       expect(FieldStruct::Types::UUID.own_option_schema.keys).to eq([:format])
-      expect(FieldStruct::Types::UUID.option_schema.keys).to contain_exactly(:format, :enum)
+      expect(FieldStruct::Types::UUID.option_schema.keys).to contain_exactly(:format, :enum, :strict)
     end
 
     it 'returns a frozen, memoized result (computed once per type)' do
@@ -37,9 +37,10 @@ RSpec.describe 'Types option_schema' do
   end
 
   describe FieldStruct::Types::String do
-    it 'accepts format: (Regexp/Symbol) and enum: (Array)' do
+    it 'accepts format: (Regexp/Symbol), enum: (Array) and strict: (Boolean)' do
       schema = described_class.option_schema
-      expect(schema.keys).to contain_exactly(:format, :enum)
+      expect(schema.keys).to contain_exactly(:format, :enum, :strict)
+      expect(schema[:strict][:type]).to contain_exactly(TrueClass, FalseClass)
       expect(schema[:format][:type]).to contain_exactly(Regexp, Symbol)
       expect(schema[:enum][:type]).to eq([Array])
       expect(schema[:format][:required]).to be false
@@ -53,8 +54,8 @@ RSpec.describe 'Types option_schema' do
   end
 
   describe FieldStruct::Types::Integer do
-    it 'accepts in: and base: (Integer)' do
-      expect(described_class.option_schema.keys).to contain_exactly(:in, :base)
+    it 'accepts in:, base: (Integer) and strict: (Boolean)' do
+      expect(described_class.option_schema.keys).to contain_exactly(:in, :base, :strict)
       expect(described_class.option_schema[:in][:type]).to contain_exactly(Array, Range)
       expect(described_class.option_schema[:base][:type]).to eq([Integer])
     end
@@ -91,9 +92,9 @@ RSpec.describe 'Types option_schema' do
   end
 
   describe FieldStruct::Types::UUID do
-    it 'inherits String format/enum and advertises its format presets' do
+    it 'inherits String format/enum/strict and advertises its format presets' do
       schema = described_class.option_schema
-      expect(schema.keys).to contain_exactly(:format, :enum)
+      expect(schema.keys).to contain_exactly(:format, :enum, :strict)
       expect(schema[:format][:presets]).to include(:v4, :v7)
     end
   end

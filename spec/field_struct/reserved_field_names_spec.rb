@@ -7,7 +7,7 @@ RSpec.describe FieldStruct::Base, 'reserved field names' do
     errors attributes attribute_names assign_attributes as_json to_json to_h
     to_model model_name inspect hash class send public_send freeze
     instance_variable_set deconstruct deconstruct_keys initialize initialize_copy
-    raise
+    raise with dup
   ]
 
   it 'includes every name Base relies on' do

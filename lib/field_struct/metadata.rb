@@ -171,8 +171,10 @@ module FieldStruct
     # @param field [Field]
     # @return [String] one +describe+ line for a field
     def describe_field(field)
-      label = "  #{field.name} (#{short_name(field.type)}, #{field.required? ? "required" : "optional"})"
-      parts = [label, declared_options_summary(field), accepts_summary(field.type)].compact
+      flags = [short_name(field.type), field.required? ? 'required' : 'optional']
+      flags << 'sensitive' if field.sensitive?
+      label = "  #{field.name} (#{flags.join(", ")})"
+      parts = [label, declared_options_summary(field), accepts_summary(field.type), element_accepts_summary(field)].compact
 
       parts.join(' — ')
     end
@@ -206,8 +208,23 @@ module FieldStruct
       when FieldStruct::Types::Nested then "Nested(#{short_name(value.struct_class)})"
       when FieldStruct::Types::Base then short_name(value.class)
       when ::Class then short_name(value)
+      # Spelled out rather than Hash#inspect, whose format changed in Ruby 3.4.
+      when ::Hash then "{#{value.map { |key, item| "#{key}: #{declared_option_repr(item)}" }.join(", ")}}"
       else value.inspect
       end
+    end
+
+    # What an array field's +element:+ may hold — its element type's native
+    # options — so the line answers "what can I pass to each element" too.
+    #
+    # @param field [Field]
+    # @return [String, nil] +nil+ for a non-array field, or an element type
+    #   with no options (a nested struct)
+    def element_accepts_summary(field)
+      return nil unless field.type <= FieldStruct::Types::Array
+
+      accepts = native_options_summary(FieldStruct::Types::Array.element_class(field.options[:of_type]))
+      accepts.empty? ? nil : "element accepts #{accepts}"
     end
 
     # @return [String, nil] the type's native option vocabulary, or +nil+ when
@@ -246,7 +263,9 @@ module FieldStruct
         description: field.description
       }
       # Only when set, so the schema of a field without one is unchanged.
-      field.rbs_type ? schema.merge(rbs_type: field.rbs_type) : schema
+      schema[:rbs_type] = field.rbs_type if field.rbs_type
+      schema[:sensitive] = true if field.sensitive?
+      schema
     end
 
     # A single class, or +A | B+ for a multi-class ruby_type (boolean, union).

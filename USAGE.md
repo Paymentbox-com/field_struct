@@ -32,22 +32,22 @@ as `nil`). "Missing" is what counts as absent for presence checks.
 
 | Name | Ruby type | Coerces from | Type options | Missing when |
 |------|-----------|--------------|--------------|--------------|
-| `:string` | `String` | `value.to_s` | `format:`, `enum:` | nil / empty / whitespace-only |
-| `:immutable_string` | `String` (frozen) | `to_s`, then frozen dup | `format:`, `enum:` | nil / empty / whitespace |
-| `:integer` | `Integer` | strings in base 10 (`"010"` → 10; `"0x1A"`/`"3.14"` raise), or `base:`; floats truncate | `in:`, `base:` | nil |
-| `:float` | `Float` | `Kernel.Float` (strict; NaN/±Infinity refused) | `round:`, `in:` | nil |
+| `:string` | `String` | `value.to_s` (`strict: true`: scalars and `to_str` only) | `format:`, `enum:`, `strict:` | nil / empty / whitespace-only |
+| `:immutable_string` | `String` (frozen) | `to_s`, then frozen dup | `format:`, `enum:`, `strict:` | nil / empty / whitespace |
+| `:integer` | `Integer` | strings in base 10 (`"010"` → 10; `"0x1A"`/`"3.14"` raise), or `base:`; floats truncate (`strict: true`: refused unless whole) | `in:`, `base:`, `strict:` | nil |
+| `:float` | `Float` | `Kernel.Float` (strict; base-10 strings only — `"0x1A"` raises; NaN/±Infinity refused) | `round:`, `in:` | nil |
 | `:big_decimal` (alias `:decimal`) | `BigDecimal` | BigDecimal/Integer/Float/numeric string (NaN/±Infinity refused) | `round:`, `in:` | nil |
 | `:boolean` | `true`/`false` | `true`/`false`, `1`/`0`, truthy/falsy strings | `values:` | nil |
 | `:date` | `Date` | `Date`, `DateTime`/`Time` (narrowed), String | `format:`, `in:` | nil |
 | `:time` | `Time` | `Time`, `Date`/`DateTime` (from components), String | `format:`, `in:` | nil |
 | `:datetime` | `DateTime` | `DateTime`, `Date`/`Time` (from components), String | `format:`, `in:` | nil |
 | `:symbol` | `Symbol` | `Symbol`, `String#to_sym` (else `TypeError`) | `enum:` | nil |
-| `:uuid` | `String` | `to_s` | `format:` (`:any_version`/`:v4`/`:v7`), `enum:` | nil / empty / whitespace |
-| `:url` | `String` | `to_s` | `format:` (`:http`/`:https_only`/`:any_scheme`), `enum:` | nil / empty / whitespace |
-| `:email` | `String` | `to_s` | `format:` (`:permissive`/`:default`/`:strict`), `enum:` | nil / empty / whitespace |
-| `:binary` | `String` (ASCII-8BIT) | `to_s`, forced to binary encoding | — | nil / empty (**whitespace bytes are kept**) |
+| `:uuid` | `String` | `to_s` | `format:` (`:any_version`/`:v4`/`:v7`), `enum:`, `strict:` | nil / empty / whitespace |
+| `:url` | `String` | `to_s` | `format:` (`:http`/`:https_only`/`:any_scheme`), `enum:`, `strict:` | nil / empty / whitespace |
+| `:email` | `String` | `to_s` | `format:` (`:permissive`/`:default`/`:strict`), `enum:`, `strict:` | nil / empty / whitespace |
+| `:binary` | `String` (ASCII-8BIT) | `to_s`, forced to binary encoding | `strict:` | nil / empty (**whitespace bytes are kept**) |
 | `:value` | `Object` (untyped) | pass-through, no coercion | — | nil |
-| `:array` | `Array` | each element coerced through `of:` | `of:` (**required**) | nil / empty |
+| `:array` | `Array` | each element coerced through `of:` (with `element:` options) | `of:` (**required**), `element:` | nil / empty |
 | `:union` | first matching member | tries each member type | `of:` (**Array, ≥2**) | nil |
 | nested (a `FieldStruct::Base` subclass) | that class | Hash → instance, or instance | — | nil |
 
@@ -60,6 +60,7 @@ required :score,     :integer, in: 0..100
 required :price,     :big_decimal, round: 2
 required :code,      :integer, base: 16           # "1A" → 26
 optional :tags,      :array, of: :string
+optional :ids,       :array, of: :integer, element: { strict: true }
 required :ref,       :union, of: %i[string integer]
 optional :address,   Address                       # nested FieldStruct
 optional :lines,     :array, of: LineItem          # array of nested
@@ -85,6 +86,7 @@ can stash and read its own options.
 | `coercion_policy:` | `:keep_raw` (default) \| `:replace` \| `:raise` — per-field override of the class setting |
 | `description:` / `desc:` | human text; introspection only — **never** in `attributes`/`as_json`/pattern match |
 | `rbs_type:` | String of RBS that `FieldStruct::RBS` emits for this field instead of the derived type (`'::ActiveRecord::Relation'`); signatures only, no runtime effect |
+| `sensitive:` | `true` renders `[FILTERED]` for the value in `inspect` / `pp`; data paths unchanged — see [Log safety](#log-safety-error-messages-and-sensitive-fields) |
 
 ```ruby
 class Account < FieldStruct::Base
@@ -95,10 +97,13 @@ end
 
 Type-specific options: `format:` (string-shaped + date/time/datetime — a regex or a
 strftime string or a preset Symbol), `round:` (float/decimal — Integer places),
-`base:` (integer — radix 2..36 for string input, default 10),
+`base:` (integer — radix 2..36 for string input, default 10), `strict:` (string-shaped
+and integer — Boolean; see [Strict coercion](#strict-coercion-strict-true)),
 `values:` (boolean — a `{truthy:, falsy:}` Hash or a preset Symbol), `of:` (array
-element type / union member array), `enum:` (string-like — Array of allowed values),
-`in:` (numeric/temporal — Array or Range).
+element type / union member array), `element:` (array — a Hash of the element
+type's own options; see [Element options](#element-options-element)), `enum:` (string-like — Array of allowed values),
+`in:` (numeric/temporal — Array or Range), `zone:` (time/datetime — `"UTC"` or
+`"±HH:MM"` for zone-less input; see [Zones](#zones-zone)).
 
 ```ruby
 required :joined, :date, format: '%m/%d/%Y'   # custom strftime
@@ -118,16 +123,68 @@ Boolean presets: `:english_yes_no`/`:english` (`true yes y on 1` / `false no n o
   Declare `base:` (2..36, checked at class load) for another radix:
   `field :code, :integer, base: 16` reads `"1A"` as 26. Integers pass through and
   Floats still truncate; `base:` only affects strings.
+- **Float strings are base 10 too.** `"0x1A"` (which `Kernel.Float` reads as 26.0)
+  is refused, like `"0b101"` and `"0o17"`. Every other `Kernel.Float` form still
+  reads: `"1_000.5"`, `" 2.5 "`, `"1e3"`, `".5"`, `"017"` (→ 17.0).
 - **NaN and ±Infinity are never valid.** `:integer`, `:float` and `:decimal` refuse
   them — as a Float, a BigDecimal, a String (`"NaN"`, `"Infinity"`) or JSON `1e400` —
   as an ordinary coercion failure under the field's `coercion_policy`. A `:union`
   refuses a non-finite Float/BigDecimal outright rather than letting a `:string`
-  member store `"NaN"`. The numeric types' messages name the input class, never the
-  value (a union's no-match error and `coercion_policy :raise` still echo it).
+  member store `"NaN"`. Like every FieldStruct message, these name the input class,
+  never the value — see [Log safety](#log-safety-error-messages-and-sensitive-fields).
 - **`round:` keeps the field's type and rounds half up** (ties away from zero).
   `round: 0` returns a `Float` / `BigDecimal`, not an Integer, and `:decimal`
   ignores the process-global `BigDecimal.mode` — a host that sets banker's rounding
   still gets `12.345` → `12.35` at `round: 2`.
+
+### Strict coercion (`strict: true`)
+
+The defaults are lenient on purpose — they match what ActiveModel does, so a Rails
+client sees the same values. A field that must not accept "close enough" (amounts,
+account numbers) can opt in per field with `strict: true`. Strict only *narrows*:
+anything it accepts becomes exactly what the default would make of it.
+
+| Input | `:string` | `:string, strict: true` | `:integer` | `:integer, strict: true` |
+|-------|-----------|-------------------------|------------|--------------------------|
+| `"abc"` / `"42"` | `"abc"` / `"42"` | same | — / 42 | — / 42 |
+| `:abc` | `"abc"` | `"abc"` | `TypeError` | `TypeError` |
+| `42` | `"42"` | `"42"` | 42 | 42 |
+| `12.0` / `BigDecimal("12.0")` | `"12.0"` / `"0.12e2"` | `TypeError` | 12 / 12 | 12 / 12 |
+| `12.7` / `Rational(25, 2)` | `"12.7"` / `"25/2"` | `TypeError` | 12 (truncated) | `ArgumentError` |
+| `"12.7"` / `"12.0"` / `"1e3"` / `"0x1A"` | as-is | as-is | `ArgumentError` | `ArgumentError` |
+| object with `to_str` | `to_s` | `to_s` | read as its `to_str` string | read as its `to_str` string |
+| `{a: 1}` / `[1]` / `true` / `Time` / `Object.new` | their `to_s` | `TypeError` | `TypeError` (a `Time` reads as its epoch) | `TypeError` (a `Time` → `ArgumentError`) |
+| `Float::NAN` / `Infinity` | `"NaN"` / `"Infinity"` | `TypeError` | `ArgumentError` | `ArgumentError` |
+
+- **`:string` strict** accepts a String, a Symbol, an Integer and anything
+  responding to `to_str`. An Integer counts because a JSON payload often carries an
+  identifier as a number (`"account": 12345`) and its text is unambiguous. A Float,
+  BigDecimal or Rational is refused: its `to_s` (`"1.0e+20"`, `"0.12e2"`, `"1/2"`)
+  is not the text the sender meant. Booleans, Hashes,
+  Arrays, Complex and other objects are refused — their `to_s` is a rendering, not
+  a value. It applies to the string subtypes too (`:immutable_string`, `:uuid`,
+  `:url`, `:email`, `:binary`).
+- **`:integer` strict** accepts a value only when it *is* a whole number: an
+  Integer, or a numeric equal to its integer (`12.0`, `BigDecimal("12")`,
+  `Rational(24, 2)`). Strings follow the default rules exactly — integer digits in
+  base 10 or `base:` — so a float-shaped string like `"12.0"` or `"1e3"` is refused
+  in both modes.
+- Refusals are ordinary coercion failures under the field's `coercion_policy`, and
+  their messages name the input class, never the value.
+- `strict:` must be `true`/`false` (checked at declaration); on any other type it
+  raises `strict: option does not apply to Float fields. It applies to: String, ImmutableString, Integer, …`
+
+<!-- doctest -->
+```ruby
+class Charge < FieldStruct::Base
+  required :reference, :string,  strict: true
+  required :cents,     :integer, strict: true
+end
+
+Charge.new(reference: :ord_1, cents: 1250.0).cents   # => 1250
+Charge.new(reference: { id: 1 }, cents: 1).valid?     # => false
+Charge.new(reference: 'ord_1', cents: 12.5).valid?    # => false
+```
 
 ### The temporal contract
 
@@ -169,11 +226,55 @@ hand-rolling `format: /\A\d{4}-\d{2}-\d{2}\z/` plus a validator. The other
 presets (`:us`, `:eu`, `:db`, `:rfc2822`) are display and interchange formats, so
 they stay strftime-based — with anchoring and civil-date validity still applied.
 
-**Zones.** A zone-less string follows the stdlib semantics of the type you
+### Zones (`zone:`)
+
+By default a zone-less string follows the stdlib semantics of the type you
 declared: `:time` uses `Time.parse` and lands in the *process* zone, `:datetime`
-uses `DateTime.parse` and lands in **UTC**. That is a real difference and it is
-not an accident of FieldStruct — if it matters to you, declare `format: :iso8601`,
-which requires an explicit offset and removes the question.
+uses `DateTime.parse` and lands in **UTC**. So `"2026-10-22 10:00"` in a `:time`
+field is a different instant on a server in Denver than on one in Tokyo.
+
+Declare `zone:` on a `:time` or `:datetime` field to name the offset a zone-less
+value means. The same input then gives the same answer on any server. `zone:`
+only fills in a **missing** offset — it never changes one the input carries.
+
+| Input | no `zone:` | `zone: "-06:00"` |
+|-------|------------|------------------|
+| `"2026-10-22 10:00"` (no offset) | `:time` process zone; `:datetime` UTC | 10:00 at -06:00 |
+| a `format:` without `%z` (`:db`, `'%H:%M'`) | as above | 10:00 at -06:00; a date the format omits is *today in -06:00* |
+| `"2026-10-22T10:00:00+02:00"`, `"… Z"`, `"… EST"` | its own offset | its own offset (unchanged) |
+| `"2026-10-22 10:00 XYZ"`, `"… America/Denver"` (a zone the stdlib can't read) | `:time` process zone; `:datetime` UTC | refused — `zone:` won't override a stated zone |
+| `Time` / `DateTime` / TimeWithZone | instant and offset kept | instant and offset kept (not converted) |
+| `Date` | midnight: `:time` process zone, `:datetime` UTC | midnight at -06:00 |
+| an epoch string under `format: '%s'` | that instant, in the process zone (`:time`) or UTC (`:datetime`) | that instant, at -06:00 |
+| Integer (epoch seconds) | refused | refused |
+
+- **Accepted values:** `"UTC"` (the `:time` value is then `utc?`) and fixed offsets
+  `"+HH:MM"` / `"-HH:MM"` from `-23:59` to `+23:59`, colon required. Anything else
+  — `"utc"`, `"Z"`, `"-0600"`, `"MST"` — raises `ArgumentError` at declaration,
+  naming the option.
+- **IANA names (`"America/Denver"`) are not accepted**, with or without
+  ActiveSupport. Ruby's stdlib has no time zone database, and accepting a name only
+  when the host loaded Rails would make the same declaration valid in one process
+  and invalid in another. A fixed offset does not follow DST: `zone: "-06:00"` is
+  -06:00 in January too. Declare the offset your input actually means.
+- `zone:` has no effect with `format: :iso8601`, which requires an offset anyway.
+  It does not apply to `:date` (a date has no time of day to place).
+
+<!-- doctest -->
+```ruby
+class Shift < FieldStruct::Base
+  required :starts, :time,     zone: '-06:00'
+  optional :logged, :datetime, zone: 'UTC'
+  optional :ends,   :time,     zone: 'UTC', format: :db
+end
+
+shift = Shift.new(starts: '2026-10-22 10:00', ends: '2026-10-22 18:30:00')
+shift.starts.utc_offset                                    # => -21600
+shift.starts.hour                                          # => 10
+shift.ends.utc?                                            # => true
+Shift.new(starts: '2026-10-22T10:00:00+02:00').starts.utc_offset   # => 7200
+Shift.new(starts: '2026-10-22 10:00', logged: '2026-10-22 10:00').logged.offset   # => 0
+```
 
 ---
 
@@ -204,6 +305,58 @@ end
 - **Inheritance:** all four macros inherit to subclasses; a child overrides by re-declaring, and the override never mutates the parent. `coercion_policy`/`unknown_attributes` override to any value; `immutable!`/`frozen!` are **one-way** — a child can add them but can't un-set an inherited one (no `mutable!`/`unfrozen!`).
 - `validate` runs at `valid?` (and at construct if any exist); convention is `errors.add(:base, ...)`; `errors[:base]` is cleared each `valid?` run.
 
+### Payment and API boundaries: `unknown_attributes :raise`
+
+At a trust boundary (a payment request, a webhook, a partner API body) declare
+`unknown_attributes :raise`. The default, `:ignore`, drops keys it doesn't know
+without telling you. So a misspelled key (`"ammount"`) or a renamed field upstream
+leaves a field unset, and a field you haven't modelled yet (`"cvv"`) goes away without
+a trace. With `:raise`, `new` / `from_json` / `assign_attributes` / `with` fail with an
+`UnknownAttributeError` whose `keys` name the extras (names only, never values).
+
+- **Declare it on every struct that reads input**, nested ones too. It is inherited
+  by *subclasses*, not by structs a field nests: a nested class without it still
+  drops its own unknown keys. The nested error propagates out of the parent's
+  `new` rather than going through the parent's `coercion_policy`.
+- **`from_json` reverse-maps `serialize :json` names first**, so external names
+  (`"amountDecimal"`) are known keys there. Passing them to `new` raises, because
+  `new` takes canonical names.
+- Keep `:ignore` where extra keys are expected and harmless, e.g. a struct reading
+  a few fields out of a large third-party payload.
+
+<!-- doctest -->
+```ruby
+class Card < FieldStruct::Base
+  unknown_attributes :raise
+  required :last4, :string
+end
+
+class Charge < FieldStruct::Base
+  unknown_attributes :raise
+  required :amount, :decimal
+  required :card,   Card
+  serialize :json, amount: 'amountDecimal'
+end
+
+Charge.from_json('{"amountDecimal":"9.99","card":{"last4":"4242"}}').valid?   # => true
+
+typo = begin
+  Charge.from_json('{"ammount":"9.99","card":{"last4":"4242"}}')
+rescue FieldStruct::UnknownAttributeError => e
+  e
+end
+typo.keys      # => [:ammount]
+typo.message   # "unknown attribute(s) for Charge: :ammount"
+
+nested = begin
+  Charge.from_json('{"amountDecimal":"9.99","card":{"last4":"4242","cvv":"123"}}')
+rescue FieldStruct::UnknownAttributeError => e
+  e
+end
+nested.keys    # => [:cvv]
+nested.message # "unknown attribute(s) for Card: :cvv"
+```
+
 ---
 
 ## Instance surface
@@ -223,7 +376,45 @@ u.as_json           # JSON-ready Hash with :json mapping applied
 u.to_json           # String (via Oj)
 User.from_json(str) # parse + reverse-map :json keys -> instance
 u.assign_attributes(age: 40)              # bulk update through the setter pipeline
+u.with(age: 41)                           # NEW instance with age changed; u untouched
 case u; in { name: 'Alice', age: } then age; end   # pattern matching
+```
+
+### Copying with changes (`with`)
+
+`with(**changes)` returns a new instance of the receiver's class with the given
+attributes changed, like `Data#with`. The receiver is never modified, so it is the
+way to "update" an `immutable!` or `frozen!` instance.
+
+- **Changed fields go through the setter pipeline**: coercion, the field's
+  `coercion_policy` (under `:raise` the `CoercionError` propagates and no copy is
+  returned), and that field's errors rewritten. Cross-field `validate` blocks rerun.
+- **Unchanged fields are carried over as they are**, errors included, exactly as
+  `dup` copies them. Callable defaults are not called again.
+- **Shallow**, like `dup`: an unchanged nested struct or array is the *same object*
+  in both instances. Mutating one through the other is visible in both.
+- **Unknown keys** follow `unknown_attributes` (dropped by default, `UnknownAttributeError`
+  under `:raise`). String keys work too: `with('age' => 41)`.
+- **Keywords only**: `with({age: 41})` raises `ArgumentError`; splat a Hash with
+  `with(**hash)`. `with` with no changes returns an equal copy, not `self`.
+- The copy is immutable when the class is, and frozen when the receiver is
+  frozen. `with` (and `dup`, which it relies on) are reserved field names.
+
+<!-- doctest -->
+```ruby
+class Point < FieldStruct::Base
+  immutable!
+  required :x, :integer
+  required :y, :integer
+end
+
+origin = Point.new(x: 0, y: 0)
+moved  = origin.with(x: '5')
+moved.x                         # => 5
+origin.x                        # => 0
+moved.class                     # => Point
+origin.with(y: nil).valid?      # => false
+origin.valid?                   # => true
 ```
 
 `Errors` API: `errors[:field] # => Array<String>`, `errors.add(:field, 'msg')`,
@@ -241,10 +432,64 @@ messages pass through unprefixed).
 - **Required + missing** → `errors.add(name, 'is required')`.
 - **Present but invalid** → `errors.add(name, 'is invalid')`. "Invalid" = `format:`
   regex mismatch, `enum:`/`in:` violation, an invalid nested struct, or an array with
-  an invalid element. So **"required" means present *and* valid**.
+  an invalid element. An array element breaking its `element:` `format:`/`enum:`/`in:`
+  is reported by index: `'element at index 2 is invalid'`. So **"required" means present *and* valid**.
 - **Validity is separate from construction.** A field can hold `nil`/raw even when
   required — see coercion policy below. Always gate on `valid?`, don't assume a
   required reader is non-nil.
+
+### Validity is computed on assignment (shallow `valid?` staleness)
+
+A field's errors are written when *that field* is assigned, and `valid?` only reads
+them (it reruns cross-field `validate` blocks, nothing else). A parent records an
+invalid nested struct or array element when the nested value is assigned. **It
+doesn't watch it afterwards.** Mutating a nested struct, or an array element, in
+place leaves the parent's errors as they were, in both directions:
+
+- the parent stays `valid?` after a nested field is broken in place, and
+- stays invalid after a nested problem is fixed in place.
+
+Pushing onto an array in place (`record.tags << 5`) also skips coercion: the raw
+value is stored as-is.
+
+**Workaround: assign the field again** (or use `with`/`assign_attributes`, which go
+through the setter). That reruns coercion and validation for that field.
+
+<!-- doctest -->
+```ruby
+class Address < FieldStruct::Base
+  required :city, :string
+end
+
+class Person < FieldStruct::Base
+  required :address, Address
+  optional :tags,    :array, of: :string
+end
+
+person = Person.new(address: { city: 'Provo' })
+person.address.city = nil         # mutate the nested struct in place
+person.address.valid?             # => false
+# Stale: the parent never saw the change.
+person.valid?                     # => true
+
+person.address = person.address   # re-assign: the setter re-validates
+person.valid?                     # => false
+person.errors[:address]           # => ['is invalid']
+
+person.address.city = 'Provo'     # fixed in place...
+# ...and stale the other way.
+person.valid?                     # => false
+person.with(address: person.address).valid?   # => true
+
+person.tags = ['a']
+person.tags << 5                  # in-place push: no coercion
+person.tags                       # => ['a', 5]
+person.tags = person.tags         # re-assign coerces each element
+person.tags                       # => ['a', '5']
+```
+
+For a nested struct you mutate often, keep it `immutable!` (or `frozen!`) and use
+`with` to change it. Then the only way to change it goes through a setter.
 
 ### Coercion failure policy
 
@@ -255,6 +500,47 @@ When a value can't be coerced into the field's type:
 | `:keep_raw` (default) | the raw input | yes (`could not be coerced: …`) | nothing lost; inspect & fix |
 | `:replace` | `nil` | yes | clean slate |
 | `:raise` | — | — | raises `FieldStruct::CoercionError` |
+
+Messages name the field, the expected type and the input's *class*, never the value:
+`could not be coerced: Integer fields expect a base-10 integer, got a String that is
+not one`; under `:raise`, `could not coerce String input for cents: …`.
+
+### Log safety: error messages and sensitive fields
+
+Payments data must not reach a log line, so **no message FieldStruct builds echoes an
+input value** — not an `errors` entry, not a raised error (`CoercionError`, a type's
+`ArgumentError`/`TypeError`, `from_json`'s errors), and not their `cause` chain, which
+error reporters print. Kernel conversion errors (`invalid value for Integer(): "…"`)
+are dropped from the chain; an invalid-JSON error from `from_json` keeps Oj's error
+class and position but not the quoted input. Declared schema (a format, a boolean's
+accepted strings, a field name) is still named. A custom type owns its own messages:
+raise with the value's class, not its `inspect`.
+
+`sensitive: true` (any type, `true`/`false` only) masks the value where objects get
+logged — `inspect`, and so `pp`, the `errors:` suffix of an invalid instance, nested
+structs and arrays of them. `nil` still shows, so a missing value stays visible:
+
+<!-- doctest -->
+```ruby
+class Card < FieldStruct::Base
+  required :number, :string, sensitive: true
+  optional :cvv,    :string, sensitive: true
+  optional :brand,  :string
+end
+
+card = Card.new(number: '4111111111111111', brand: 'visa')
+card             # => #<Card number: [FILTERED], cvv: nil, brand: "visa">
+card.inspect.include?('4111')      # => false
+card.number      # => "4111111111111111"
+card.to_h        # => { number: "4111111111111111", cvv: nil, brand: "visa" }
+Card.metadata[:number].sensitive?  # => true
+```
+
+Data paths are **not** masked — the reader, `attributes`/`to_h`, `as_json`/`to_json`,
+`deconstruct_keys` and equality all return the real value, so `from_json(to_json)`
+still round-trips. Masking there would corrupt the data; filter at the log boundary
+if you log those. `Field#inspect`, `Metadata#to_h` (`sensitive: true`) and `describe`
+show the flag only when it is set.
 
 ---
 
@@ -278,6 +564,43 @@ Person.new(name: 'A', address: { city: 'NYC' }).address   # => #<Address city: "
 
 Nested validity propagates: a `Person` with an invalid `address` is itself invalid.
 Pattern matching recurses (`in { address: { city: 'NYC' } }`).
+
+A refused array element is named by its index (0-based), never its value:
+`errors[:ids] # => ["could not be coerced: element at index 1: Integer fields expect a base-10 integer, got a String that is not one"]`.
+
+### Element options (`element:`)
+
+`element:` takes the options a scalar field of the element type would take, and
+applies them to every element — coercion options (`strict:`, `base:`, `round:`,
+`format:`, `zone:`, `values:`) and validation options (`format:` Regexp, `enum:`,
+`in:`) alike. Array-level options stay on the field (`required:`, `default:`,
+`coercion_policy:`, `sensitive:`, …).
+
+<!-- doctest -->
+```ruby
+class Batch < FieldStruct::Base
+  optional :ids,   :array, of: :integer, element: { strict: true, base: 16 }
+  optional :days,  :array, of: :date,    element: { format: '%d/%m/%Y' }
+  optional :codes, :array, of: :string,  element: { format: /\A[A-Z]{3}\z/ }
+end
+
+Batch.new(ids: %w[ff 10]).ids                    # => [255, 16]
+Batch.new(ids: [1, 2.5]).errors[:ids]            # => ["could not be coerced: element at index 1: Integer fields with strict: true expect a whole number, got a Float that is not one"]
+Batch.new(codes: %w[USD eur]).errors[:codes]     # => ["element at index 1 is invalid"]
+Batch.new(days: ['22/10/2026']).as_json[:days]   # => ['22/10/2026']
+Batch.metadata.to_h[:ids][:options]              # => { of_type: 'Integer', element: { strict: true, base: 16 } }
+```
+
+They are checked at declaration against the element type's own schema, with the
+error a scalar field would get, prefixed with the field: `element: { base: '16' }`
+raises `in element: of array field :ids, base: on Integer expects Integer, got String
+("16")`. A key the element type doesn't take raises, listing the ones it does
+(`round: is not an Integer option. Integer accepts: in, base, strict.`) — unlike a
+field, `element:` passes nothing through. A temporal element's `format:` is also
+what `to_json` writes, so `from_json` reads it back. `describe` lists what each
+array's elements accept (`element accepts in (Array | Range), base (Integer), …`).
+Not supported: `element:` on an `:array` of arrays, and on a nested struct element
+(a struct takes no options).
 
 ---
 
@@ -428,10 +751,11 @@ the README "Type signatures" section for a Rake-task wiring example.
   That is a deliberate invariant, not a coincidence — see `.claude/project_intent.md`
   invariant 8. Coercion dispatches on explicit stdlib classes rather than on
   `respond_to?(:to_date)` and friends, which ActiveSupport defines on every String.
-- `:array` requires `of:`; `:union` requires `of: [...]` with ≥2 members.
+- `:array` requires `of:`; `:union` requires `of: [...]` with ≥2 members. Options for
+  each array element go in `element: { ... }`, not on the field.
 - Option scoping: `format:` → string-shaped + date/time/datetime; `enum:` →
   string/symbol; `in:` → integer/float/decimal/date/time/datetime; `round:` →
-  float/decimal; `base:` → integer; `values:` → boolean. Misapplying raises `ArgumentError` at declaration.
+  float/decimal; `base:` → integer; `strict:` → string-shaped/integer; `values:` → boolean; `element:` → array. Misapplying raises `ArgumentError` at declaration.
 - `description:`/`desc:` is documentation only — absent from `attributes`, `as_json`,
   and pattern-match keys.
 - **Input is a Hash, or anything with `to_hash`** (e.g. a permitted
@@ -447,5 +771,9 @@ the README "Type signatures" section for a Rake-task wiring example.
   naming it; name the field something else and map the external key with
   `serialize :json, errors_field: 'errors'`. `method`, `name`, `type` stay legal.
 - Unknown input keys are dropped by default (`unknown_attributes :ignore`); set
-  `:raise` to reject them with `UnknownAttributeError`.
+  `:raise` to reject them with `UnknownAttributeError` — recommended at payment/API
+  boundaries, on each struct (see [above](#payment-and-api-boundaries-unknown_attributes-raise)).
+- **Validity is computed on assignment.** In-place mutation of a nested struct or an
+  array element doesn't refresh the parent's errors; re-assign the field (see
+  [staleness](#validity-is-computed-on-assignment-shallow-valid-staleness)).
 - Uses **Oj** for JSON (`Oj.load`/`Oj.dump`), not the stdlib JSON.

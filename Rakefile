@@ -149,6 +149,14 @@ namespace :docs do
   end
 end
 
+# --- Benchmarks -------------------------------------------------------
+
+# Not part of the default task: timings are indicative, not a gate.
+desc 'Run the indicative benchmarks in benchmarks/run.rb (BENCH_SECONDS=n per case, default 1)'
+task :bench do
+  ruby 'benchmarks/run.rb', ENV.fetch('BENCH_SECONDS', '1.0')
+end
+
 # --- Release pre-flight -----------------------------------------------
 
 namespace :release do

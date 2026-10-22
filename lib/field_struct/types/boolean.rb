@@ -83,14 +83,14 @@ module FieldStruct
         return true if value == 1
         return false if value == 0
 
+        truthy, falsy = truthy_and_falsy_for(values)
         if value.is_a?(::String)
           downcased = value.downcase
-          truthy, falsy = truthy_and_falsy_for(values)
           return true if truthy.include?(downcased)
           return false if falsy.include?(downcased)
         end
 
-        raise ArgumentError, "cannot coerce #{value.inspect} to boolean"
+        raise ArgumentError, refusal_message(value, truthy + falsy)
       end
 
       # @return [Array(Class, Class)] +[TrueClass, FalseClass]+
@@ -99,6 +99,17 @@ module FieldStruct
       end
 
       private
+
+      # The accepted vocabulary is declared schema, so it is listed; the
+      # refused value is named by class only — it may be payments data.
+      #
+      # @param value [Object] the refused input
+      # @param accepted [Array<::String>] the truthy then falsy strings
+      # @return [::String]
+      def refusal_message(value, accepted)
+        got = value.is_a?(::String) ? 'a String that is not one' : value.class.to_s
+        "Boolean fields expect true, false, 1, 0 or one of the strings #{accepted.map(&:inspect).join(", ")}, got #{got}"
+      end
 
       # @param values [::Hash{::Symbol=>::Array<::String>}, nil] the field's +values:+
       # @return [Array(::Array<::String>, ::Array<::String>)] +[truthy, falsy]+, downcased

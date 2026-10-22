@@ -10,6 +10,7 @@ require_relative 'field_struct/types/preset_resolver'
 require_relative 'field_struct/types/temporal_parser'
 require_relative 'field_struct/types/rfc3339_format'
 require_relative 'field_struct/types/time_format_resolver'
+require_relative 'field_struct/types/zone_option'
 require_relative 'field_struct/types/string'
 require_relative 'field_struct/types/immutable_string'
 require_relative 'field_struct/types/integer'
@@ -40,6 +41,12 @@ require_relative 'field_struct/scaffold'
 # and per-field validation. Subclass {FieldStruct::Base} to get a value object
 # whose attributes coerce, validate on assignment, and introspect cleanly.
 module FieldStruct
+  # What {Base#inspect} renders in place of a +sensitive: true+ field's
+  # value (the placeholder ActiveSupport's parameter filter uses).
+  #
+  # @return [String]
+  FILTERED = '[FILTERED]'
+
   # The library's root directory — the parent of +lib/+. Computed from this
   # file's location, so it resolves to the repo root in development and to the
   # installed gem directory when packaged.

@@ -2,6 +2,7 @@
 # and per-field validation. Subclass {FieldStruct::Base} to get a value object
 # whose attributes coerce, validate on assignment, and introspect cleanly.
 module FieldStruct
+  FILTERED: String
   VERSION: String
 
   # The library's root directory — the parent of +lib/+. Computed from this
@@ -329,7 +330,7 @@ module FieldStruct
     # 
     # _@param_ `type_arg` — a registered name in the resolving registry, OR a +Types::Base+ subclass, OR a +FieldStruct::Base+ subclass (auto-wrapped in {Types::Nested})
     # 
-    # _@param_ `options` — each keyword option's value: +required:+ (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol), +description:+ / +desc:+ (String), +rbs_type:+ (String — an RBS type expression {RBS.generate} emits for this field instead of the derived one), plus type-specific options (e.g. +format:+, +round:+, +of:+, +values:+, +enum:+, +in:+) — see each type's +coerce+ for the options it consumes
+    # _@param_ `options` — each keyword option's value: +required:+ (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol), +description:+ / +desc:+ (String), +rbs_type:+ (String — an RBS type expression {RBS.generate} emits for this field instead of the derived one), +sensitive:+ (Boolean — mask the value in +inspect+; see {Field#sensitive?}), plus type-specific options (e.g. +format:+, +round:+, +of:+, +values:+, +enum:+, +in:+) — see each type's +coerce+ for the options it consumes
     # 
     # _@return_ — the class-level metadata, so the DSL reads
     # cleanly in IRB (each line prints the running set of declared
@@ -421,8 +422,10 @@ module FieldStruct
     # so the full setter pipeline runs: coercion (strings re-coerce to
     # Date/Time/BigDecimal), nested Hash → Types::Nested instantiation,
     # +unknown_attributes+ policy, +coercion_policy+. Invalid JSON
-    # surfaces the underlying Oj parse error; a non-object root
-    # (+[...]+, +"hi"+, +42+) raises +ArgumentError+.
+    # raises the underlying Oj parse error's class (+EncodingError+ or a
+    # subclass) with its position but not the input, which Oj's own
+    # message quotes; a non-object root (+[...]+, +"hi"+, +42+) raises
+    # +ArgumentError+ naming its class.
     # 
     # JSON numbers with a fraction or exponent parse as +BigDecimal+, never
     # through a Float, so a +:decimal+ field gets the exact digits sent.
@@ -431,6 +434,16 @@ module FieldStruct
     # 
     # _@param_ `json_string`
     def self.from_json: (String json_string) -> Base
+
+    # Oj quotes the whole input in its parse-error message, and that input
+    # may be payments data. Re-raise the same class with Oj's description
+    # and position only, and without the original as +cause+ (which error
+    # reporters print).
+    # 
+    # _@param_ `json_string`
+    # 
+    # _@return_ — the parsed JSON value
+    def self.parse_json: (String json_string) -> Object?
 
     # Walk a parsed JSON hash (string-keyed, possibly with external
     # names) and reverse-map every key to its canonical Symbol via
@@ -480,6 +493,30 @@ module FieldStruct
     # _@return_ — for an +:array+ field, +of:+ resolved
     # into +of_type:+; otherwise +options+ unchanged
     def self.resolve_array_options: (singleton(Types::Base) type_class, ::Hash[Symbol, Object?] options) -> ::Hash[Symbol, Object?]
+
+    # Check an array field's +element:+ options against the element type's
+    # own schema, exactly as a scalar field of that type is checked, and
+    # store them resolved and frozen. An empty or absent +element:+ leaves
+    # no +:element+ key, so an array without one is unchanged.
+    # 
+    # _@param_ `name` — the field name, for error messages
+    # 
+    # _@param_ `options` — the array field's resolved options
+    # 
+    # _@return_ — +options+ with +:element+ resolved
+    def self.resolve_element_options: ((Symbol | String) name, ::Hash[Symbol, Object?] options) -> ::Hash[Symbol, Object?]
+
+    # _@param_ `element_class` — the array's element type
+    # 
+    # _@param_ `element` — the declared +element:+ options
+    # 
+    # _@return_ — +element+, every key native to +element_class+
+    def self.element_options_checked: (singleton(Types::Base) element_class, ::Hash[Symbol, Object?] element) -> ::Hash[Symbol, Object?]
+
+    # _@param_ `word`
+    # 
+    # _@return_ — +"an"+ before a vowel, otherwise +"a"+
+    def self.article: (String word) -> String
 
     # _@param_ `type_class`
     # 
@@ -571,6 +608,9 @@ module FieldStruct
     # _@param_ `value` — the declared +rbs_type:+
     def self.validate_rbs_type!: (Object value) -> void
 
+    # _@param_ `value` — the declared +sensitive:+
+    def self.validate_sensitive!: (Object value) -> void
+
     # _@param_ `field`
     def self.define_field_accessors: (Field field) -> void
 
@@ -636,6 +676,28 @@ module FieldStruct
     # _@param_ `attrs` — anything responding to +to_hash+ is converted first
     def assign_attributes: ((::Hash[(Symbol | String), Object?] | _ToHash[untyped, untyped]) attrs) -> self
 
+    # A new instance with the given attributes changed; the receiver is left
+    # untouched. Like +Data#with+.
+    # 
+    #   moved = person.with(city: 'Provo', zip: '84601')
+    # 
+    # Changed fields run through the normal setter pipeline (coercion, the
+    # field's +coercion_policy+, its errors rewritten), then cross-field
+    # validators rerun. Unchanged fields are carried over exactly as they
+    # are, errors included, and callable defaults are not called again.
+    # The copy is shallow, as with +dup+: an unchanged nested struct or
+    # array is the same object in both. Unknown keys follow
+    # {.unknown_attributes}. Works on +immutable!+ and frozen instances;
+    # the copy is an instance of the receiver's class, immutable when the
+    # class is, and frozen when the receiver is.
+    # 
+    # _@param_ `positional` — refused — changes are keywords only
+    # 
+    # _@param_ `changes` — new values, by field name
+    # 
+    # _@return_ — a new instance of the receiver's class
+    def with: (*Object positional, **Object? changes) -> Base
+
     # _@return_ — a fresh hash of current attribute values
     # keyed by canonical field name. For format-aware export (with the
     # declared +:json+ mapping applied), see {#as_json} / {#to_json}.
@@ -694,6 +756,10 @@ module FieldStruct
     # required"]}>+ — so the most-read debug output never hides invalidity
     # (design invariant 7). This reads the current {#errors}; it does not
     # re-run validation, so printing an instance never mutates it.
+    # 
+    # A +sensitive: true+ field renders {FieldStruct::FILTERED} in place of
+    # a non-nil value (+nil+ still shows, so a missing value stays visible).
+    # +pp+ goes through here too.
     def inspect: () -> String
 
     def model_name: () -> ModelName
@@ -760,13 +826,24 @@ module FieldStruct
 
     # A declared +format:+ is now stored as written, so a preset name has to be
     # expanded before strftime sees it — and only the field's own type knows
-    # its preset table. With no declared format (an :array of dates, a :value
-    # field holding one) the answer is ISO-8601, as it has always been.
+    # its preset table. An :array field's elements use the +format:+ in its
+    # +element:+ options, read through the element type, so +from_json+ reads
+    # back what +to_json+ wrote. With no declared format (an :array without
+    # one, a :value field holding a date) the answer is ISO-8601, as it has
+    # always been.
     # 
     # _@param_ `value`
     # 
     # _@param_ `field`
     def temporal_json_value: ((::Date | ::Time | ::DateTime) value, Field? field) -> String
+
+    # _@param_ `field`
+    # 
+    # _@return_ — the
+    # options holding the +format:+ for this field's temporal values and
+    # the type class that resolves it — an array's +element:+ options and
+    # element type, or the field's own
+    def temporal_format_source: (Field? field) -> ([::Hash[Symbol, Object?], Class] | [NilClass, Class] | [NilClass, NilClass])
 
     def apply_defaults: () -> void
 
@@ -784,6 +861,22 @@ module FieldStruct
     # 
     # _@param_ `value` — a present (non-missing) coerced value
     def field_value_invalid?: (Field field, Object? value) -> bool
+
+    # Whether +value+ breaks a +format:+ Regexp, +enum:+ or +in:+ in +options+.
+    # 
+    # _@param_ `options` — a field's options, or an array field's +element:+ options
+    # 
+    # _@param_ `value` — a present coerced value
+    def outside_options?: (::Hash[Symbol, Object?] options, Object? value) -> bool
+
+    # _@param_ `field`
+    # 
+    # _@param_ `value` — a present coerced value
+    # 
+    # _@return_ — the index of the first non-nil element that
+    # breaks the array field's +element:+ +format:+ / +enum:+ / +in:+, or
+    # +nil+ when there is none (or the field declares no +element:+)
+    def invalid_element_index: (Field field, Object? value) -> Integer?
 
     # `in:` with a Range means a BOUNDS check, so ask the Range for its bounds.
     # 
@@ -895,6 +988,8 @@ module FieldStruct
     # 
     # _@param_ `rbs_type` — RBS type expression overriding the derived one in generated signatures (see {#rbs_type})
     # 
+    # _@param_ `sensitive` — mask the value in {Base#inspect} (see {#sensitive?})
+    # 
     # _@param_ `options` — extra keyword type/field options forwarded to coerce (e.g. +format:+, +of_type:+, +round:+, +values:+, +enum:+, +in:+)
     def initialize: (
                       name: (Symbol | String),
@@ -905,10 +1000,19 @@ module FieldStruct
                       ?coercion_policy: Symbol?,
                       ?description: String?,
                       ?rbs_type: String?,
+                      ?sensitive: bool,
                       **Object? options
                     ) -> void
 
     def required?: () -> bool
+
+    # Whether the field holds data that must not reach a log — a card
+    # number, a CVV, a token. {Base#inspect} (and so +pp+) renders
+    # {FieldStruct::FILTERED} in place of a non-nil value. Data paths —
+    # the reader, +attributes+, +to_h+, +as_json+, +to_json+, pattern
+    # matching — return the real value, so round-trips stay exact.
+    # Declared with the +sensitive:+ field option.
+    def sensitive?: () -> bool
 
     # Concise one-line representation. Designed to be readable in IRB
     # without dumping every ivar (the default Object#inspect is the
@@ -1146,6 +1250,15 @@ module FieldStruct
     # than a quoted string, so the line reads like the declaration it
     # describes.
     def declared_option_repr: (Object? value) -> String
+
+    # What an array field's +element:+ may hold — its element type's native
+    # options — so the line answers "what can I pass to each element" too.
+    # 
+    # _@param_ `field`
+    # 
+    # _@return_ — +nil+ for a non-array field, or an element type
+    # with no options (a nested struct)
+    def element_accepts_summary: (Field field) -> String?
 
     # _@param_ `type_class`
     # 
@@ -1656,7 +1769,8 @@ module FieldStruct
     # (strftime via +as_json+).
     class Time < FieldStruct::Types::Base
       # Native options: a +format:+ strftime/strptime String (or Symbol
-      # preset; see {.presets}) and an +in:+ Array or Range of allowed values.
+      # preset; see {.presets}), an +in:+ Array or Range of allowed values,
+      # and a +zone:+ String (+"UTC"+ or +"±HH:MM"+; see {ZoneOption}).
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       def self.default_format: () -> ::String?
@@ -1669,8 +1783,12 @@ module FieldStruct
       # presets stay strftime-based.
       def self.presets: () -> ::Hash[::Symbol, Object]
 
-      # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
-      # string at field-declaration time; other forms pass through.
+      # Validate a Symbol +format:+ preset (see {.presets}) and a +zone:+
+      # (see {ZoneOption}) at field-declaration time.
+      # 
+      # _@param_ `options` — the per-field options
+      # 
+      # _@return_ — the options, unchanged
       def self.resolve_options: (::Hash[::Symbol, Object?] options) -> ::Hash[::Symbol, Object?]
 
       # Resolve a declared +format:+ (a Symbol preset name or a strftime
@@ -1701,7 +1819,9 @@ module FieldStruct
       # _@param_ `value` — +nil+ → +nil+; a String is read through +strptime+ when a +format:+ is set and +Time.parse+ otherwise; a +Time+ passes through; a +DateTime+, +Date+ or Time-like value (ActiveSupport's TimeWithZone) is converted. Anything else is refused.
       # 
       # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      def coerce: ((::String | ::Time | ::Date | ::DateTime)? value, ?format: ::String?) -> ::Time?
+      # 
+      # _@param_ `zone` — +"UTC"+ or +"±HH:MM"+: the offset for a String that names none, and for a +Date+'s midnight. Input carrying its own offset keeps it. +nil+ means the process zone. See {ZoneOption}.
+      def coerce: ((::String | ::Time | ::Date | ::DateTime)? value, ?format: ::String?, ?zone: ::String?) -> ::Time?
 
       # _@return_ — the top-level +::Time+ class
       def ruby_type: () -> Class
@@ -1709,7 +1829,9 @@ module FieldStruct
       # _@param_ `value` — the raw string
       # 
       # _@param_ `format` — strptime format, when the field declares one
-      def parse_string: (::String value, ::String? format) -> ::Time
+      # 
+      # _@param_ `zone` — the field's +zone:+, if declared
+      def parse_string: (::String value, ::String? format, ::String? zone) -> ::Time
 
       # _@param_ `value` — the value to convert
       # 
@@ -1747,19 +1869,37 @@ module FieldStruct
     # type named by the +:of+ DSL option (resolved at field-declaration
     # time and stashed as +options[:of_type]+ — a class, not a symbol).
     # 
+    # An optional +:element+ Hash carries the element type's own options
+    # (+strict:+, +base:+, +format:+, …), passed to every element's coerce:
+    # 
+    #   optional :ids, :array, of: :integer, element: {strict: true, base: 16}
+    # 
+    # A refused element is reported with its index — +element at index 2: …+.
+    # 
     # Missing: +nil+ or empty array. ruby_type: +::Array+.
     class Array < FieldStruct::Types::Base
       # Native options: a required +of:+ naming the element type — a
       # registered Symbol or a Class (a +Types::Base+ or +FieldStruct::Base+
-      # subclass).
+      # subclass) — and an +element:+ Hash of that element type's options.
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
+
+      # The element type class behind an +of_type+ option, whether it holds
+      # a class (+:integer+ → {Types::Integer}) or a built instance (a
+      # {Types::Nested}). Its +option_schema+ is what +element:+ accepts.
+      # 
+      # _@param_ `of_type` — an array field's +:of_type+ option
+      # 
+      # _@return_ — a {Types::Base} subclass
+      def self.element_class: ((Class | Types::Base) of_type) -> singleton(Types::Base)
 
       # _@param_ `value` — anything else raises TypeError
       # 
       # _@param_ `of_type` — the element type — a Types::Base subclass for stock types, or an already-built instance for parameterized types like {Types::Nested}. The DSL stashes this when the user writes +of: :string+ / +of: SomeStruct+. Required at the type level; nil here means the type was called directly without DSL help.
       # 
+      # _@param_ `element` — the element type's options, passed to every element's coerce (the DSL's +element:+, already validated against the element type's schema)
+      # 
       # _@return_ — each element coerced by +of_type+
-      def coerce: (::Array[Object?]? value, ?of_type: (Class | Types::Base)?) -> ::Array[Object?]?
+      def coerce: (::Array[Object?]? value, ?of_type: (Class | Types::Base)?, ?element: ::Hash[::Symbol, Object?]?) -> ::Array[Object?]?
 
       # _@param_ `value`
       # 
@@ -1808,8 +1948,12 @@ module FieldStruct
     end
 
     # Float type. Coerces via +Kernel#Float+, which parses numeric strings
-    # strictly and rejects anything non-numeric.
+    # strictly and rejects anything non-numeric. Strings are base 10, as for
+    # {Types::Integer}: a hex string like "0x1A", which +Kernel#Float+ would
+    # read as 26.0, is refused.
     class Float < FieldStruct::Types::Base
+      HEX_PREFIX: ::Regexp
+
       # Native options: a +round:+ Integer precision and an +in:+ Array or
       # Range of allowed values.
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
@@ -1817,7 +1961,7 @@ module FieldStruct
       # _@return_ — field-level rounding precision; +nil+ disables.
       def self.default_round: () -> ::Integer?
 
-      # _@param_ `value` — +nil+ → +nil+; everything else flows through +Kernel#Float+ — strict on string parsing, rejects non-numeric strings, Symbols, Booleans, Arrays.
+      # _@param_ `value` — +nil+ → +nil+; everything else flows through +Kernel#Float+ — strict on string parsing, rejects non-numeric strings, Symbols, Booleans, Arrays, and hex strings ("0x1A").
       # 
       # _@param_ `round` — decimal places, rounding half up (ties away from zero); +nil+ leaves the value unrounded. The result is a Float even at +round: 0+.
       # 
@@ -1968,17 +2112,22 @@ module FieldStruct
     end
 
     # String type. Coerces any non-nil value via +to_s+; treats nil, empty,
-    # and whitespace-only strings as missing.
+    # and whitespace-only strings as missing. A field declared +strict: true+
+    # accepts only scalars (String, Symbol, Integer) and objects
+    # responding to +to_str+, so a Hash or Array is refused rather than stored
+    # as its +inspect+ text.
     class String < FieldStruct::Types::Base
       # Native options: a +format:+ Regexp (or Symbol preset, used by the
-      # +:uuid+ / +:url+ / +:email+ subtypes) and an +enum:+ Array of
-      # allowed values.
+      # +:uuid+ / +:url+ / +:email+ subtypes), an +enum:+ Array of
+      # allowed values, and a +strict:+ Boolean.
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@param_ `value` — anything stringable (everything in Ruby responds to +to_s+); +nil+ stays +nil+
       # 
+      # _@param_ `strict` — when true, refuse anything but a String, Symbol, Integer or +to_str+ object (a Float, BigDecimal or Rational is refused: its +to_s+ is +"0.12e2"+ / +"1/2"+, not the caller's text). Strict never changes what an accepted value becomes — it is still +value.to_s+.
+      # 
       # _@return_ — +nil+ when input is +nil+, otherwise +value.to_s+
-      def coerce: (_ToS? value) -> ::String?
+      def coerce: (_ToS? value, ?strict: bool?) -> ::String?
 
       # Missing if nil, empty, or whitespace-only.
       # 
@@ -1987,6 +2136,9 @@ module FieldStruct
 
       # _@return_ — the top-level +::String+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value` — a non-nil value
+      def refuse_non_scalar!: (Object value) -> void
     end
 
     # Symbol type. Accepts an existing +Symbol+ or a +String+. Anything else
@@ -2048,6 +2200,14 @@ module FieldStruct
       # _@return_ — +[TrueClass, FalseClass]+
       def ruby_type: () -> [Class, Class]
 
+      # The accepted vocabulary is declared schema, so it is listed; the
+      # refused value is named by class only — it may be payments data.
+      # 
+      # _@param_ `value` — the refused input
+      # 
+      # _@param_ `accepted` — the truthy then falsy strings
+      def refusal_message: (Object value, ::Array[::String] accepted) -> ::String
+
       # _@param_ `values` — the field's +values:+
       # 
       # _@return_ — +[truthy, falsy]+, downcased
@@ -2058,13 +2218,15 @@ module FieldStruct
     # +base:+, so "010" is ten (not octal eight) and "0x1A" is refused rather
     # than read as hex. Float-shaped strings like "3.14" raise rather than
     # silently truncate. Float numerics, by contrast, are truncated — that
-    # matches +Kernel#Integer+'s own behavior on numeric input.
+    # matches +Kernel#Integer+'s own behavior on numeric input — unless the
+    # field declares +strict: true+, which refuses any non-integral value.
     class Integer < FieldStruct::Types::Base
       BASES: ::Range[::Integer]
       MAX_DECIMAL_DIGITS: ::Integer
 
-      # Native options: an +in:+ Array or Range of allowed values, and a
-      # +base:+ Integer radix (2..36) for string input.
+      # Native options: an +in:+ Array or Range of allowed values, a
+      # +base:+ Integer radix (2..36) for string input, and a +strict:+
+      # Boolean.
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # Refuse a +base:+ outside 2..36 at field-declaration time. A
@@ -2079,14 +2241,21 @@ module FieldStruct
       # 
       # _@param_ `base` — radix (2..36) for String input; +nil+ means 10
       # 
+      # _@param_ `strict` — when true, refuse a value that is not a whole number (+12.7+, a +Time+) instead of truncating it; an integral one (+12.0+) still becomes its Integer
+      # 
       # _@return_ — +nil+ for +nil+ input, otherwise the parsed integer
-      def coerce: ((::Integer | Numeric | ::String)? value, ?base: ::Integer?) -> ::Integer?
+      def coerce: ((::Integer | Numeric | ::String)? value, ?base: ::Integer?, ?strict: bool?) -> ::Integer?
 
       # _@return_ — the top-level +::Integer+ class
       def ruby_type: () -> Class
 
       # _@param_ `value`
       def refuse_huge_decimal!: (Object value) -> void
+
+      # _@param_ `value` — the input, already read by +Kernel#Integer+
+      # 
+      # _@param_ `whole` — what +Kernel#Integer+ made of it
+      def refuse_inexact!: (Object value, ::Integer whole) -> void
 
       # _@param_ `value`
       # 
@@ -2103,7 +2272,8 @@ module FieldStruct
     # (strftime via +as_json+).
     class DateTime < FieldStruct::Types::Base
       # Native options: a +format:+ strftime/strptime String (or Symbol
-      # preset; see {.presets}) and an +in:+ Array or Range of allowed values.
+      # preset; see {.presets}), an +in:+ Array or Range of allowed values,
+      # and a +zone:+ String (+"UTC"+ or +"±HH:MM"+; see {ZoneOption}).
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@return_ — field-level strftime/strptime format; +nil+
@@ -2118,8 +2288,12 @@ module FieldStruct
       # presets stay strftime-based.
       def self.presets: () -> ::Hash[::Symbol, Object]
 
-      # Resolve a Symbol +format:+ preset (see {.presets}) to its strftime
-      # string at field-declaration time; other forms pass through.
+      # Validate a Symbol +format:+ preset (see {.presets}) and a +zone:+
+      # (see {ZoneOption}) at field-declaration time.
+      # 
+      # _@param_ `options` — the per-field options
+      # 
+      # _@return_ — the options, unchanged
       def self.resolve_options: (::Hash[::Symbol, Object?] options) -> ::Hash[::Symbol, Object?]
 
       # Resolve a declared +format:+ (a Symbol preset name or a strftime
@@ -2142,7 +2316,9 @@ module FieldStruct
       # _@param_ `value` — +nil+ → +nil+; a String is read through +strptime+ when a +format:+ is set and +DateTime.parse+ otherwise; a +DateTime+ passes through; a +Date+ becomes midnight and a +Time+ (including ActiveSupport's TimeWithZone) keeps its instant and offset. Anything else is refused.
       # 
       # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      def coerce: ((::String | ::DateTime | ::Date | ::Time)? value, ?format: ::String?) -> ::DateTime?
+      # 
+      # _@param_ `zone` — +"UTC"+ or +"±HH:MM"+: the offset for a String that names none, and for a +Date+'s midnight. Input carrying its own offset keeps it. +nil+ means UTC. See {ZoneOption}.
+      def coerce: ((::String | ::DateTime | ::Date | ::Time)? value, ?format: ::String?, ?zone: ::String?) -> ::DateTime?
 
       # _@return_ — the top-level +::DateTime+ class
       def ruby_type: () -> Class
@@ -2150,7 +2326,9 @@ module FieldStruct
       # _@param_ `value` — the raw string
       # 
       # _@param_ `format` — strptime format, when the field declares one
-      def parse_string: (::String value, ::String? format) -> ::DateTime
+      # 
+      # _@param_ `zone` — the field's +zone:+, if declared
+      def parse_string: (::String value, ::String? format, ::String? zone) -> ::DateTime
 
       # _@param_ `value` — the value to convert
       # 
@@ -2181,6 +2359,73 @@ module FieldStruct
 
       # _@param_ `value` — a value that is neither a BigDecimal nor a Float
       def parse: (Object value) -> ::BigDecimal
+    end
+
+    # The +zone:+ option shared by {Time} and {DateTime}.
+    # 
+    # A zone-less string (+"2026-10-22 10:00"+) names a wall-clock time, not an
+    # instant: by default +:time+ reads it in the *process* zone and +:datetime+
+    # in UTC, so the same input meant different instants on different servers.
+    # +zone:+ supplies the missing offset, so it means one instant everywhere.
+    # 
+    # It only fills in an offset that is MISSING. A string with an offset, a
+    # +Time+, a +DateTime+ (and ActiveSupport's TimeWithZone) keep theirs; a
+    # +Date+, which has none, becomes midnight in the zone.
+    # 
+    # Accepted values are +"UTC"+ and fixed offsets +"±HH:MM"+. IANA names
+    # (+"America/Denver"+) are refused: the stdlib has no time zone database,
+    # and accepting them only when a host happens to load ActiveSupport would
+    # make a declaration valid in one process and invalid in another
+    # (invariant 7). A DST-aware zone is a different contract — a per-instant
+    # offset — and is left for a separate option.
+    module ZoneOption
+      OFFSET: ::Regexp
+
+      # Refuse a +zone:+ value FieldStruct cannot read, at declaration. A
+      # non-String is left for the option-shape check to report.
+      # 
+      # _@param_ `type_name` — the type's short name, for the message
+      # 
+      # _@param_ `options` — the per-field options
+      # 
+      # _@return_ — the options, unchanged
+      def self.validate!: (::String type_name, ::Hash[::Symbol, Object?] options) -> ::Hash[::Symbol, Object?]
+
+      # _@param_ `zone` — a declared +zone:+
+      # 
+      # _@return_ — seconds east of UTC, or +nil+ when +zone+ is
+      # not a value {.validate!} accepts
+      def self.offset_seconds: (::String zone) -> ::Integer?
+
+      # Whether parsed fragments leave the offset to +zone:+.
+      # 
+      # _@param_ `parts` — fragments from +Date._parse+ or +Date._strptime+
+      # 
+      # _@return_ — +true+ when the string named no offset at all
+      def self.zoneless?: (::Hash[::Symbol, Object] parts) -> bool
+
+      # Read a zone-less String as a wall-clock time at +zone+'s offset.
+      # 
+      # _@param_ `value` — a string {.zoneless?} accepted
+      # 
+      # _@param_ `format` — a resolved strptime format, or +nil+ for the no-format path (which has already required a whole day)
+      # 
+      # _@param_ `zone` — a declared +zone:+
+      # 
+      # _@return_ — at +zone+'s offset (+utc?+ for +"UTC"+)
+      def self.time_at: (::String value, ::String? format, ::String zone) -> ::Time
+
+      # _@param_ `value` — a plain Date
+      # 
+      # _@param_ `zone` — a declared +zone:+
+      # 
+      # _@return_ — midnight at +zone+'s offset
+      def self.midnight: (::Date value, ::String zone) -> ::Time
+
+      # _@param_ `seconds` — seconds east of UTC
+      # 
+      # _@return_ — +"+HH:MM"+ / +"-HH:MM"+
+      def self.offset_text: (::Integer seconds) -> ::String
     end
 
     # RFC 3339 — the profile of ISO 8601 that "ISO-8601" means in an API

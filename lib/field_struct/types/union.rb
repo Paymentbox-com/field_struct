@@ -64,7 +64,9 @@ module FieldStruct
           next
         end
 
-        raise ::TypeError, "no union member could coerce #{value.inspect}"
+        # The class, never the value — it may be payments data.
+        members = @member_types.map { |m| m.class.name.to_s.split('::').last }.join(' | ')
+        raise ::TypeError, "no union member (#{members}) could coerce #{value.class} input"
       end
 
       # @param value [Object]

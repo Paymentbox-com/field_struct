@@ -35,7 +35,7 @@ module FieldStruct
     RESERVED_FIELD_NAMES = %i[
       errors attributes attribute_names assign_attributes
       as_json to_json to_h to_model model_name inspect hash class
-      send public_send freeze instance_variable_set initialize initialize_copy raise
+      send public_send freeze instance_variable_set initialize initialize_copy raise with dup
       deconstruct deconstruct_keys
       json_value temporal_json_value apply_defaults run_cross_field_validators
       validate_field apply_coercion_policy record_coercion_failure
@@ -167,6 +167,7 @@ module FieldStruct
       #   (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol),
       #   +description:+ / +desc:+ (String), +rbs_type:+ (String — an RBS type
       #   expression {RBS.generate} emits for this field instead of the derived one),
+      #   +sensitive:+ (Boolean — mask the value in +inspect+; see {Field#sensitive?}),
       #   plus type-specific options (e.g. +format:+, +round:+, +of:+,
       #   +values:+, +enum:+, +in:+) — see each type's +coerce+ for the
       #   options it consumes
@@ -184,6 +185,7 @@ module FieldStruct
         options = apply_default_format(type_class, options)
         options = type_class.resolve_options(options)
         validate_options!(type_class, options)
+        options = resolve_element_options(name, options) if type_class <= FieldStruct::Types::Array
         required = options.delete(:required) { false }
         default = options.delete(:default)
         coercion_policy = options.delete(:coercion_policy)
@@ -191,11 +193,13 @@ module FieldStruct
         description = extract_description!(options)
         rbs_type = options.delete(:rbs_type)
         validate_rbs_type!(rbs_type) unless rbs_type.nil?
+        sensitive = options.delete(:sensitive) { false }
+        validate_sensitive!(sensitive)
         field = Field.new(
           name: name, type: type_class, type_instance: type_instance,
           required: required, default: default,
           coercion_policy: coercion_policy, description: description,
-          rbs_type: rbs_type, **options
+          rbs_type: rbs_type, sensitive: sensitive, **options
         )
         metadata.add(field)
         define_field_accessors(field)
@@ -310,8 +314,10 @@ module FieldStruct
       # so the full setter pipeline runs: coercion (strings re-coerce to
       # Date/Time/BigDecimal), nested Hash → Types::Nested instantiation,
       # +unknown_attributes+ policy, +coercion_policy+. Invalid JSON
-      # surfaces the underlying Oj parse error; a non-object root
-      # (+[...]+, +"hi"+, +42+) raises +ArgumentError+.
+      # raises the underlying Oj parse error's class (+EncodingError+ or a
+      # subclass) with its position but not the input, which Oj's own
+      # message quotes; a non-object root (+[...]+, +"hi"+, +42+) raises
+      # +ArgumentError+ naming its class.
       #
       # JSON numbers with a fraction or exponent parse as +BigDecimal+, never
       # through a Float, so a +:decimal+ field gets the exact digits sent.
@@ -321,14 +327,30 @@ module FieldStruct
       # @param json_string [String]
       # @return [Base]
       # @raise [ArgumentError] when the parsed root is not a JSON object
+      # @raise [EncodingError] when the input is not valid JSON
       def from_json(json_string)
-        parsed = Oj.load(json_string, mode: :compat, decimal_class: ::BigDecimal)
-        unless parsed.is_a?(::Hash)
-          raise ArgumentError,
-            "from_json expects a JSON object root, got #{parsed.class}: #{parsed.inspect}"
-        end
+        parsed = parse_json(json_string)
+        raise ArgumentError, "from_json expects a JSON object root, got #{parsed.class}" unless parsed.is_a?(::Hash)
 
         new(canonicalize_serialized_hash(parsed))
+      end
+
+      # Oj quotes the whole input in its parse-error message, and that input
+      # may be payments data. Re-raise the same class with Oj's description
+      # and position only, and without the original as +cause+ (which error
+      # reporters print).
+      #
+      # @api private
+      # @param json_string [String]
+      # @return [Object, nil] the parsed JSON value
+      # @raise [EncodingError] when the input is not valid JSON
+      def parse_json(json_string)
+        Oj.load(json_string, mode: :compat, decimal_class: ::BigDecimal)
+      rescue ::EncodingError => e
+        description = e.message[/\A[^(\[]*/].to_s.strip
+        position = e.message[/line \d+, column \d+/]
+        detail = [description, position && "at #{position}"].compact.reject(&:empty?).join(' ')
+        raise e.class, "from_json could not parse its input as JSON (#{detail})", e.backtrace, cause: nil
       end
 
       # Walk a parsed JSON hash (string-keyed, possibly with external
@@ -437,8 +459,62 @@ module FieldStruct
 
         rest = options.dup
         element_class, element_instance = resolve_type_arg(rest.delete(:of))
-        rest[:of_type] = element_instance || element_class
-        rest
+        # of_type first, so to_h / describe read like the declaration.
+        {of_type: element_instance || element_class}.merge(rest)
+      end
+
+      # Check an array field's +element:+ options against the element type's
+      # own schema, exactly as a scalar field of that type is checked, and
+      # store them resolved and frozen. An empty or absent +element:+ leaves
+      # no +:element+ key, so an array without one is unchanged.
+      #
+      # @param name [Symbol, String] the field name, for error messages
+      # @param options [Hash{Symbol=>Object, nil}] the array field's resolved options
+      # @return [Hash{Symbol=>Object, nil}] +options+ with +:element+ resolved
+      # @raise [ArgumentError] prefixed +in element: of array field :name,+
+      #   when an element option is not one the element type accepts, has
+      #   the wrong shape, or is refused by the element type's resolver
+      def resolve_element_options(name, options)
+        element = options[:element]
+        return options.except(:element) if element.nil? || element.empty?
+
+        element_class = FieldStruct::Types::Array.element_class(options[:of_type])
+        resolved = element_class.resolve_options(element_options_checked(element_class, element))
+        validate_options!(element_class, resolved)
+        options.merge(element: resolved.freeze)
+      rescue ArgumentError => e
+        raise ArgumentError, "in element: of array field :#{name}, #{e.message}"
+      end
+
+      # @param element_class [Class<Types::Base>] the array's element type
+      # @param element [Hash{Symbol=>Object, nil}] the declared +element:+ options
+      # @return [Hash{Symbol=>Object, nil}] +element+, every key native to +element_class+
+      # @raise [ArgumentError] on a key that isn't one of +element_class+'s
+      #   options, or when the element type is an Array or Union
+      def element_options_checked(element_class, element)
+        if element_class <= FieldStruct::Types::Array || element_class <= FieldStruct::Types::Union
+          raise ArgumentError, "element options are not supported for #{short_type_name(element_class)} elements"
+        end
+
+        schema = element_class.option_schema
+        element.each_key do |key|
+          next if schema.key?(key)
+
+          if UNIVERSAL_FIELD_OPTIONS.include?(key)
+            raise ArgumentError, "#{key}: is a field option, not an element option. Declare it on the field itself."
+          end
+
+          type = short_type_name(element_class)
+          accepts = schema.empty? ? 'accepts no options' : "accepts: #{schema.keys.join(", ")}"
+          raise ArgumentError, "#{key}: is not #{article(type)} #{type} option. #{type} #{accepts}."
+        end
+        element
+      end
+
+      # @param word [String]
+      # @return [String] +"an"+ before a vowel, otherwise +"a"+
+      def article(word)
+        word.match?(/\A[AEIOU]/i) ? 'an' : 'a'
       end
 
       # @param type_class [Class<Types::Union>]
@@ -491,7 +567,7 @@ module FieldStruct
       # type-option check skips them.
       #
       # @return [Array<Symbol>]
-      UNIVERSAL_FIELD_OPTIONS = %i[required default coercion_policy description desc rbs_type].freeze
+      UNIVERSAL_FIELD_OPTIONS = %i[required default coercion_policy description desc rbs_type sensitive].freeze
       private_constant :UNIVERSAL_FIELD_OPTIONS
 
       # Three-way option check (design invariant 7): validate native, pass
@@ -623,6 +699,15 @@ module FieldStruct
 
         raise ArgumentError, 'rbs_type: must be a non-empty String of RBS (e.g. ' \
                              "rbs_type: '::ActiveRecord::Relation'), got #{value.inspect}"
+      end
+
+      # @param value [Object] the declared +sensitive:+
+      # @return [void]
+      # @raise [ArgumentError] unless +value+ is +true+ or +false+
+      def validate_sensitive!(value)
+        return if [true, false].include?(value)
+
+        raise ArgumentError, "sensitive: must be true or false, got #{value.class}"
       end
 
       # @param field [Field]
@@ -759,6 +844,48 @@ module FieldStruct
       self
     end
 
+    # A new instance with the given attributes changed; the receiver is left
+    # untouched. Like +Data#with+.
+    #
+    #   moved = person.with(city: 'Provo', zip: '84601')
+    #
+    # Changed fields run through the normal setter pipeline (coercion, the
+    # field's +coercion_policy+, its errors rewritten), then cross-field
+    # validators rerun. Unchanged fields are carried over exactly as they
+    # are, errors included, and callable defaults are not called again.
+    # The copy is shallow, as with +dup+: an unchanged nested struct or
+    # array is the same object in both. Unknown keys follow
+    # {.unknown_attributes}. Works on +immutable!+ and frozen instances;
+    # the copy is an instance of the receiver's class, immutable when the
+    # class is, and frozen when the receiver is.
+    #
+    # @param positional [Object] refused — changes are keywords only
+    # @param changes [Object, nil] new values, by field name
+    # @return [Base] a new instance of the receiver's class
+    # @raise [ArgumentError] when given a positional argument
+    # @raise [UnknownAttributeError] under +unknown_attributes :raise+
+    # @raise [CoercionError] under +coercion_policy :raise+
+    def with(*positional, **changes)
+      unless positional.empty?
+        raise ArgumentError,
+          "#{self.class.name || "AnonymousFieldStruct"}#with takes keyword arguments only, " \
+          "got #{positional.size} positional; pass a Hash as with(**hash)"
+      end
+
+      freeze_copy = frozen?
+      copy = dup
+      copy.instance_exec do
+        # Reopen the copy for its setters (immutable! checks this flag), as
+        # #initialize does, then close it again.
+        @_initialized = false
+        assign_attributes(changes)
+        run_cross_field_validators if self.class.validators.any?
+        @_initialized = true
+        freeze if freeze_copy
+      end
+      copy
+    end
+
     # @return [Hash{Symbol=>Object, nil}] a fresh hash of current attribute values
     #   keyed by canonical field name. For format-aware export (with the
     #   declared +:json+ mapping applied), see {#as_json} / {#to_json}.
@@ -847,9 +974,16 @@ module FieldStruct
     # (design invariant 7). This reads the current {#errors}; it does not
     # re-run validation, so printing an instance never mutates it.
     #
+    # A +sensitive: true+ field renders {FieldStruct::FILTERED} in place of
+    # a non-nil value (+nil+ still shows, so a missing value stays visible).
+    # +pp+ goes through here too.
+    #
     # @return [String]
     def inspect
-      pairs = attributes.map { |name, value| "#{name}: #{value.inspect}" }.join(', ')
+      pairs = self.class.metadata.map do |field|
+        value = public_send(field.name)
+        "#{field.name}: #{field.sensitive? && !value.nil? ? FieldStruct::FILTERED : value.inspect}"
+      end.join(', ')
       body = "#{self.class.name || "AnonymousFieldStruct"} #{pairs}"
       current = errors.to_h
       unless current.empty?
@@ -962,22 +1096,38 @@ module FieldStruct
 
     # A declared +format:+ is now stored as written, so a preset name has to be
     # expanded before strftime sees it — and only the field's own type knows
-    # its preset table. With no declared format (an :array of dates, a :value
-    # field holding one) the answer is ISO-8601, as it has always been.
+    # its preset table. An :array field's elements use the +format:+ in its
+    # +element:+ options, read through the element type, so +from_json+ reads
+    # back what +to_json+ wrote. With no declared format (an :array without
+    # one, a :value field holding a date) the answer is ISO-8601, as it has
+    # always been.
     #
     # @param value [::Date, ::Time, ::DateTime]
     # @param field [Field, nil]
     # @return [String]
     def temporal_json_value(value, field)
-      format = field&.options&.[](:format)
-      return value.iso8601 if format.nil?
+      options, type_class = temporal_format_source(field)
+      format = options&.[](:format)
+      return value.iso8601 if format.nil? || type_class.nil?
 
-      resolved = field.type_instance.class.resolve_format(format)
+      resolved = type_class.resolve_format(format)
       # A format FieldStruct implements itself renders itself; a strftime
       # String is handed to strftime, as it always was.
       return resolved.render(value) if resolved.is_a?(Types::Rfc3339Format)
 
       value.strftime(resolved)
+    end
+
+    # @param field [Field, nil]
+    # @return [Array(Hash{Symbol=>Object, nil}, Class), Array(nil, Class), Array(nil, nil)] the
+    #   options holding the +format:+ for this field's temporal values and
+    #   the type class that resolves it — an array's +element:+ options and
+    #   element type, or the field's own
+    def temporal_format_source(field)
+      return [nil, nil] if field.nil?
+      return [field.options, field.type_instance.class] unless field.type <= Types::Array
+
+      [field.options[:element], Types::Array.element_class(field.options[:of_type])]
     end
 
     # @return [void]
@@ -1021,19 +1171,44 @@ module FieldStruct
         return
       end
 
-      errors.add(field.name, 'is invalid') if field_value_invalid?(field, value)
+      if field_value_invalid?(field, value)
+        errors.add(field.name, 'is invalid')
+      elsif (index = invalid_element_index(field, value))
+        errors.add(field.name, "element at index #{index} is invalid")
+      end
     end
 
     # @param field [Field]
     # @param value [Object, nil] a present (non-missing) coerced value
     # @return [Boolean]
     def field_value_invalid?(field, value)
-      fmt = field.options[:format]
-      return true if fmt.is_a?(::Regexp) && !fmt.match?(value)
-      return true if field.options[:enum] && !field.options[:enum].include?(value)
-      return true if field.options[:in] && !within_allowed?(field.options[:in], value)
+      outside_options?(field.options, value) || nested_invalid?(value)
+    end
 
-      nested_invalid?(value)
+    # Whether +value+ breaks a +format:+ Regexp, +enum:+ or +in:+ in +options+.
+    #
+    # @param options [Hash{Symbol=>Object, nil}] a field's options, or an
+    #   array field's +element:+ options
+    # @param value [Object, nil] a present coerced value
+    # @return [Boolean]
+    def outside_options?(options, value)
+      fmt = options[:format]
+      return true if fmt.is_a?(::Regexp) && !fmt.match?(value)
+      return true if options[:enum] && !options[:enum].include?(value)
+
+      !options[:in].nil? && !within_allowed?(options[:in], value)
+    end
+
+    # @param field [Field]
+    # @param value [Object, nil] a present coerced value
+    # @return [Integer, nil] the index of the first non-nil element that
+    #   breaks the array field's +element:+ +format:+ / +enum:+ / +in:+, or
+    #   +nil+ when there is none (or the field declares no +element:+)
+    def invalid_element_index(field, value)
+      element_options = field.options[:element]
+      return nil unless element_options && value.is_a?(::Array)
+
+      value.index { |item| !item.nil? && outside_options?(element_options, item) }
     end
 
     # `in:` with a Range means a BOUNDS check, so ask the Range for its bounds.
@@ -1085,7 +1260,7 @@ module FieldStruct
         nil
       when :raise
         raise CoercionError.new(
-          "could not coerce #{raw_value.inspect} for #{field.name}: #{error.message}",
+          "could not coerce #{raw_value.class} input for #{field.name}: #{error.message}",
           field_name: field.name,
           original: error
         )

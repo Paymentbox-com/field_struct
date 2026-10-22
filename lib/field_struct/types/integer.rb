@@ -8,20 +8,23 @@ module FieldStruct
     # +base:+, so "010" is ten (not octal eight) and "0x1A" is refused rather
     # than read as hex. Float-shaped strings like "3.14" raise rather than
     # silently truncate. Float numerics, by contrast, are truncated — that
-    # matches +Kernel#Integer+'s own behavior on numeric input.
+    # matches +Kernel#Integer+'s own behavior on numeric input — unless the
+    # field declares +strict: true+, which refuses any non-integral value.
     class Integer < Base
       # The radixes +Kernel#Integer+ accepts for a +base:+ option.
       # @return [::Range<::Integer>]
       BASES = (2..36)
 
-      # Native options: an +in:+ Array or Range of allowed values, and a
-      # +base:+ Integer radix (2..36) for string input.
+      # Native options: an +in:+ Array or Range of allowed values, a
+      # +base:+ Integer radix (2..36) for string input, and a +strict:+
+      # Boolean.
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.own_option_schema
         {
           in: option(type: [::Array, ::Range]),
-          base: option(type: [::Integer])
+          base: option(type: [::Integer]),
+          strict: option(type: [::TrueClass, ::FalseClass])
         }
       end
 
@@ -48,11 +51,14 @@ module FieldStruct
       #   Symbols/Booleans/Arrays raise TypeError.
       # @param base [::Integer, nil] radix (2..36) for String input; +nil+
       #   means 10
+      # @param strict [Boolean, nil] when true, refuse a value that is not a
+      #   whole number (+12.7+, a +Time+) instead of truncating it; an
+      #   integral one (+12.0+) still becomes its Integer
       # @return [::Integer, nil] +nil+ for +nil+ input, otherwise the parsed integer
       # @raise [ArgumentError, TypeError] when the value cannot be coerced,
       #   including a NaN or ±Infinity Numeric (Float, BigDecimal) and a
       #   Complex with an imaginary part
-      def coerce(value, base: 10, **)
+      def coerce(value, base: 10, strict: false, **)
         return nil if value.nil?
         return value if value.is_a?(::Integer)
         return parse_string(value, base || 10) if value.is_a?(::String)
@@ -63,12 +69,14 @@ module FieldStruct
 
         refuse_huge_decimal!(value)
 
-        begin
+        whole = begin
           ::Kernel.Integer(value)
         rescue ::RangeError
           # A Complex with an imaginary part; Kernel's message echoes the value.
-          raise ArgumentError, "Integer fields could not read a #{value.class} as a number"
+          raise ArgumentError, "Integer fields could not read a #{value.class} as a number", cause: nil
         end
+        refuse_inexact!(value, whole) if strict
+        whole
       end
 
       # The most integer digits a decimal may expand to. +BigDecimal('1e10000000')+
@@ -98,6 +106,18 @@ module FieldStruct
                              "got a larger #{value.class}"
       end
 
+      # @param value [Object] the input, already read by +Kernel#Integer+
+      # @param whole [::Integer] what +Kernel#Integer+ made of it
+      # @return [void]
+      # @raise [ArgumentError] unless +whole+ equals +value+ — i.e. the read
+      #   truncated a fraction, or went through +to_i+ on a non-number
+      def refuse_inexact!(value, whole)
+        return if whole == value
+
+        # The class, never the value — see Types::Time#coerce.
+        raise ArgumentError, "Integer fields with strict: true expect a whole number, got a #{value.class} that is not one"
+      end
+
       # @param value [::String]
       # @param base [::Integer]
       # @return [::Integer]
@@ -106,7 +126,7 @@ module FieldStruct
         ::Kernel.Integer(value, base)
       rescue ::ArgumentError
         # The class, never the value — see Types::Time#coerce.
-        raise ArgumentError, "Integer fields expect a base-#{base} integer, got a String that is not one"
+        raise ArgumentError, "Integer fields expect a base-#{base} integer, got a String that is not one", cause: nil
       end
     end
   end

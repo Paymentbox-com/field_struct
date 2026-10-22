@@ -345,6 +345,11 @@ module FieldStruct
     # surfaces the underlying Oj parse error; a non-object root
     # (+[...]+, +"hi"+, +42+) raises +ArgumentError+.
     # 
+    # JSON numbers with a fraction or exponent parse as +BigDecimal+, never
+    # through a Float, so a +:decimal+ field gets the exact digits sent.
+    # +:float+ fields still convert to Float; +:value+ fields (and numbers
+    # inside their Hashes and Arrays) receive the +BigDecimal+.
+    # 
     # _@param_ `json_string`
     def self.from_json: (String json_string) -> Base
 

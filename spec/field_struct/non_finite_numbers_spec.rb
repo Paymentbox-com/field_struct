@@ -30,9 +30,12 @@ RSpec.describe FieldStruct::Base, 'non-finite numeric input' do
       expect(klass.new(n: BigDecimal('-Infinity')).errors[:n]).to include(/could not be coerced/)
     end
 
-    it 'records a coercion error for JSON 1e400 instead of raising' do
+    # from_json parses JSON numbers as BigDecimal, so 1e400 is a finite
+    # number rather than a Float overflowing to Infinity.
+    it 'reads JSON 1e400 exactly instead of raising' do
       instance = klass.from_json('{"n": 1e400}')
-      expect(instance.errors[:n]).to include(/could not be coerced/)
+      expect(instance).to be_valid
+      expect(instance.n).to eq(10**400)
     end
 
     it 'names the class in the message, never the value' do
@@ -87,8 +90,10 @@ RSpec.describe FieldStruct::Base, 'non-finite numeric input' do
       expect(klass.new(d: BigDecimal('NaN')).errors[:d]).to include(/could not be coerced/)
     end
 
-    it 'refuses JSON 1e400' do
-      expect(klass.from_json('{"d": 1e400}').errors[:d]).to include(/could not be coerced/)
+    it 'reads JSON 1e400 exactly, like the String "1e400"' do
+      instance = klass.from_json('{"d": 1e400}')
+      expect(instance).to be_valid
+      expect(instance.d).to eq(BigDecimal('1e400'))
     end
 
     it 'still accepts a large but finite decimal string' do
@@ -127,10 +132,10 @@ RSpec.describe FieldStruct::Base, 'non-finite numeric input' do
       expect(union_klass.new(i: BigDecimal('NaN')).errors[:i]).to include(/could not be coerced/)
     end
 
-    it 'refuses JSON 1e400' do
+    it 'lets the :integer member read JSON 1e400 exactly' do
       instance = union_klass.from_json('{"i": 1e400}')
-      expect(instance).not_to be_valid
-      expect(instance.errors[:i]).to include(/could not be coerced/)
+      expect(instance).to be_valid
+      expect(instance.i).to eq(10**400)
     end
 
     it 'refuses a non-finite number even when :string is the first member' do

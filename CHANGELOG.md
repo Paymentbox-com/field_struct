@@ -6,7 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Tooling / CI
+### Signatures
+
+- **Core types in `Types` name the core class.** `Types::String#coerce`, `Types::Symbol#coerce`, `Types::Integer#coerce` and `Types::Float#coerce` were typed with bare `String` / `Symbol` / `Integer` / `Float`, which RBS resolves to `FieldStruct::Types::String` etc. inside `module Types`. Their YARD now says `::String` and friends, so the sig says the value is a `::String`, not a type object.
+- **Keyword and rest splats are typed per value.** `**options` on `field` / `required` / `optional` / `Field.new` is `**Object` (was `**::Hash[Symbol, Object]`, which meant every option value had to be a Hash), `serialize`'s `**mapping` is `**(String | Symbol)`, and `validate`'s `*method_names` is `*Symbol` (was `*::Array[Symbol]`). No runtime change. `sigs:untyped` ceiling 215 → 212, sord allowlist 155 → 152.
 
 - **`sig/` can only get more typed.** Three guards, no Steep gate:
   - `rake sigs:untyped` (CI, `release:check`) counts non-comment `untyped` in `sig/` against a committed ceiling (`rakelib/sig_guards/untyped_ceiling.txt`, 215). Above it fails; below it also fails until the ceiling is lowered, so the slack can't be spent later.

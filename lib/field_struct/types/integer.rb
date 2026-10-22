@@ -39,7 +39,7 @@ module FieldStruct
         options
       end
 
-      # @param value [Integer, Numeric, ::String, nil] +nil+ → +nil+;
+      # @param value [::Integer, Numeric, ::String, nil] +nil+ → +nil+;
       #   +Integer+ passes through; a String parses in +base+ (surrounding
       #   whitespace and digit underscores allowed; float-shaped or
       #   out-of-base strings raise ArgumentError); other numerics flow
@@ -47,7 +47,7 @@ module FieldStruct
       #   Symbols/Booleans/Arrays raise TypeError.
       # @param base [::Integer, nil] radix (2..36) for String input; +nil+
       #   means 10
-      # @return [Integer, nil] +nil+ for +nil+ input, otherwise the parsed integer
+      # @return [::Integer, nil] +nil+ for +nil+ input, otherwise the parsed integer
       # @raise [ArgumentError, TypeError] when the value cannot be coerced,
       #   including a NaN or ±Infinity Numeric (Float, BigDecimal) and a
       #   Complex with an imaginary part

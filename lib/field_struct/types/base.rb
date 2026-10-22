@@ -63,8 +63,8 @@ module FieldStruct
       # through unchanged; concrete types override to interpret their
       # own options (e.g. +format: :iso8601+ → strftime string).
       #
-      # @param options [Hash] the per-field options hash, as written by the user
-      # @return [Hash] possibly-modified options to store on the Field
+      # @param options [::Hash{::Symbol => Object, nil}] the per-field options hash, as written by the user
+      # @return [::Hash{::Symbol => Object, nil}] possibly-modified options to store on the Field
       def self.resolve_options(options)
         options
       end

@@ -39,7 +39,7 @@ module FieldStruct
         %w[false 0]
       end
 
-      # @return [Hash{::Symbol=>Hash}] named presets for the +values:+ option
+      # @return [::Hash{::Symbol => ::Hash{::Symbol => ::Array<::String>}}] named presets for the +values:+ option
       def self.presets
         {
           english_yes_no: {truthy: %w[true yes y on 1], falsy: %w[false no n off 0]},
@@ -100,6 +100,8 @@ module FieldStruct
 
       private
 
+      # @param values [::Hash{::Symbol=>::Array<::String>}, nil] the field's +values:+
+      # @return [Array(::Array<::String>, ::Array<::String>)] +[truthy, falsy]+, downcased
       def truthy_and_falsy_for(values)
         return [self.class.default_truthy, self.class.default_falsy] unless values
 

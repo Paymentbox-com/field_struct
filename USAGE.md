@@ -47,7 +47,7 @@ as `nil`). "Missing" is what counts as absent for presence checks.
 | `:email` | `String` | `to_s` | `format:` (`:permissive`/`:default`/`:strict`), `enum:`, `strict:` | nil / empty / whitespace |
 | `:binary` | `String` (ASCII-8BIT) | `to_s`, forced to binary encoding | `strict:` | nil / empty (**whitespace bytes are kept**) |
 | `:value` | `Object` (untyped) | pass-through, no coercion | — | nil |
-| `:array` | `Array` | each element coerced through `of:` | `of:` (**required**) | nil / empty |
+| `:array` | `Array` | each element coerced through `of:` (with `element:` options) | `of:` (**required**), `element:` | nil / empty |
 | `:union` | first matching member | tries each member type | `of:` (**Array, ≥2**) | nil |
 | nested (a `FieldStruct::Base` subclass) | that class | Hash → instance, or instance | — | nil |
 
@@ -60,6 +60,7 @@ required :score,     :integer, in: 0..100
 required :price,     :big_decimal, round: 2
 required :code,      :integer, base: 16           # "1A" → 26
 optional :tags,      :array, of: :string
+optional :ids,       :array, of: :integer, element: { strict: true }
 required :ref,       :union, of: %i[string integer]
 optional :address,   Address                       # nested FieldStruct
 optional :lines,     :array, of: LineItem          # array of nested
@@ -99,7 +100,8 @@ strftime string or a preset Symbol), `round:` (float/decimal — Integer places)
 `base:` (integer — radix 2..36 for string input, default 10), `strict:` (string-shaped
 and integer — Boolean; see [Strict coercion](#strict-coercion-strict-true)),
 `values:` (boolean — a `{truthy:, falsy:}` Hash or a preset Symbol), `of:` (array
-element type / union member array), `enum:` (string-like — Array of allowed values),
+element type / union member array), `element:` (array — a Hash of the element
+type's own options; see [Element options](#element-options-element)), `enum:` (string-like — Array of allowed values),
 `in:` (numeric/temporal — Array or Range), `zone:` (time/datetime — `"UTC"` or
 `"±HH:MM"` for zone-less input; see [Zones](#zones-zone)).
 
@@ -378,7 +380,8 @@ messages pass through unprefixed).
 - **Required + missing** → `errors.add(name, 'is required')`.
 - **Present but invalid** → `errors.add(name, 'is invalid')`. "Invalid" = `format:`
   regex mismatch, `enum:`/`in:` violation, an invalid nested struct, or an array with
-  an invalid element. So **"required" means present *and* valid**.
+  an invalid element. An array element breaking its `element:` `format:`/`enum:`/`in:`
+  is reported by index: `'element at index 2 is invalid'`. So **"required" means present *and* valid**.
 - **Validity is separate from construction.** A field can hold `nil`/raw even when
   required — see coercion policy below. Always gate on `valid?`, don't assume a
   required reader is non-nil.
@@ -456,6 +459,43 @@ Person.new(name: 'A', address: { city: 'NYC' }).address   # => #<Address city: "
 
 Nested validity propagates: a `Person` with an invalid `address` is itself invalid.
 Pattern matching recurses (`in { address: { city: 'NYC' } }`).
+
+A refused array element is named by its index (0-based), never its value:
+`errors[:ids] # => ["could not be coerced: element at index 1: Integer fields expect a base-10 integer, got a String that is not one"]`.
+
+### Element options (`element:`)
+
+`element:` takes the options a scalar field of the element type would take, and
+applies them to every element — coercion options (`strict:`, `base:`, `round:`,
+`format:`, `zone:`, `values:`) and validation options (`format:` Regexp, `enum:`,
+`in:`) alike. Array-level options stay on the field (`required:`, `default:`,
+`coercion_policy:`, `sensitive:`, …).
+
+<!-- doctest -->
+```ruby
+class Batch < FieldStruct::Base
+  optional :ids,   :array, of: :integer, element: { strict: true, base: 16 }
+  optional :days,  :array, of: :date,    element: { format: '%d/%m/%Y' }
+  optional :codes, :array, of: :string,  element: { format: /\A[A-Z]{3}\z/ }
+end
+
+Batch.new(ids: %w[ff 10]).ids                    # => [255, 16]
+Batch.new(ids: [1, 2.5]).errors[:ids]            # => ["could not be coerced: element at index 1: Integer fields with strict: true expect a whole number, got a Float that is not one"]
+Batch.new(codes: %w[USD eur]).errors[:codes]     # => ["element at index 1 is invalid"]
+Batch.new(days: ['22/10/2026']).as_json[:days]   # => ['22/10/2026']
+Batch.metadata.to_h[:ids][:options]              # => { of_type: 'Integer', element: { strict: true, base: 16 } }
+```
+
+They are checked at declaration against the element type's own schema, with the
+error a scalar field would get, prefixed with the field: `element: { base: '16' }`
+raises `in element: of array field :ids, base: on Integer expects Integer, got String
+("16")`. A key the element type doesn't take raises, listing the ones it does
+(`round: is not an Integer option. Integer accepts: in, base, strict.`) — unlike a
+field, `element:` passes nothing through. A temporal element's `format:` is also
+what `to_json` writes, so `from_json` reads it back. `describe` lists what each
+array's elements accept (`element accepts in (Array | Range), base (Integer), …`).
+Not supported: `element:` on an `:array` of arrays, and on a nested struct element
+(a struct takes no options).
 
 ---
 
@@ -606,10 +646,11 @@ the README "Type signatures" section for a Rake-task wiring example.
   That is a deliberate invariant, not a coincidence — see `.claude/project_intent.md`
   invariant 8. Coercion dispatches on explicit stdlib classes rather than on
   `respond_to?(:to_date)` and friends, which ActiveSupport defines on every String.
-- `:array` requires `of:`; `:union` requires `of: [...]` with ≥2 members.
+- `:array` requires `of:`; `:union` requires `of: [...]` with ≥2 members. Options for
+  each array element go in `element: { ... }`, not on the field.
 - Option scoping: `format:` → string-shaped + date/time/datetime; `enum:` →
   string/symbol; `in:` → integer/float/decimal/date/time/datetime; `round:` →
-  float/decimal; `base:` → integer; `strict:` → string-shaped/integer; `values:` → boolean. Misapplying raises `ArgumentError` at declaration.
+  float/decimal; `base:` → integer; `strict:` → string-shaped/integer; `values:` → boolean; `element:` → array. Misapplying raises `ArgumentError` at declaration.
 - `description:`/`desc:` is documentation only — absent from `attributes`, `as_json`,
   and pattern-match keys.
 - **Input is a Hash, or anything with `to_hash`** (e.g. a permitted

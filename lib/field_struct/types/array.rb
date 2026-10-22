@@ -19,14 +19,14 @@ module FieldStruct
         {of: option(type: [::Symbol, ::Class], required: true)}
       end
 
-      # @param value [Array, nil] anything else raises TypeError
+      # @param value [::Array<Object, nil>, nil] anything else raises TypeError
       # @param of_type [Class, Types::Base, nil] the element type — a
       #   Types::Base subclass for stock types, or an already-built
       #   instance for parameterized types like {Types::Nested}. The DSL
       #   stashes this when the user writes +of: :string+ / +of: SomeStruct+.
       #   Required at the type level; nil here means the type was called
       #   directly without DSL help.
-      # @return [Array, nil]
+      # @return [::Array<Object, nil>, nil] each element coerced by +of_type+
       # @raise [TypeError] when input is non-nil and not an Array
       # @raise [ArgumentError] when +of_type+ is missing
       # @raise [StandardError] whatever the element type raises on a bad element
@@ -60,6 +60,9 @@ module FieldStruct
       # instance (the DSL form for parameterized types like
       # {Types::Nested}). Both produce a single cached instance per
       # configured element type.
+      #
+      # @param type_or_instance [Class<Types::Base>, Types::Base]
+      # @return [Types::Base]
       def element_type_for(type_or_instance)
         return type_or_instance unless type_or_instance.is_a?(::Class)
 

@@ -18,7 +18,7 @@ module FieldStruct
     #   parameterless callable returning one, or +nil+ if no default
     attr_reader :default
 
-    # @return [Hash{Symbol=>Object}] frozen, holds the remaining keyword
+    # @return [Hash{Symbol=>Object, nil}] frozen, holds the remaining keyword
     #   options forwarded to {Types::Base#coerce} (e.g. +:format+,
     #   +:round+, +:values+, +:of_type+, +:enum+, +:in+)
     attr_reader :options
@@ -38,6 +38,13 @@ module FieldStruct
     #   pattern matches.
     attr_reader :description
 
+    # @return [String, nil] an RBS type expression that {RBS.generate} and
+    #   {RBS.type_for} emit for this field instead of deriving one from the
+    #   type (e.g. +"::ActiveRecord::Relation"+ on a +:value+ field), or
+    #   +nil+ to derive it. Declared with the +rbs_type:+ field option;
+    #   signatures only — it never affects coercion or validation.
+    attr_reader :rbs_type
+
     # @param name [Symbol, String] canonical field name
     # @param type [Class<Types::Base>] the resolved type class
     # @param type_instance [Types::Base, nil] optional pre-built instance —
@@ -45,7 +52,7 @@ module FieldStruct
     #   +type.new+ wouldn't be enough to capture the parameterization. When
     #   nil, +type.new+ is called.
     # @param required [Boolean]
-    # @param default [Object, #call, nil] literal default value, or a
+    # @param default [Object, nil] literal default value, or a
     #   parameterless callable (Proc/Lambda/Method) that returns one.
     #   Callables are invoked once per instance during apply_defaults.
     # @param coercion_policy [:keep_raw, :replace, :raise, nil] override
@@ -53,10 +60,12 @@ module FieldStruct
     #   "use whatever the class says"
     # @param description [String, nil] human-readable description of the
     #   field; for documentation purposes only
-    # @param options [Hash{Symbol=>Object}] extra type/field options
+    # @param rbs_type [String, nil] RBS type expression overriding the
+    #   derived one in generated signatures (see {#rbs_type})
+    # @param options [Object, nil] extra keyword type/field options
     #   forwarded to coerce (e.g. +format:+, +of_type:+, +round:+,
     #   +values:+, +enum:+, +in:+)
-    def initialize(name:, type:, type_instance: nil, required: false, default: nil, coercion_policy: nil, description: nil, **options)
+    def initialize(name:, type:, type_instance: nil, required: false, default: nil, coercion_policy: nil, description: nil, rbs_type: nil, **options)
       @name = name.to_sym
       @type = type
       @required = required
@@ -65,6 +74,7 @@ module FieldStruct
       @type_instance = type_instance || type.new
       @coercion_policy = coercion_policy
       @description = description
+      @rbs_type = rbs_type
       freeze
     end
 
@@ -88,6 +98,7 @@ module FieldStruct
       parts << "default=#{@default.inspect}" unless @default.nil?
       parts << "coercion_policy=#{@coercion_policy.inspect}" if @coercion_policy
       parts << "description=#{@description.inspect}" if @description
+      parts << "rbs_type=#{@rbs_type.inspect}" if @rbs_type
       @options.each { |key, value| parts << "#{key}=#{option_repr(value)}" }
       "#<#{FieldStruct.inspect_namespace}::Field #{parts.join(" ")}>"
     end
@@ -103,6 +114,7 @@ module FieldStruct
 
     private
 
+    # @return [String] the type's short name, or +Nested(...)+ / +Union(...)+
     def type_repr
       base = @type.name.to_s.split('::').last
       if @type <= FieldStruct::Types::Nested
@@ -118,6 +130,9 @@ module FieldStruct
     # Render an option's value in inspect output. Type-class values
     # (e.g. +:of_type+ on an Array field) get their basename instead
     # of the full +FieldStruct::Types::String+ class.inspect.
+    #
+    # @param value [Object, nil] an option value
+    # @return [String]
     def option_repr(value)
       case value
       when ::Class

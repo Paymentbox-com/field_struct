@@ -1,0 +1,16 @@
+# frozen_string_literal: true
+
+# Report-only Steep lane — see the `types` job in .github/workflows/main.yml.
+#
+# Steep 2.x and rbs 4.x need Ruby >= 3.3, but the main Gemfile has to install
+# on the 3.2 lane, so they live here instead. This lane prints Steep's problem
+# count and never fails the build: sig/ is guarded by `rake sigs:untyped`, the
+# sord allowlist and `rbs validate`, not by Steep. Run with:
+#
+#   BUNDLE_GEMFILE=gemfiles/types.gemfile bundle exec steep check
+source 'https://rubygems.org'
+
+gemspec path: '..'
+
+gem 'rbs', '~> 4.2', require: false
+gem 'steep', '~> 2.1', require: false

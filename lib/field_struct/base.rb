@@ -19,8 +19,10 @@ module FieldStruct
   # hook. Macros and validation layer on in later slices.
   class Base
     # Accepted values for the +coercion_policy+ macro (class- and field-level).
+    # @return [Array<Symbol>]
     VALID_COERCION_POLICIES = %i[keep_raw replace raise].freeze
     # Accepted values for the +unknown_attributes+ macro.
+    # @return [Array<Symbol>]
     VALID_UNKNOWN_POLICIES = %i[ignore raise].freeze
     # Field names {.field} refuses because Base itself calls a method of
     # that name on its own instances — a field would define a reader that
@@ -28,6 +30,8 @@ module FieldStruct
     # equality). Curated, not +instance_methods+: names Base never calls on
     # itself (+:method+, +:name+, +:type+) stay legal. {Scaffold::RESERVED}
     # renames these too.
+    #
+    # @return [Array<Symbol>]
     RESERVED_FIELD_NAMES = %i[
       errors attributes attribute_names assign_attributes
       as_json to_json to_h to_model model_name inspect hash class
@@ -36,6 +40,8 @@ module FieldStruct
       json_value temporal_json_value apply_defaults run_cross_field_validators
       validate_field apply_coercion_policy record_coercion_failure
     ].freeze
+    # Sentinel default for the macro readers/writers, so +nil+ can be a value.
+    # @return [Object]
     UNSET = Object.new.freeze
     private_constant :UNSET
 
@@ -157,8 +163,10 @@ module FieldStruct
       #   a registered name in the resolving registry, OR a +Types::Base+
       #   subclass, OR a +FieldStruct::Base+ subclass (auto-wrapped in
       #   {Types::Nested})
-      # @param options [Hash{Symbol=>Object}] +required:+ (Boolean),
-      #   +default:+ (literal or callable), +coercion_policy:+ (Symbol),
+      # @param options [Object, nil] each keyword option's value: +required:+
+      #   (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol),
+      #   +description:+ / +desc:+ (String), +rbs_type:+ (String — an RBS type
+      #   expression {RBS.generate} emits for this field instead of the derived one),
       #   plus type-specific options (e.g. +format:+, +round:+, +of:+,
       #   +values:+, +enum:+, +in:+) — see each type's +coerce+ for the
       #   options it consumes
@@ -181,10 +189,13 @@ module FieldStruct
         coercion_policy = options.delete(:coercion_policy)
         validate_coercion_policy_override!(coercion_policy) if coercion_policy
         description = extract_description!(options)
+        rbs_type = options.delete(:rbs_type)
+        validate_rbs_type!(rbs_type) unless rbs_type.nil?
         field = Field.new(
           name: name, type: type_class, type_instance: type_instance,
           required: required, default: default,
-          coercion_policy: coercion_policy, description: description, **options
+          coercion_policy: coercion_policy, description: description,
+          rbs_type: rbs_type, **options
         )
         metadata.add(field)
         define_field_accessors(field)
@@ -195,7 +206,7 @@ module FieldStruct
       #
       # @param name [Symbol, String]
       # @param type_name [Symbol, Class<Types::Base>, Class<FieldStruct::Base>]
-      # @param options [Hash{Symbol=>Object}]
+      # @param options [Object, nil] keyword options, as for {.field}
       # @return [Metadata]
       def required(name, type_name, **options)
         field(name, type_name, **options, required: true)
@@ -205,7 +216,7 @@ module FieldStruct
       #
       # @param name [Symbol, String]
       # @param type_name [Symbol, Class<Types::Base>, Class<FieldStruct::Base>]
-      # @param options [Hash{Symbol=>Object}]
+      # @param options [Object, nil] keyword options, as for {.field}
       # @return [Metadata]
       def optional(name, type_name, **options)
         field(name, type_name, **options, required: false)
@@ -233,8 +244,9 @@ module FieldStruct
       # by downstream gems reading the same metadata.
       #
       # @param name [Symbol, String] the format name (e.g. +:json+)
-      # @param mapping [Hash{Symbol=>String,Symbol}] internal field name
-      #   → external key. Symbol values are normalized to Strings.
+      # @param mapping [String, Symbol] each external key, passed as a
+      #   keyword named for the internal field. Symbol values are
+      #   normalized to Strings.
       # @return [self]
       # @raise [ArgumentError] when a mapping key is not a declared field
       def serialize(name, **mapping)
@@ -327,8 +339,8 @@ module FieldStruct
       # by +new+'s +unknown_attributes+ check.
       #
       # @api private
-      # @param hash [Hash] parsed JSON object
-      # @return [Hash{Symbol=>Object}] canonical-keyed input ready for +.new+
+      # @param hash [Hash{String, Symbol=>Object, nil}] parsed JSON object
+      # @return [Hash{Symbol=>Object, nil}] canonical-keyed input ready for +.new+
       def canonicalize_serialized_hash(hash)
         mapping = metadata.serialization(:json)
         reverse = mapping.each_with_object({}) { |(internal, external), out| out[external] = internal }
@@ -345,6 +357,9 @@ module FieldStruct
       # {.canonicalize_serialized_hash}.
       #
       # @api private
+      # @param value [Object, nil] the parsed JSON value
+      # @param field [Field, nil] the field it is for; +nil+ for an unknown key
+      # @return [Object, nil] +value+, with nested Hashes reverse-mapped
       def canonicalize_serialized_value(value, field)
         return value if field.nil?
 
@@ -375,9 +390,9 @@ module FieldStruct
       # setter's +coercion_policy+ handles the failure.
       #
       # @api private
-      # @param hash [Hash] parsed JSON object for a union field
+      # @param hash [Hash{String, Symbol=>Object, nil}] parsed JSON object for a union field
       # @param union [Types::Union]
-      # @return [Base, Hash]
+      # @return [Base, Hash{String, Symbol=>Object, nil}]
       def canonicalize_serialized_union_hash(hash, union)
         union.member_types.each do |member|
           if member.is_a?(FieldStruct::Types::Nested)
@@ -394,6 +409,8 @@ module FieldStruct
 
       private
 
+      # @return [Registry, nil] the +field_types+ of the nearest enclosing
+      #   module that defines one, or +nil+ to fall back to {FieldStruct.types}
       def namespace_field_types
         return nil unless name
 
@@ -410,6 +427,10 @@ module FieldStruct
         nil
       end
 
+      # @param type_class [Class<Types::Base>]
+      # @param options [Hash{Symbol=>Object, nil}] the field's declared options
+      # @return [Hash{Symbol=>Object, nil}] for an +:array+ field, +of:+ resolved
+      #   into +of_type:+; otherwise +options+ unchanged
       def resolve_array_options(type_class, options)
         return options unless type_class <= FieldStruct::Types::Array
         raise ArgumentError, 'array field requires an `of:` option naming the element type' unless options.key?(:of)
@@ -420,6 +441,10 @@ module FieldStruct
         rest
       end
 
+      # @param type_class [Class<Types::Union>]
+      # @param options [Hash{Symbol=>Object, nil}] the field's declared options
+      # @return [Array(Types::Union, Hash{Symbol=>Object, nil})] the built union
+      #   and the options without +of:+
       def build_union_instance(type_class, options)
         raise ArgumentError, 'union field requires an `of: [...]` option naming the member types' unless options.key?(:of)
 
@@ -435,6 +460,10 @@ module FieldStruct
         [type_class.new(instances), rest]
       end
 
+      # @param type_class [Class<Types::Base>]
+      # @param options [Hash{Symbol=>Object, nil}] the field's declared options
+      # @return [Hash{Symbol=>Object, nil}] +options+ with the type's default
+      #   +format:+ added when it has one and none was declared
       def apply_default_format(type_class, options)
         return options if options.key?(:format)
         return options unless type_class.respond_to?(:default_format)
@@ -445,7 +474,7 @@ module FieldStruct
       # Pull +description:+ (canonical) or +desc:+ (alias) out of the
       # field-declaration options. Raises if both are given — pick one.
       #
-      # @param options [Hash] mutated in place (keys deleted)
+      # @param options [Hash{Symbol=>Object, nil}] mutated in place (keys deleted)
       # @return [String, nil]
       def extract_description!(options)
         description = options.delete(:description)
@@ -460,7 +489,9 @@ module FieldStruct
       # Field options reserved by FieldStruct's own DSL on *every* field,
       # regardless of type. They're consumed by {.field} itself, so the
       # type-option check skips them.
-      UNIVERSAL_FIELD_OPTIONS = %i[required default coercion_policy description desc].freeze
+      #
+      # @return [Array<Symbol>]
+      UNIVERSAL_FIELD_OPTIONS = %i[required default coercion_policy description desc rbs_type].freeze
       private_constant :UNIVERSAL_FIELD_OPTIONS
 
       # Three-way option check (design invariant 7): validate native, pass
@@ -476,7 +507,8 @@ module FieldStruct
       #    schema exporter).
       #
       # @param type_class [Class<Types::Base>]
-      # @param options [Hash] the resolved per-field options
+      # @param options [Hash{Symbol=>Object, nil}] the resolved per-field options
+      # @return [void]
       # @raise [ArgumentError] on a misapplied or wrong-shaped native option
       def validate_options!(type_class, options)
         schema = type_class.option_schema
@@ -507,6 +539,11 @@ module FieldStruct
         (native + UNIVERSAL_FIELD_OPTIONS).uniq
       end
 
+      # @param type_class [Class<Types::Base>] the field's type
+      # @param key [Symbol] the option name
+      # @param value [Object, nil] the declared option value
+      # @param descriptor [Hash{Symbol=>Object}] the option's schema entry
+      # @return [void]
       # @raise [ArgumentError] when +value+ isn't one of the descriptor's
       #   accepted classes. +nil+ is always allowed (matches the
       #   nil-exemption of format:/enum:/in: validation).
@@ -520,6 +557,9 @@ module FieldStruct
           "got #{value.class} (#{value.inspect})"
       end
 
+      # @param key [Symbol] the misapplied option name
+      # @param type_class [Class<Types::Base>] the field's type
+      # @param registry [Registry] the registry the field resolves through
       # @return [String] the message for a native-elsewhere option, naming
       #   the registered types that do accept it
       def wrong_family_message(key, type_class, registry)
@@ -534,10 +574,14 @@ module FieldStruct
 
       # @return [String] the unqualified class name (+"Integer"+, not
       #   +"FieldStruct::Types::Integer"+) for readable messages
+      # @param type_class [Module] a type class or an option-value class
       def short_type_name(type_class)
         type_class.name.to_s.split('::').last
       end
 
+      # @param name [Symbol, String] the field name being declared
+      # @return [void]
+      # @raise [ArgumentError] when +name+ is in {RESERVED_FIELD_NAMES}
       def refuse_reserved_name!(name)
         sym = name.to_sym
         return unless RESERVED_FIELD_NAMES.include?(sym)
@@ -548,6 +592,10 @@ module FieldStruct
           "(e.g. serialize :json, #{sym}_field: '#{sym}')."
       end
 
+      # @param name [Symbol, String] the format name
+      # @param mapping [Hash{Symbol=>String, Symbol}] internal → external names
+      # @return [void]
+      # @raise [ArgumentError] when a key is not a declared field
       def validate_serialize_mapping!(name, mapping)
         unknown = mapping.keys.reject { |key| metadata[key] }
         return if unknown.empty?
@@ -557,6 +605,9 @@ module FieldStruct
           'Declare fields before calling serialize.'
       end
 
+      # @param value [Object] the declared field-level +coercion_policy:+
+      # @return [void]
+      # @raise [ArgumentError] unless +value+ is a {VALID_COERCION_POLICIES} entry
       def validate_coercion_policy_override!(value)
         return if VALID_COERCION_POLICIES.include?(value)
 
@@ -564,6 +615,18 @@ module FieldStruct
                              "(expected one of #{VALID_COERCION_POLICIES.inspect})"
       end
 
+      # @param value [Object] the declared +rbs_type:+
+      # @return [void]
+      # @raise [ArgumentError] unless +value+ is a non-blank String
+      def validate_rbs_type!(value)
+        return if value.is_a?(::String) && !value.strip.empty?
+
+        raise ArgumentError, 'rbs_type: must be a non-empty String of RBS (e.g. ' \
+                             "rbs_type: '::ActiveRecord::Relation'), got #{value.inspect}"
+      end
+
+      # @param field [Field]
+      # @return [void]
       def define_field_accessors(field)
         attr_reader field.name
 
@@ -589,8 +652,8 @@ module FieldStruct
 
       public
 
-      # @return [Array<#call>] the registered cross-field validators
-      #   for this class. Each entry is a callable that takes the
+      # @return [Array<Proc>] the registered cross-field validators
+      #   for this class. Each entry is a proc that takes the
       #   record. Subclasses start with a +dup+ of the parent's list at
       #   inheritance time and accumulate their own.
       def validators
@@ -628,7 +691,7 @@ module FieldStruct
       # auto-clearing; the user is then responsible for clearing those
       # entries.
       #
-      # @param method_names [Array<Symbol>] zero or more instance method
+      # @param method_names [Symbol] zero or more instance method
       #   names to invoke on each record at +valid?+ time
       # @yield [record] optional block validator
       # @yieldparam record [Base] the instance being validated
@@ -646,6 +709,8 @@ module FieldStruct
       # declarations and config flow down the class chain.
       #
       # @api private
+      # @param subclass [Class<Base>]
+      # @return [void]
       def inherited(subclass)
         super
         subclass.metadata.merge(metadata)
@@ -653,7 +718,7 @@ module FieldStruct
       end
     end
 
-    # @param attrs [Hash{Symbol,String=>Object}, #to_hash, nil] input values,
+    # @param attrs [Hash{Symbol,String=>Object, nil}, #to_hash, nil] input values,
     #   by symbol or string key. Anything responding to +to_hash+ (e.g. a
     #   permitted +ActionController::Parameters+) is converted first; +nil+
     #   is treated as no input.
@@ -677,7 +742,7 @@ module FieldStruct
     # in an external naming convention, see {Base.serialize} and
     # {Base.from_json}.
     #
-    # @param attrs [Hash{Symbol,String=>Object}, #to_hash] anything
+    # @param attrs [Hash{Symbol,String=>Object, nil}, #to_hash] anything
     #   responding to +to_hash+ is converted first
     # @return [self]
     # @raise [ArgumentError] when +attrs+ is not a Hash and does not
@@ -694,8 +759,7 @@ module FieldStruct
       self
     end
 
-    # @return [Hash{Symbol=>Object}] a fresh hash of current attribute values
-    # @return [Hash{Symbol=>Object}] a fresh hash of current attribute values
+    # @return [Hash{Symbol=>Object, nil}] a fresh hash of current attribute values
     #   keyed by canonical field name. For format-aware export (with the
     #   declared +:json+ mapping applied), see {#as_json} / {#to_json}.
     def attributes
@@ -750,13 +814,13 @@ module FieldStruct
       [self.class, attributes].hash
     end
 
-    # @return [Hash{Symbol=>Object}] alias of {#attributes}
+    # @return [Hash{Symbol=>Object, nil}] alias of {#attributes}
     def to_h
       attributes
     end
 
     # @param _options [Object] unused — accepted for ActiveSupport-style symmetry
-    # @return [Hash{Symbol=>Object}] a JSON-ready hash with the
+    # @return [Hash{Symbol=>Object, nil}] a JSON-ready hash with the
     #   +:json+ serialize mapping applied. Date/Time/DateTime convert
     #   to ISO-8601 strings, BigDecimal to its plain-form string,
     #   Symbol to String. Arrays recurse. Nested FieldStructs walk
@@ -824,7 +888,7 @@ module FieldStruct
     #
     # @param keys [Array<Symbol>, nil] keys the pattern requested, or
     #   +nil+ for the +**rest+ pattern (every declared field)
-    # @return [Hash{Symbol=>Object}]
+    # @return [Hash{Symbol=>Object, nil}]
     def deconstruct_keys(keys)
       return attributes if keys.nil?
 
@@ -845,7 +909,7 @@ module FieldStruct
     #     Math.hypot(x, y)
     #   end
     #
-    # @return [Array<Object>]
+    # @return [Array<Object, nil>]
     def deconstruct
       attributes.values
     end
@@ -855,6 +919,9 @@ module FieldStruct
     # Ruby hook behind +dup+ / +clone+: give the copy its own {Errors},
     # seeded with the original's messages, so validating or reassigning
     # one instance never changes the other's validity.
+    #
+    # @param source [self] the instance being copied
+    # @return [void]
     def initialize_copy(source)
       super
       @errors = source.errors.dup
@@ -862,6 +929,11 @@ module FieldStruct
 
     # Return +attrs+ as a Hash, converting via +to_hash+ when it isn't one.
     # The message names the input's class, never its value.
+    #
+    # @param attrs [Object, nil] the caller's input
+    # @param method_label [String] the public method, for the message
+    # @return [Hash{Symbol, String=>Object, nil}]
+    # @raise [ArgumentError] when +attrs+ is not a Hash and has no +to_hash+
     def hash_input!(attrs, method_label)
       return attrs if attrs.is_a?(::Hash)
       return attrs.to_hash if attrs.respond_to?(:to_hash)
@@ -871,6 +943,9 @@ module FieldStruct
         "(or an object responding to #to_hash), got #{attrs.class}"
     end
 
+    # @param value [Object, nil] a field value, or an element inside one
+    # @param field [Field, nil] the field it belongs to, for its +format:+
+    # @return [Object, nil] a JSON-ready value for Oj
     def json_value(value, field = nil)
       case value
       when nil, true, false, ::String, ::Integer, ::Float then value
@@ -889,6 +964,10 @@ module FieldStruct
     # expanded before strftime sees it — and only the field's own type knows
     # its preset table. With no declared format (an :array of dates, a :value
     # field holding one) the answer is ISO-8601, as it has always been.
+    #
+    # @param value [::Date, ::Time, ::DateTime]
+    # @param field [Field, nil]
+    # @return [String]
     def temporal_json_value(value, field)
       format = field&.options&.[](:format)
       return value.iso8601 if format.nil?
@@ -901,6 +980,7 @@ module FieldStruct
       value.strftime(resolved)
     end
 
+    # @return [void]
     def apply_defaults
       self.class.metadata.each do |field|
         value = field.default
@@ -909,11 +989,15 @@ module FieldStruct
       end
     end
 
+    # @return [void]
     def run_cross_field_validators
       errors.clear(:base)
       self.class.validators.each { |validator| validator.call(self) }
     end
 
+    # @param attrs [Hash{Symbol, String=>Object, nil}]
+    # @return [void]
+    # @raise [UnknownAttributeError] under +unknown_attributes :raise+
     def reject_unknown_attributes!(attrs)
       return if self.class.unknown_attributes == :ignore
 
@@ -927,6 +1011,9 @@ module FieldStruct
       )
     end
 
+    # @param field [Field]
+    # @param value [Object, nil] the coerced value just stored
+    # @return [void]
     def validate_field(field, value)
       errors.clear(field.name)
       if field.type_instance.missing?(value)
@@ -937,6 +1024,9 @@ module FieldStruct
       errors.add(field.name, 'is invalid') if field_value_invalid?(field, value)
     end
 
+    # @param field [Field]
+    # @param value [Object, nil] a present (non-missing) coerced value
+    # @return [Boolean]
     def field_value_invalid?(field, value)
       fmt = field.options[:format]
       return true if fmt.is_a?(::Regexp) && !fmt.match?(value)
@@ -960,10 +1050,18 @@ module FieldStruct
     #
     # An Array stays a membership test. There is no string-range case to worry
     # about: the DSL refuses `in:` on String fields outright.
+    #
+    # @param allowed [Range<Object>, Enumerable<Object>] the field's +in:+ option
+    #   (an Array for the stock types; a custom type may declare another)
+    # @param value [Object, nil]
+    # @return [Boolean]
     def within_allowed?(allowed, value)
       allowed.is_a?(::Range) ? allowed.cover?(value) : allowed.include?(value)
     end
 
+    # @param value [Object, nil]
+    # @return [Boolean] whether +value+ is, or is an Array holding, an
+    #   invalid FieldStruct
     def nested_invalid?(value)
       return value.invalid? if value.is_a?(FieldStruct::Base)
       return false unless value.is_a?(::Array)
@@ -971,6 +1069,12 @@ module FieldStruct
       value.any? { |element| element.is_a?(FieldStruct::Base) && element.invalid? }
     end
 
+    # @param field [Field]
+    # @param raw_value [Object, nil] the value that failed to coerce
+    # @param error [StandardError] what the type raised
+    # @return [Object, nil] what the setter stored: +raw_value+ under
+    #   +:keep_raw+, +nil+ under +:replace+
+    # @raise [CoercionError] under +:raise+
     def apply_coercion_policy(field, raw_value, error)
       case field.coercion_policy || self.class.coercion_policy
       when :keep_raw
@@ -988,6 +1092,10 @@ module FieldStruct
       end
     end
 
+    # @param field [Field]
+    # @param stored_value [Object, nil] what to store in the field
+    # @param error [StandardError] what the type raised
+    # @return [void]
     def record_coercion_failure(field, stored_value, error)
       instance_variable_set(:"@#{field.name}", stored_value)
       errors.clear(field.name)

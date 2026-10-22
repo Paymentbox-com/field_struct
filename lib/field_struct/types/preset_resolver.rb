@@ -14,11 +14,11 @@ module FieldStruct
       # Resolve +options[key]+ when it's a Symbol preset name, leaving other
       # values untouched.
       #
-      # @param options [::Hash{::Symbol => Object}] the per-field options
+      # @param options [::Hash{::Symbol => Object, nil}] the per-field options
       # @param key [::Symbol] the option to resolve (e.g. +:format+)
       # @param presets [::Hash{::Symbol => Object}] preset name → concrete value
       # @param label [::String] used in the unknown-preset error message
-      # @return [::Hash{::Symbol => Object}] options with +key+ resolved (a copy when changed)
+      # @return [::Hash{::Symbol => Object, nil}] options with +key+ resolved (a copy when changed)
       # @raise [ArgumentError] when +options[key]+ names an unknown preset
       def self.call(options, key, presets, label:)
         return options unless options.key?(key)

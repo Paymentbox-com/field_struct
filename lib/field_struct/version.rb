@@ -2,5 +2,6 @@
 
 module FieldStruct
   # The gem's semantic version.
-  VERSION = '0.11.0'
+  # @return [String]
+  VERSION = '0.12.0'
 end

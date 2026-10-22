@@ -34,11 +34,15 @@ module FieldStruct
   # the comments point at where.
   module Scaffold
     # Matches an integer- or decimal-looking string (kept as +:string+, only hinted).
+    # @return [Regexp]
     NUMERIC_STRING = /\A-?\d+(?:\.\d+)?\z/
     # Most distinct repeated string values before a field is flagged as an enum candidate.
+    # @return [Integer]
     ENUM_MAX_DISTINCT = 6
     # Names a scaffolded attribute can't take (suffixed with +_field+): Ruby
     # keywords, plus {Base::RESERVED_FIELD_NAMES}, which +field+ refuses.
+    #
+    # @return [Array<String>]
     RESERVED = (%w[
       BEGIN END alias and begin break case class def defined? do else elsif end
       ensure false for if in module next nil not or redo rescue retry return self
@@ -47,7 +51,7 @@ module FieldStruct
 
     # Generate FieldStruct class source from JSON example(s).
     #
-    # @param input [String, Hash, Array<Hash>] a JSON string (object or array
+    # @param input [String, Hash{Object=>Object, nil}, Array<Hash{Object=>Object, nil}>] a JSON string (object or array
     #   root), a parsed Hash, or an Array of same-shape Hashes
     # @param class_name [String] the root class name
     # @return [String] Ruby source defining the class and any nested classes
@@ -62,7 +66,9 @@ module FieldStruct
       "#{classes.join("\n\n")}\n"
     end
 
-    # @return [Array<Hash>] the sample set (a lone object becomes a set of one)
+    # @param input [String, Hash{Object=>Object, nil}, Array<Hash{Object=>Object, nil}>]
+    # @return [Array<Object>] the sample set (a lone object becomes a set of
+    #   one); {.from_json} checks every element is a Hash
     def self.normalize(input)
       data = input.is_a?(::String) ? Oj.load(input, mode: :strict) : input
       case data
@@ -77,6 +83,12 @@ module FieldStruct
     # Build the class for +samples+ as +class_name+, appending nested classes
     # to +classes+ first (post-order, so references resolve), and return the
     # (deduplicated) class name used.
+    #
+    # @param class_name [String] the name wanted
+    # @param samples [Array<Hash{Object=>Object, nil}>]
+    # @param classes [Array<String>] class sources emitted so far (appended to)
+    # @param used [Array<String>] class names taken so far (appended to)
+    # @return [String]
     def self.emit_object(class_name, samples, classes, used)
       name = unique_name(class_name, used)
       total = samples.length
@@ -94,13 +106,22 @@ module FieldStruct
     end
     private_class_method :emit_object
 
-    # @return [Hash] +{ present: Integer, values: Array }+ for +key+ across samples
+    # @param samples [Array<Hash{Object=>Object, nil}>]
+    # @param key [Object] a sample key
+    # @return [Hash{Symbol=>Integer, Array<Object, nil>}] +{ present: Integer, values: Array }+
+    #   for +key+ across samples
     def self.observe(samples, key)
       present = samples.select { |sample| sample.key?(key) }
       {present: present.length, values: present.map { |sample| sample[key] }}
     end
     private_class_method :observe
 
+    # @param attr [String] the attribute name
+    # @param obs [Hash{Symbol=>Integer, Array<Object, nil>}] from {.observe}
+    # @param total [Integer] the sample count
+    # @param classes [Array<String>] class sources emitted so far
+    # @param used [Array<String>] class names taken so far
+    # @return [String] the indented DSL line
     def self.field_line(attr, obs, total, classes, used)
       values = obs[:values]
       non_nil = values.compact
@@ -113,6 +134,10 @@ module FieldStruct
     end
     private_class_method :field_line
 
+    # @param attr [String] the attribute name
+    # @param non_nil [Array<Object>] the attribute's non-nil sample values
+    # @param classes [Array<String>] class sources emitted so far
+    # @param used [Array<String>] class names taken so far
     # @return [Array(String, String)] +[type_part, comment_hint]+
     def self.type_for(attr, non_nil, classes, used)
       if non_nil.any?(::Hash)
@@ -127,6 +152,10 @@ module FieldStruct
     end
     private_class_method :type_for
 
+    # @param attr [String] the attribute name
+    # @param elements [Array<Object, nil>] every element of the attribute's arrays
+    # @param classes [Array<String>] class sources emitted so far
+    # @param used [Array<String>] class names taken so far
     # @return [Array(String, String)] +of:+ value and a comment hint
     def self.array_element(attr, elements, classes, used)
       non_nil = elements.compact
@@ -139,6 +168,7 @@ module FieldStruct
     end
     private_class_method :array_element
 
+    # @param values [Array<Object>] non-nil scalar sample values
     # @return [Array(Symbol, String)] inferred scalar type and a comment hint
     def self.infer_scalar(values)
       return [:string, 'always null/absent in samples — type unknown'] if values.empty?
@@ -153,6 +183,8 @@ module FieldStruct
     end
     private_class_method :infer_scalar
 
+    # @param values [Array<String>]
+    # @return [Array(Symbol, String)] +:string+ and a comment hint
     def self.string_inference(values)
       non_empty = values.reject { |s| blank_string?(s) }
       return [:string, 'always empty in samples — type unknown'] if non_empty.empty?
@@ -171,6 +203,8 @@ module FieldStruct
     end
     private_class_method :string_inference
 
+    # @param value [Object]
+    # @return [Symbol] +:boolean+, +:integer+, +:float+, +:string+ or +:other+
     def self.scalar_kind(value)
       case value
       when true, false then :boolean
@@ -183,6 +217,11 @@ module FieldStruct
     private_class_method :scalar_kind
 
     # +serialize+ refuses undeclared fields, so the mapping goes after them.
+    #
+    # @param name [String] the class name
+    # @param mappings [Hash{String=>Object}] attribute name → original sample key
+    # @param lines [Array<String>] the field lines
+    # @return [String] the class source
     def self.build_class(name, mappings, lines)
       body = lines.dup
       body << '  # (no fields detected in samples)' if body.empty?
@@ -194,6 +233,10 @@ module FieldStruct
     end
     private_class_method :build_class
 
+    # @param declaration [String] the DSL call, without indentation
+    # @param comment_parts [String, nil] trailing-comment fragments; nil and
+    #   empty ones are dropped
+    # @return [String] the indented line, with a +#+ comment when any part remains
     def self.decorate(declaration, *comment_parts)
       parts = comment_parts.compact.reject(&:empty?)
       line = "  #{declaration}"
@@ -201,6 +244,10 @@ module FieldStruct
     end
     private_class_method :decorate
 
+    # @param present [Integer] samples holding the key
+    # @param total [Integer] the sample count
+    # @param missing [Integer] nil or blank values among them
+    # @return [String, nil]
     def self.availability_comment(present, total, missing)
       return "present #{present}/#{total}" if present < total
       # Only note partial emptiness; when every sample is empty the scalar
@@ -212,6 +259,9 @@ module FieldStruct
     private_class_method :availability_comment
 
     # First-seen union of keys across all samples.
+    #
+    # @param samples [Array<Hash{Object=>Object, nil}>]
+    # @return [Array<Object>]
     def self.ordered_keys(samples)
       samples.each_with_object([]) do |sample, keys|
         sample.each_key { |key| keys << key unless keys.include?(key) }
@@ -219,6 +269,9 @@ module FieldStruct
     end
     private_class_method :ordered_keys
 
+    # @param base [String] the name wanted
+    # @param used [Array<String>] names taken so far (appended to)
+    # @return [String] +base+, or +base+ with a numeric suffix
     def self.unique_name(base, used)
       name = base
       suffix = 1
@@ -231,6 +284,8 @@ module FieldStruct
     end
     private_class_method :unique_name
 
+    # @param key [String] an attribute name
+    # @return [String] a constant-safe class name
     def self.class_name_for(key)
       name = camelize(key)
       name = "N#{name}" unless name.match?(/\A[A-Z]/)
@@ -238,6 +293,8 @@ module FieldStruct
     end
     private_class_method :class_name_for
 
+    # @param str [String]
+    # @return [String]
     def self.camelize(str)
       str.to_s.split(/[^a-zA-Z0-9]+/).reject(&:empty?).map { |part| part[0].upcase + (part[1..] || '') }.join
     end
@@ -245,11 +302,16 @@ module FieldStruct
 
     # Naive: strip one trailing "s". Good enough for a prototype name; the
     # developer renames as needed.
+    #
+    # @param str [String]
+    # @return [String]
     def self.singularize(str)
       str.end_with?('s') && str.length > 1 ? str[0..-2] : str
     end
     private_class_method :singularize
 
+    # @param key [Object] a sample key
+    # @return [String] a snake_case attribute name that +field+ accepts
     def self.safe_attr(key)
       attr = key.to_s.gsub(/([a-z\d])([A-Z])/, '\1_\2').gsub(/[^a-zA-Z0-9]+/, '_').downcase
       attr = attr.sub(/\A_+/, '').sub(/_+\z/, '')
@@ -259,6 +321,8 @@ module FieldStruct
     end
     private_class_method :safe_attr
 
+    # @param value [Object, nil]
+    # @return [Boolean]
     def self.blank_string?(value)
       value.is_a?(::String) && value.strip.empty?
     end

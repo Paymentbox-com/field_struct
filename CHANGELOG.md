@@ -6,6 +6,46 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-22
+
+Valid, guarded RBS. The gem's own signatures go from 215 `untyped` to 5 and
+can only get more typed (CI ratchet); generated RBS for your structs carries
+real element types, typed setters and an `rbs_type:` escape hatch. No runtime
+behaviour changes beyond `rbs_type:` becoming a recognized option.
+
+### Added
+
+- **`rbs_type:` field option.** `optional :scope, :value, rbs_type: '::ActiveRecord::Relation'` makes `FieldStruct::RBS` emit that type for the field's reader and writer instead of the derived one. Signatures only — no effect on coercion or validation. Must be a non-blank String (`ArgumentError` at declaration otherwise); it is not parsed, since `rbs` is not a runtime dependency. Readable as `Field#rbs_type` and shown in `Field#inspect`; kept out of `Field#options`.
+- **`Types::Base#rbs_type` hook.** A custom type can return an RBS expression (`def rbs_type = '::Hash[::Symbol, ::String]'`) for every field of that type. Default `nil` (derive from `ruby_type`). A field's `rbs_type:` wins over it.
+- **`FieldStruct::RBS.type_for(field, nullable: nil) -> String`.** The per-field RBS type, exactly as `generate` emits it, for other generators. `nullable: nil` follows `!field.required?`.
+
+### Changed
+
+**Generated RBS changes for consumers.** Regenerating sigs for your own structs with `FieldStruct::RBS.generate` gives different output, and Steep may report new errors in code that relied on the old `untyped` writers:
+
+- **Writers are typed `(T? value) -> T?`** (were `(untyped value) -> untyped`). The runtime setter accepts `nil` and returns the coerced value. Assigning loose input the type would coerce (`user.age = "30"`) still works in Ruby but is now a Steep error.
+- **Output opens with a comment header** saying the types describe a *valid* instance — an invalid one (unset required field, `:keep_raw` failure holding raw input) can hold other values.
+- **Array elements of a scalar type are nullable** (`of: :string` → `::Array[::String?]`): `["x", nil]` passes validation, so the old `::Array[::String]` was false. Nested elements stay non-nil (a nil one fails validation). A union's members use their own `rbs_type`, and an anonymous nested class raises `ArgumentError` instead of emitting `::?`.
+- **Generic arguments are always present.** A custom type whose `ruby_type` is a bare generic class (`::Hash`, `::Array`, `::Range`) emits `::Hash[untyped, untyped]` and so on, instead of a bare `::Hash`, which `rbs validate` rejects.
+- **Unions render a boolean member as `bool`** (`(::String | bool)`, was `(::String | ::TrueClass | ::FalseClass)`), and a union with a `:value` member collapses to `untyped`.
+- **Optional `:value` fields are `untyped`, not `untyped?`.**
+
+### Signatures
+
+- **Nil is admitted where the runtime returns it.** `Base#attributes`, `#to_h`, `#as_json` and `#deconstruct_keys` return `::Hash[Symbol, Object?]`, `#deconstruct` `::Array[Object?]`, `Field#options` is `::Hash[Symbol, Object?]` (e.g. `format: nil`), and `Metadata#to_h` is `::Hash[Symbol, ::Hash[Symbol, Object?]]` (`default: nil`, `description: nil`). They claimed non-nil values. No runtime change. Steep report-only count 190 → 189.
+
+- **Core types in `Types` name the core class.** `Types::String#coerce`, `Types::Symbol#coerce`, `Types::Integer#coerce` and `Types::Float#coerce` were typed with bare `String` / `Symbol` / `Integer` / `Float`, which RBS resolves to `FieldStruct::Types::String` etc. inside `module Types`. Their YARD now says `::String` and friends, so the sig says the value is a `::String`, not a type object.
+- **Keyword and rest splats are typed per value.** `**options` on `field` / `required` / `optional` / `Field.new` is `**Object` (was `**::Hash[Symbol, Object]`, which meant every option value had to be a Hash), `serialize`'s `**mapping` is `**(String | Symbol)`, and `validate`'s `*method_names` is `*Symbol` (was `*::Array[Symbol]`). No runtime change. `sigs:untyped` ceiling 215 → 212, sord allowlist 155 → 152.
+- **Private helpers, generics and constants are typed.** Every private helper Sord used to write as `(untyped ...) -> untyped` now has YARD types, generic `Hash[untyped, untyped]` / `Array[untyped]` name their key and element types, and Sord runs without `--skip-constants`, so the sig declares the gem's constants (`VERSION: String`, `Base::RESERVED_FIELD_NAMES: ::Array[Symbol]`, …) from their `@return` tags. RBS has no private constants, so `private_constant`s (`Base::UNSET`, `Metadata::EMPTY_SERIALIZATION`, …) are declared too. Where a value really is anything (raw input, `:value` fields, Oj output) the type is `Object?`, never narrower. Hashes whose values can be `nil` now say so: `new` / `assign_attributes` take `::Hash[(Symbol | String), Object?]`, and the `**options` of `field` / `required` / `optional` / `Field.new` are `**Object?` (FS-6 made them `**Object`, which rejected `format: nil`). `Base.validators` is `::Array[Proc]` (it only ever holds lambdas and blocks). No runtime change. `sigs:untyped` ceiling 212 → 5, sord allowlist 152 → 6; what remains is `#to_hash` input (`_ToHash[untyped, untyped]`) and `Field#default`, a value or a callable.
+
+- **`sig/` can only get more typed.** Three guards, no Steep gate:
+  - `rake sigs:untyped` (CI, `release:check`) counts non-comment `untyped` in `sig/` against a committed ceiling (`rakelib/sig_guards/untyped_ceiling.txt`, 215). Above it fails; below it also fails until the ceiling is lowered, so the slack can't be spent later.
+  - `sigs:generate` / `sigs:check` fail on a Sord `[OMIT]` / `[DUCK]` warning missing from `rakelib/sig_guards/sord_allowlist.txt` (155 entries, keyed without file:line), and on an entry Sord no longer emits, so the list only shrinks.
+  - `sigs:validate` runs `rbs validate` over the whole `sig/` directory, not just the generated file.
+- **Sord runs without `--replace-errors-with-untyped`.** The output is byte-identical today; an unresolvable YARD type now lands in the sig as its own name (which `rbs validate` rejects) instead of a quiet `untyped`, on top of the existing generation-time guard.
+- **Report-only Steep lane.** A `types` job on Ruby 3.4 runs `steep check` (Steep 2.1 / rbs 4.2 via `gemfiles/types.gemfile`, since both need Ruby >= 3.3) and prints the problem count. It never fails the build and is not part of the required `ci` check.
+- **The packaged gem also leaves out `gemfiles/`** (CI-only Gemfiles).
+
 ## [0.11.0] - 2026-10-22
 
 Correctness and safer input. A number field holds a finite number of its own

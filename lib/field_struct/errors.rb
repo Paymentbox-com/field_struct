@@ -15,6 +15,8 @@ module FieldStruct
     # adding to the copy never changes the original.
     #
     # @api private
+    # @param source [self] the collection being copied
+    # @return [void]
     def initialize_copy(source)
       super
       @messages = source.to_h.transform_values(&:dup)

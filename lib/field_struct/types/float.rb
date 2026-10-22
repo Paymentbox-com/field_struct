@@ -29,7 +29,7 @@ module FieldStruct
       # @param round [::Integer, nil] decimal places, rounding half up (ties
       #   away from zero); +nil+ leaves the value unrounded. The result is a
       #   Float even at +round: 0+.
-      # @return [Float, nil] +nil+ for +nil+ input, otherwise the parsed float
+      # @return [::Float, nil] +nil+ for +nil+ input, otherwise the parsed float
       # @raise [ArgumentError, TypeError] when the value cannot be coerced
       #   (a String that is not a number, a Complex), or coerces to NaN or
       #   ±Infinity (including a String like "1e400")

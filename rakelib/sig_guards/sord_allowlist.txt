@@ -1,0 +1,13 @@
+# sord [OMIT]/[DUCK] warnings sig/field_struct.rbs is allowed to carry.
+# Each line is a spot where sord wrote `untyped` (OMIT: no YARD type) or a
+# duck-type stand-in (DUCK). Checked by `rake sigs:generate` / `sigs:check`:
+# a warning not listed here fails, and so does a listed one sord no longer
+# emits. This list only shrinks — fix the YARD type rather than adding a line.
+# Format: KIND (Object#method) message — no file:line, so moving code is free.
+
+DUCK (FieldStruct::Base#assign_attributes) #to_hash looks like a duck type with an equivalent RBS interface, replacing with _ToHash[untyped, untyped]
+DUCK (FieldStruct::Base#initialize) #to_hash looks like a duck type with an equivalent RBS interface, replacing with _ToHash[untyped, untyped]
+DUCK (FieldStruct::Field#default) #call looks like a duck type, replacing with untyped
+DUCK (FieldStruct::Types::Binary#coerce) #to_s looks like a duck type with an equivalent RBS interface, replacing with _ToS
+DUCK (FieldStruct::Types::ImmutableString#coerce) #to_s looks like a duck type with an equivalent RBS interface, replacing with _ToS
+DUCK (FieldStruct::Types::String#coerce) #to_s looks like a duck type with an equivalent RBS interface, replacing with _ToS

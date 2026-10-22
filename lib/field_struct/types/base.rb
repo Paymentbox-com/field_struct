@@ -63,8 +63,8 @@ module FieldStruct
       # through unchanged; concrete types override to interpret their
       # own options (e.g. +format: :iso8601+ → strftime string).
       #
-      # @param options [Hash] the per-field options hash, as written by the user
-      # @return [Hash] possibly-modified options to store on the Field
+      # @param options [::Hash{::Symbol => Object, nil}] the per-field options hash, as written by the user
+      # @return [::Hash{::Symbol => Object, nil}] possibly-modified options to store on the Field
       def self.resolve_options(options)
         options
       end
@@ -120,6 +120,24 @@ module FieldStruct
       # @raise [NotImplementedError] always, unless overridden by a subclass
       def ruby_type
         raise NotImplementedError, "#{self.class} must implement #ruby_type"
+      end
+
+      # The RBS type expression {FieldStruct::RBS} emits for fields of this
+      # type, or +nil+ (the default) to derive one from {#ruby_type}. Override
+      # in a custom type whose values {#ruby_type} can't describe on its own —
+      # typically a generic class, which RBS needs type arguments for:
+      #
+      #   def ruby_type = ::Hash
+      #   def rbs_type  = '::Hash[::Symbol, ::String]'
+      #
+      # Without it a bare generic +ruby_type+ is emitted with +untyped+
+      # arguments (+::Hash[untyped, untyped]+). A field's own +rbs_type:+
+      # option wins over this. Fully qualify constants (+::Hash+, not
+      # +Hash+): the RBS is emitted inside the struct's module nesting.
+      #
+      # @return [::String, nil]
+      def rbs_type
+        nil
       end
 
       # Concise type-instance representation. The default shows just the

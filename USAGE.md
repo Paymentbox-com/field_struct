@@ -277,7 +277,45 @@ u.as_json           # JSON-ready Hash with :json mapping applied
 u.to_json           # String (via Oj)
 User.from_json(str) # parse + reverse-map :json keys -> instance
 u.assign_attributes(age: 40)              # bulk update through the setter pipeline
+u.with(age: 41)                           # NEW instance with age changed; u untouched
 case u; in { name: 'Alice', age: } then age; end   # pattern matching
+```
+
+### Copying with changes (`with`)
+
+`with(**changes)` returns a new instance of the receiver's class with the given
+attributes changed, like `Data#with`. The receiver is never modified, so it is the
+way to "update" an `immutable!` or `frozen!` instance.
+
+- **Changed fields go through the setter pipeline**: coercion, the field's
+  `coercion_policy` (under `:raise` the `CoercionError` propagates and no copy is
+  returned), and that field's errors rewritten. Cross-field `validate` blocks rerun.
+- **Unchanged fields are carried over as they are**, errors included, exactly as
+  `dup` copies them. Callable defaults are not called again.
+- **Shallow**, like `dup`: an unchanged nested struct or array is the *same object*
+  in both instances. Mutating one through the other is visible in both.
+- **Unknown keys** follow `unknown_attributes` (dropped by default, `UnknownAttributeError`
+  under `:raise`). String keys work too: `with('age' => 41)`.
+- **Keywords only**: `with({age: 41})` raises `ArgumentError`; splat a Hash with
+  `with(**hash)`. `with` with no changes returns an equal copy, not `self`.
+- The copy is immutable when the class is, and frozen when the receiver is
+  frozen. `with` (and `dup`, which it relies on) are reserved field names.
+
+<!-- doctest -->
+```ruby
+class Point < FieldStruct::Base
+  immutable!
+  required :x, :integer
+  required :y, :integer
+end
+
+origin = Point.new(x: 0, y: 0)
+moved  = origin.with(x: '5')
+moved.x                         # => 5
+origin.x                        # => 0
+moved.class                     # => Point
+origin.with(y: nil).valid?      # => false
+origin.valid?                   # => true
 ```
 
 `Errors` API: `errors[:field] # => Array<String>`, `errors.add(:field, 'msg')`,

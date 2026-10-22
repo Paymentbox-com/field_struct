@@ -35,7 +35,7 @@ module FieldStruct
     RESERVED_FIELD_NAMES = %i[
       errors attributes attribute_names assign_attributes
       as_json to_json to_h to_model model_name inspect hash class
-      send public_send freeze instance_variable_set initialize initialize_copy raise
+      send public_send freeze instance_variable_set initialize initialize_copy raise with dup
       deconstruct deconstruct_keys
       json_value temporal_json_value apply_defaults run_cross_field_validators
       validate_field apply_coercion_policy record_coercion_failure
@@ -787,6 +787,48 @@ module FieldStruct
         public_send(:"#{sym}=", value)
       end
       self
+    end
+
+    # A new instance with the given attributes changed; the receiver is left
+    # untouched. Like +Data#with+.
+    #
+    #   moved = person.with(city: 'Provo', zip: '84601')
+    #
+    # Changed fields run through the normal setter pipeline (coercion, the
+    # field's +coercion_policy+, its errors rewritten), then cross-field
+    # validators rerun. Unchanged fields are carried over exactly as they
+    # are, errors included, and callable defaults are not called again.
+    # The copy is shallow, as with +dup+: an unchanged nested struct or
+    # array is the same object in both. Unknown keys follow
+    # {.unknown_attributes}. Works on +immutable!+ and frozen instances;
+    # the copy is an instance of the receiver's class, immutable when the
+    # class is, and frozen when the receiver is.
+    #
+    # @param positional [Object] refused — changes are keywords only
+    # @param changes [Object, nil] new values, by field name
+    # @return [Base] a new instance of the receiver's class
+    # @raise [ArgumentError] when given a positional argument
+    # @raise [UnknownAttributeError] under +unknown_attributes :raise+
+    # @raise [CoercionError] under +coercion_policy :raise+
+    def with(*positional, **changes)
+      unless positional.empty?
+        raise ArgumentError,
+          "#{self.class.name || "AnonymousFieldStruct"}#with takes keyword arguments only, " \
+          "got #{positional.size} positional; pass a Hash as with(**hash)"
+      end
+
+      freeze_copy = frozen?
+      copy = dup
+      copy.instance_exec do
+        # Reopen the copy for its setters (immutable! checks this flag), as
+        # #initialize does, then close it again.
+        @_initialized = false
+        assign_attributes(changes)
+        run_cross_field_validators if self.class.validators.any?
+        @_initialized = true
+        freeze if freeze_copy
+      end
+      copy
     end
 
     # @return [Hash{Symbol=>Object, nil}] a fresh hash of current attribute values

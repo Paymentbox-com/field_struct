@@ -652,6 +652,28 @@ module FieldStruct
     # _@param_ `attrs` — anything responding to +to_hash+ is converted first
     def assign_attributes: ((::Hash[(Symbol | String), Object?] | _ToHash[untyped, untyped]) attrs) -> self
 
+    # A new instance with the given attributes changed; the receiver is left
+    # untouched. Like +Data#with+.
+    # 
+    #   moved = person.with(city: 'Provo', zip: '84601')
+    # 
+    # Changed fields run through the normal setter pipeline (coercion, the
+    # field's +coercion_policy+, its errors rewritten), then cross-field
+    # validators rerun. Unchanged fields are carried over exactly as they
+    # are, errors included, and callable defaults are not called again.
+    # The copy is shallow, as with +dup+: an unchanged nested struct or
+    # array is the same object in both. Unknown keys follow
+    # {.unknown_attributes}. Works on +immutable!+ and frozen instances;
+    # the copy is an instance of the receiver's class, immutable when the
+    # class is, and frozen when the receiver is.
+    # 
+    # _@param_ `positional` — refused — changes are keywords only
+    # 
+    # _@param_ `changes` — new values, by field name
+    # 
+    # _@return_ — a new instance of the receiver's class
+    def with: (*Object positional, **Object? changes) -> Base
+
     # _@return_ — a fresh hash of current attribute values
     # keyed by canonical field name. For format-aware export (with the
     # declared +:json+ mapping applied), see {#as_json} / {#to_json}.

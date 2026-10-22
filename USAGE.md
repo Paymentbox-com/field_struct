@@ -100,7 +100,8 @@ strftime string or a preset Symbol), `round:` (float/decimal — Integer places)
 and integer — Boolean; see [Strict coercion](#strict-coercion-strict-true)),
 `values:` (boolean — a `{truthy:, falsy:}` Hash or a preset Symbol), `of:` (array
 element type / union member array), `enum:` (string-like — Array of allowed values),
-`in:` (numeric/temporal — Array or Range).
+`in:` (numeric/temporal — Array or Range), `zone:` (time/datetime — `"UTC"` or
+`"±HH:MM"` for zone-less input; see [Zones](#zones-zone)).
 
 ```ruby
 required :joined, :date, format: '%m/%d/%Y'   # custom strftime
@@ -223,11 +224,55 @@ hand-rolling `format: /\A\d{4}-\d{2}-\d{2}\z/` plus a validator. The other
 presets (`:us`, `:eu`, `:db`, `:rfc2822`) are display and interchange formats, so
 they stay strftime-based — with anchoring and civil-date validity still applied.
 
-**Zones.** A zone-less string follows the stdlib semantics of the type you
+### Zones (`zone:`)
+
+By default a zone-less string follows the stdlib semantics of the type you
 declared: `:time` uses `Time.parse` and lands in the *process* zone, `:datetime`
-uses `DateTime.parse` and lands in **UTC**. That is a real difference and it is
-not an accident of FieldStruct — if it matters to you, declare `format: :iso8601`,
-which requires an explicit offset and removes the question.
+uses `DateTime.parse` and lands in **UTC**. So `"2026-10-22 10:00"` in a `:time`
+field is a different instant on a server in Denver than on one in Tokyo.
+
+Declare `zone:` on a `:time` or `:datetime` field to name the offset a zone-less
+value means. The same input then gives the same answer on any server. `zone:`
+only fills in a **missing** offset — it never changes one the input carries.
+
+| Input | no `zone:` | `zone: "-06:00"` |
+|-------|------------|------------------|
+| `"2026-10-22 10:00"` (no offset) | `:time` process zone; `:datetime` UTC | 10:00 at -06:00 |
+| a `format:` without `%z` (`:db`, `'%H:%M'`) | as above | 10:00 at -06:00; a date the format omits is *today in -06:00* |
+| `"2026-10-22T10:00:00+02:00"`, `"… Z"`, `"… EST"` | its own offset | its own offset (unchanged) |
+| `"2026-10-22 10:00 XYZ"`, `"… America/Denver"` (a zone the stdlib can't read) | `:time` process zone; `:datetime` UTC | refused — `zone:` won't override a stated zone |
+| `Time` / `DateTime` / TimeWithZone | instant and offset kept | instant and offset kept (not converted) |
+| `Date` | midnight: `:time` process zone, `:datetime` UTC | midnight at -06:00 |
+| an epoch string under `format: '%s'` | that instant, in the process zone (`:time`) or UTC (`:datetime`) | that instant, at -06:00 |
+| Integer (epoch seconds) | refused | refused |
+
+- **Accepted values:** `"UTC"` (the `:time` value is then `utc?`) and fixed offsets
+  `"+HH:MM"` / `"-HH:MM"` from `-23:59` to `+23:59`, colon required. Anything else
+  — `"utc"`, `"Z"`, `"-0600"`, `"MST"` — raises `ArgumentError` at declaration,
+  naming the option.
+- **IANA names (`"America/Denver"`) are not accepted**, with or without
+  ActiveSupport. Ruby's stdlib has no time zone database, and accepting a name only
+  when the host loaded Rails would make the same declaration valid in one process
+  and invalid in another. A fixed offset does not follow DST: `zone: "-06:00"` is
+  -06:00 in January too. Declare the offset your input actually means.
+- `zone:` has no effect with `format: :iso8601`, which requires an offset anyway.
+  It does not apply to `:date` (a date has no time of day to place).
+
+<!-- doctest -->
+```ruby
+class Shift < FieldStruct::Base
+  required :starts, :time,     zone: '-06:00'
+  optional :logged, :datetime, zone: 'UTC'
+  optional :ends,   :time,     zone: 'UTC', format: :db
+end
+
+shift = Shift.new(starts: '2026-10-22 10:00', ends: '2026-10-22 18:30:00')
+shift.starts.utc_offset                                    # => -21600
+shift.starts.hour                                          # => 10
+shift.ends.utc?                                            # => true
+Shift.new(starts: '2026-10-22T10:00:00+02:00').starts.utc_offset   # => 7200
+Shift.new(starts: '2026-10-22 10:00', logged: '2026-10-22 10:00').logged.offset   # => 0
+```
 
 ---
 

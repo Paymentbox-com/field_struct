@@ -19,7 +19,7 @@ things most often gotten wrong. (For *contributing to the gem itself*, see
 2. **`required` ≠ non-nil at runtime** — an invalid instance can hold `nil`. Gate on `valid?`.
 3. **Whitespace-only strings count as missing** for `:string` and its subtypes.
 4. **`:array` needs `of:`; `:union` needs `of: [...]`** (≥2 members).
-5. **Option scoping**: `format:`→string/date-ish, `enum:`→string/symbol, `in:`→numeric/temporal, `round:`→float/decimal, `base:`→integer, `strict:`→string-shaped/integer, `zone:`→time/datetime, `values:`→boolean; `sensitive:` works on any type. A misapplied known option raises at class load and names the types it applies to; an *unknown* option passes through onto the Field untouched (kept for downstream tooling). You don't have to memorize this table — ask the type (next section).
+5. **Option scoping**: `format:`→string/date-ish, `enum:`→string/symbol, `in:`→numeric/temporal, `round:`→float/decimal, `base:`→integer, `strict:`→string-shaped/integer, `zone:`→time/datetime, `values:`→boolean, `element:`→array (a Hash of the element type's options); `sensitive:` works on any type. A misapplied known option raises at class load and names the types it applies to; an *unknown* option passes through onto the Field untouched (kept for downstream tooling). You don't have to memorize this table — ask the type (next section).
 6. **`valid?` is computed on assignment, not on read.** Mutating a nested struct or an array element in place doesn't refresh the parent's errors. Assign the field again (or use `with`) to re-validate. See [USAGE](USAGE.md#validity-is-computed-on-assignment-shallow-valid-staleness).
 
 ## Fast paths

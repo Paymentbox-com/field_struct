@@ -17,7 +17,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Documentation and tooling
 
 - **USAGE: "Payment and API boundaries"** — when and why to declare `unknown_attributes :raise` (on every struct that reads input; nested classes don't inherit it from their holder; `from_json` reverse-maps `serialize :json` names first). Doctested.
-- **USAGE: "Validity is computed on assignment"** — mutating a nested struct or array element in place doesn't refresh the parent's errors (stale in both directions), and an in-place array push skips coercion; re-assign the field or use `with`. Doctested. README, AGENTS.md, the skill and getting started now cover `strict:`, `zone:`, `sensitive:`, `with` and this.
+- **USAGE: "Validity is computed on assignment"** — mutating a nested struct or array element in place doesn't refresh the parent's errors (stale in both directions), and an in-place array push skips coercion; re-assign the field or use `with`. Doctested. README, AGENTS.md, the skill and getting started now cover `strict:`, `zone:`, `sensitive:`, `element:`, `with` and this.
 - **`benchmarks/run.rb` and `rake bench`** (not in the default task): dependency-free timings for `new`, `from_json`, `to_json`, nested, a 100-element array, `strict:` vs default and a validation-heavy struct. README "Performance" has indicative numbers. `benchmarks/` is left out of the packaged gem.
 
 ### Breaking-ish (visible behaviour changes)

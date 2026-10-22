@@ -27,6 +27,7 @@ options see [`USAGE.md`](../USAGE.md); for the feature tour see
 | Refuse loose input on a money/id field | `required :cents, :integer, strict: true` |
 | Read zone-less timestamps at a fixed offset | `optional :at, :time, zone: '-06:00'` |
 | Keep card data out of `inspect` / logs | `required :pan, :string, sensitive: true` |
+| Options for each array element | `optional :ids, :array, of: :integer, element: {strict: true}` |
 | Reject unexpected keys at an API boundary | `unknown_attributes :raise` (on each struct) |
 
 ## Install

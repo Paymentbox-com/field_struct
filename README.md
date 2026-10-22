@@ -184,6 +184,7 @@ class Order < FieldStruct::Base
   required :contact,      :email,    format: :strict           # stricter regex preset
   required :cents,        :integer,  strict: true              # 12.7 refused, not truncated
   required :starts_at,    :time,     zone: '-06:00'            # zone-less input read at -06:00
+  optional :ids,          :array,    of: :integer, element: {strict: true}  # options for each element
 end
 ```
 
@@ -196,6 +197,7 @@ What each type supports:
 | `:big_decimal` / `:decimal`, `:float` | `round:` | Integer (half up; result keeps the field's type) | — |
 | `:integer` | `base:` | Integer 2..36 (string radix; default 10) | — |
 | `:string` (and subtypes), `:integer` | `strict:` | Boolean — refuse loose input instead of `to_s` / truncating ([Strict coercion](USAGE.md#strict-coercion-strict-true)) | — |
+| `:array` | `element:` | Hash of the element type's own options, applied to each element ([Element options](USAGE.md#element-options-element)) | — |
 | `:time`, `:datetime` | `zone:` | `"UTC"` or `"±HH:MM"` — the offset for zone-less input ([Zones](USAGE.md#zones-zone)) | — |
 | `:boolean` | `values:` | `{truthy:, falsy:}` Hash, or Symbol | `:english_yes_no`, `:english`, `:numeric` |
 | `:date` | `format:` | strftime String, or Symbol | `:iso8601`, `:us`, `:eu` |
@@ -609,17 +611,17 @@ Either way it triggers when you ask Claude to define, edit, or debug a `FieldStr
 
 ## Performance
 
-Indicative numbers from `bundle exec rake bench` (`benchmarks/run.rb`, no dependencies; `BENCH_SECONDS=n` sets the time per case). Ruby 4.0.7 on an Apple M4, FieldStruct 0.12.0 plus the 0.13.0 work on `develop`. Mean time per call. Inputs are already the right types, except that `from_json` parses a string:
+Indicative numbers from `bundle exec rake bench` (`benchmarks/run.rb`, no dependencies; `BENCH_SECONDS=n` sets the time per case). Ruby 4.0.7 on an Apple M4, FieldStruct 0.12.0 plus the 0.13.0 work on `develop` (through `element:`). Mean time per call. Inputs are already the right types, except that `from_json` parses a string:
 
 | case | µs/call | calls/sec |
 |---|---:|---:|
-| `new` (5 fields) | 7.7 | 129,000 |
-| `new` (5 fields, `strict: true`) | 7.8 | 128,000 |
-| `from_json` (5 fields) | 10.2 | 98,000 |
-| `to_json` (5 fields) | 2.3 | 433,000 |
-| `new` (nested struct) | 9.0 | 111,000 |
-| `new` (array of 100 integers) | 12.6 | 79,000 |
-| `new` (validation-heavy: `email`, `enum:`, `in:`, `format:`, 2 dates, a `validate` block) | 18.2 | 55,000 |
+| `new` (5 fields) | 8.1 | 124,000 |
+| `new` (5 fields, `strict: true`) | 8.2 | 122,000 |
+| `from_json` (5 fields) | 10.4 | 96,000 |
+| `to_json` (5 fields) | 2.3 | 445,000 |
+| `new` (nested struct) | 9.4 | 106,000 |
+| `new` (array of 100 integers) | 17.1 | 59,000 |
+| `new` (validation-heavy: `email`, `enum:`, `in:`, `format:`, 2 dates, a `validate` block) | 18.7 | 53,000 |
 
 `strict: true` costs nothing measurable. Every assignment runs coercion and validation, so the cost scales with the number of fields assigned rather than with the size of the class. Numbers vary with CPU and Ruby version. Compare runs on one machine.
 

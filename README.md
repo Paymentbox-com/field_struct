@@ -32,16 +32,11 @@ never *looks* fine when it isn't.
 
 ## Installation
 
-Add to your Gemfile:
+FieldStruct isn't on RubyGems yet. Add it to your Gemfile from GitHub,
+pinned to a release tag:
 
 ```ruby
-gem 'field_struct'
-```
-
-Or install directly:
-
-```bash
-gem install field_struct
+gem 'field_struct', git: 'https://github.com/Paymentbox-com/field_struct', tag: 'v0.11.0'
 ```
 
 Requires Ruby 3.0+.
@@ -179,6 +174,7 @@ Each type accepts a small set of customization options at the field level. Value
 class Order < FieldStruct::Base
   required :total,        :decimal,  round: 2                  # round to 2 decimals
   required :discount,     :float,    round: 4
+  required :sku_hex,      :integer,  base: 16                 # "1A" → 26 (strings default to base 10)
   required :paid,         :boolean,  values: :english_yes_no   # symbol preset
   required :priority,     :boolean,  values: {truthy: %w[high urgent], falsy: %w[low normal]}
   required :placed_at,    :datetime, format: :db               # '%Y-%m-%d %H:%M:%S'
@@ -192,7 +188,8 @@ What each type supports:
 
 | Type | Option | Form | Built-in presets |
 |---|---|---|---|
-| `:big_decimal` / `:decimal`, `:float` | `round:` | Integer | — |
+| `:big_decimal` / `:decimal`, `:float` | `round:` | Integer (half up; result keeps the field's type) | — |
+| `:integer` | `base:` | Integer 2..36 (string radix; default 10) | — |
 | `:boolean` | `values:` | `{truthy:, falsy:}` Hash, or Symbol | `:english_yes_no`, `:english`, `:numeric` |
 | `:date` | `format:` | strftime String, or Symbol | `:iso8601`, `:us`, `:eu` |
 | `:datetime`, `:time` | `format:` | strftime String, or Symbol | `:iso8601`, `:rfc2822`, `:db` |
@@ -202,7 +199,7 @@ What each type supports:
 
 You don't have to memorize this table — **each type describes its own options at runtime**. `FieldStruct.types.lookup(:date).option_schema` returns `{ format: {type:, required:, presets:}, in: {...} }`. The DSL validates these native options at class-load: a wrong-shaped value (`round: '2'`) or a misapplied option (`enum:` on `:integer`) raises with the expected shape / the types it applies to. An option the type doesn't recognize is **not** an error — it's stored verbatim on the `Field`, so downstream tooling (e.g. an Avro exporter) can carry its own options.
 
-Time-shaped `format:` applies in **both** directions: input strings parse via `strptime`, output (`as_json` / `to_json`) emits via `strftime`. The round-trip property holds — `Klass.from_json(instance.to_json) == instance` for any format you pick.
+Time-shaped `format:` applies in **both** directions: input strings parse via `strptime`, output (`as_json` / `to_json`) emits via `strftime`. The exception is `:iso8601`, which FieldStruct parses and renders itself as RFC 3339 (`Types::Rfc3339Format`) rather than through a strftime string — no strftime string can express an optional fractional second, and `%z` emits `+0000` where RFC 3339 requires `+00:00` or `Z`. The round-trip property holds either way — `Klass.from_json(instance.to_json) == instance` for any format you pick.
 
 You can override the type's defaults class-wide by subclassing and overriding the relevant `default_*` or `presets` method, then registering the subclass:
 
@@ -218,6 +215,8 @@ module Acme
 end
 ```
 
+Numeric coercion is strict about what a number is: `:integer` reads strings in base 10 (`"010"` is 10, `"0x1A"` is refused) unless the field declares `base:`; `:integer`, `:float` and `:decimal` refuse NaN and ±Infinity (including JSON `1e400`) as a coercion failure; and `round:` rounds half up whatever the global `BigDecimal.mode`, returning a `Float` / `BigDecimal` even at `round: 0`.
+
 ### Restricting values — `enum:` and `in:`
 
 Two parallel options for "the coerced value must be one of these":
@@ -232,7 +231,7 @@ required :start_on,  :date,    in: Date.new(2024, 1, 1)..Date.new(2024, 12, 31)
 ```
 
 - `enum: [...]` — string-like types (`:string`, `:symbol`, `:uuid`, etc.). Array of allowed values.
-- `in:` — rangy types (`:integer`, `:float`, `:decimal`, `:date`, `:time`, `:datetime`). Either an Array or a Range (closed, half-open — anything that responds to `include?`).
+- `in:` — rangy types (`:integer`, `:float`, `:decimal`, `:date`, `:time`, `:datetime`). An Array is a membership test; a Range is a bounds check via `cover?`, so closed and half-open both work and a `:date` / `:datetime` range compares endpoints instead of enumerating days.
 - Both run post-coercion (`'10'` becomes `10` before the check) and emit `'is invalid'` on mismatch.
 - Passing `enum:` to a rangy field — or `in:` to a string-like field — raises `ArgumentError` at class load.
 
@@ -424,6 +423,7 @@ user.to_json
 - `to_h` and `attributes` always return canonical names — only `to_json` / `as_json` / `from_json` consult the mapping.
 - Each mapping key must be a declared field; an unknown key raises `ArgumentError` at class load. Declare fields first, then `serialize`.
 - The mapping is inherited by subclasses; redeclaring on a subclass replaces it (last-write-wins).
+- Nested FieldStructs apply their own mapping — including struct members of a `:union`. `from_json` tries the union's members in declared order, reverse-mapping the object through each struct member's mapping, so give struct members `unknown_attributes :raise` if the union must tell them apart.
 - Multiple formats can coexist on the same class (`serialize :json, ...` + `serialize :csv, ...`). Only `:json` is wired in-gem; CSV / XML / Avro support is left for downstream gems that read `Klass.metadata.serializations[:their_name]`.
 - Nested FieldStructs and arrays of nested propagate naturally — each level uses its own serialize mapping.
 

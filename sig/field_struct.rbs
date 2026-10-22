@@ -345,6 +345,11 @@ module FieldStruct
     # surfaces the underlying Oj parse error; a non-object root
     # (+[...]+, +"hi"+, +42+) raises +ArgumentError+.
     # 
+    # JSON numbers with a fraction or exponent parse as +BigDecimal+, never
+    # through a Float, so a +:decimal+ field gets the exact digits sent.
+    # +:float+ fields still convert to Float; +:value+ fields (and numbers
+    # inside their Hashes and Arrays) receive the +BigDecimal+.
+    # 
     # _@param_ `json_string`
     def self.from_json: (String json_string) -> Base
 
@@ -364,6 +369,20 @@ module FieldStruct
     # nested FieldStructs and arrays of nested. Companion to
     # {.canonicalize_serialized_hash}.
     def self.canonicalize_serialized_value: (untyped value, untyped field) -> untyped
+
+    # Which external names apply depends on which member the Hash is for,
+    # so try the members in declared order, as {Types::Union#coerce} does:
+    # a struct member gets the Hash reverse-mapped through its own
+    # +serialize :json+ mapping, and the first member that accepts wins. A
+    # winning struct is returned built (the union's coerce passes it
+    # through to that member); a winning non-struct member gets the Hash
+    # unchanged. When nothing accepts it, the Hash goes on as-is and the
+    # setter's +coercion_policy+ handles the failure.
+    # 
+    # _@param_ `hash` — parsed JSON object for a union field
+    # 
+    # _@param_ `union`
+    def self.canonicalize_serialized_union_hash: (::Hash[untyped, untyped] hash, Types::Union union) -> (Base | ::Hash[untyped, untyped])
 
     def self.namespace_field_types: () -> untyped
 
@@ -418,6 +437,8 @@ module FieldStruct
     # +"FieldStruct::Types::Integer"+) for readable messages
     def self.short_type_name: (untyped type_class) -> String
 
+    def self.refuse_reserved_name!: (untyped name) -> untyped
+
     def self.validate_serialize_mapping!: (untyped name, untyped mapping) -> untyped
 
     def self.validate_coercion_policy_override!: (untyped value) -> untyped
@@ -469,8 +490,8 @@ module FieldStruct
     # declarations and config flow down the class chain.
     def self.inherited: (untyped subclass) -> untyped
 
-    # _@param_ `attrs` — input values, by symbol or string key
-    def initialize: (?::Hash[(Symbol | String), Object] attrs) -> void
+    # _@param_ `attrs` — input values, by symbol or string key. Anything responding to +to_hash+ (e.g. a permitted +ActionController::Parameters+) is converted first; +nil+ is treated as no input.
+    def initialize: (?(::Hash[(Symbol | String), Object] | _ToHash[untyped, untyped])? attrs) -> void
 
     # Bulk-update declared attributes from a hash. Routes each value
     # through the same setter pipeline used everywhere else — so coercion,
@@ -481,8 +502,8 @@ module FieldStruct
     # in an external naming convention, see {Base.serialize} and
     # {Base.from_json}.
     # 
-    # _@param_ `attrs`
-    def assign_attributes: (::Hash[(Symbol | String), Object] attrs) -> self
+    # _@param_ `attrs` — anything responding to +to_hash+ is converted first
+    def assign_attributes: ((::Hash[(Symbol | String), Object] | _ToHash[untyped, untyped]) attrs) -> self
 
     # _@return_ — a fresh hash of current attribute values
     # 
@@ -585,6 +606,15 @@ module FieldStruct
     #     Math.hypot(x, y)
     #   end
     def deconstruct: () -> ::Array[Object]
+
+    # Ruby hook behind +dup+ / +clone+: give the copy its own {Errors},
+    # seeded with the original's messages, so validating or reassigning
+    # one instance never changes the other's validity.
+    def initialize_copy: (untyped source) -> untyped
+
+    # Return +attrs+ as a Hash, converting via +to_hash+ when it isn't one.
+    # The message names the input's class, never its value.
+    def hash_input!: (untyped attrs, untyped method_label) -> untyped
 
     def json_value: (untyped value, ?untyped field) -> untyped
 
@@ -762,6 +792,10 @@ module FieldStruct
   # clears and rewrites a field's entry on every assignment.
   class Errors
     def initialize: () -> void
+
+    # Ruby hook behind +dup+ / +clone+: copy the message lists too, so
+    # adding to the copy never changes the original.
+    def initialize_copy: (untyped source) -> untyped
 
     # _@param_ `field_name`
     # 
@@ -1090,6 +1124,7 @@ module FieldStruct
 
     def self.scalar_kind: (untyped value) -> untyped
 
+    # +serialize+ refuses undeclared fields, so the mapping goes after them.
     def self.build_class: (untyped name, untyped mappings, untyped lines) -> untyped
 
     def self.decorate: (untyped declaration, *untyped comment_parts) -> untyped
@@ -1469,13 +1504,16 @@ module FieldStruct
 
       # _@param_ `value` — +nil+ → +nil+; everything else flows through +Kernel#Float+ — strict on string parsing, rejects non-numeric strings, Symbols, Booleans, Arrays.
       # 
-      # _@param_ `round` — decimal places; +nil+ leaves the value unrounded
+      # _@param_ `round` — decimal places, rounding half up (ties away from zero); +nil+ leaves the value unrounded. The result is a Float even at +round: 0+.
       # 
       # _@return_ — +nil+ for +nil+ input, otherwise the parsed float
       def coerce: ((Numeric | ::String)? value, ?round: ::Integer?) -> Float?
 
       # _@return_ — the top-level +::Float+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value` — a non-Float value
+      def parse: (Object value) -> ::Float
     end
 
     # Union type — a value that may be any of several types. Each
@@ -1696,21 +1734,41 @@ module FieldStruct
       def truthy_and_falsy_for: (untyped values) -> untyped
     end
 
-    # Integer type. Coerces numerics and digit-strings via +Kernel#Integer+,
-    # so float-shaped strings like "3.14" deliberately raise rather than
+    # Integer type. Strings parse in base 10 unless the field declares a
+    # +base:+, so "010" is ten (not octal eight) and "0x1A" is refused rather
+    # than read as hex. Float-shaped strings like "3.14" raise rather than
     # silently truncate. Float numerics, by contrast, are truncated — that
     # matches +Kernel#Integer+'s own behavior on numeric input.
     class Integer < FieldStruct::Types::Base
-      # Native options: an +in:+ Array or Range of allowed values.
+      # Native options: an +in:+ Array or Range of allowed values, and a
+      # +base:+ Integer radix (2..36) for string input.
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
-      # _@param_ `value` — +nil+ → +nil+; +Integer+ passes through; everything else flows through +Kernel#Integer+ — Floats are truncated, digit-strings parse, float-shaped strings ("3.14") and non-digit strings raise ArgumentError, Symbols/Booleans/Arrays raise TypeError.
+      # Refuse a +base:+ outside 2..36 at field-declaration time. A
+      # non-Integer +base:+ is left for the option-shape check to report.
+      # 
+      # _@param_ `options` — the per-field options hash
+      # 
+      # _@return_ — the options, unchanged
+      def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
+
+      # _@param_ `value` — +nil+ → +nil+; +Integer+ passes through; a String parses in +base+ (surrounding whitespace and digit underscores allowed; float-shaped or out-of-base strings raise ArgumentError); other numerics flow through +Kernel#Integer+ — Floats are truncated; Symbols/Booleans/Arrays raise TypeError.
+      # 
+      # _@param_ `base` — radix (2..36) for String input; +nil+ means 10
       # 
       # _@return_ — +nil+ for +nil+ input, otherwise the parsed integer
-      def coerce: ((Integer | Numeric | ::String)? value) -> Integer?
+      def coerce: ((Integer | Numeric | ::String)? value, ?base: ::Integer?) -> Integer?
 
       # _@return_ — the top-level +::Integer+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value`
+      def refuse_huge_decimal!: (Object value) -> void
+
+      # _@param_ `value`
+      # 
+      # _@param_ `base`
+      def parse_string: (::String value, ::Integer base) -> ::Integer
     end
 
     # DateTime type. Returns a +DateTime+ as-is, builds one from a +Date+ or
@@ -1792,11 +1850,14 @@ module FieldStruct
 
       # _@param_ `value` — +nil+ → +nil+; a +BigDecimal+ passes through; +Float+ uses +Float::DIG+ precision; everything else goes through +Kernel.BigDecimal(value.to_s)+ — non-numeric strings raise ArgumentError.
       # 
-      # _@param_ `round` — decimal places; +nil+ leaves the value unrounded
+      # _@param_ `round` — decimal places, rounding half up (ties away from zero) whatever the global +BigDecimal.mode+; +nil+ leaves the value unrounded. The result is a BigDecimal even at +round: 0+.
       def coerce: ((::BigDecimal | Numeric | ::String)? value, ?round: ::Integer?) -> ::BigDecimal?
 
       # _@return_ — the top-level +::BigDecimal+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value` — a value that is neither a BigDecimal nor a Float
+      def parse: (Object value) -> ::BigDecimal
     end
 
     # RFC 3339 — the profile of ISO 8601 that "ISO-8601" means in an API

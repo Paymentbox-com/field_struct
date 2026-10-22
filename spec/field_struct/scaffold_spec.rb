@@ -95,6 +95,51 @@ RSpec.describe FieldStruct::Scaffold do
     end
   end
 
+  describe 'generated source' do
+    def eval_scaffold(src)
+      namespace = stub_const('ScaffoldEval', Module.new)
+      namespace.module_eval(src)
+      namespace
+    end
+
+    it 'evaluates when keys need a serialize mapping' do
+      src = described_class.from_json('{"firstName":"a","amount":1}')
+      klass = eval_scaffold(src).const_get(:Generated)
+
+      instance = klass.from_json('{"firstName":"a","amount":1}')
+      expect(instance.first_name).to eq('a')
+      expect(instance.to_json).to eq('{"firstName":"a","amount":1}')
+    end
+
+    it 'emits serialize after the field declarations' do
+      src = described_class.from_json('{"firstName":"a","amount":1}')
+
+      expect(src.index('serialize :json')).to be > src.index('required :amount')
+    end
+
+    it 'renames keys that are reserved field names and maps them back' do
+      src = described_class.from_json('{"errors":"e","hash":"h","method":"card"}')
+      klass = eval_scaffold(src).const_get(:Generated)
+
+      expect(klass.attribute_names).to eq(%i[errors_field hash_field method])
+      instance = klass.from_json('{"errors":"e","hash":"h","method":"card"}')
+      expect(instance.errors_field).to eq('e')
+      expect(instance.to_json).to eq('{"errors":"e","hash":"h","method":"card"}')
+    end
+
+    it 'gives keys that normalize to the same name distinct fields' do
+      json = '{"errors":1,"errors_field":2,"fooBar":3,"foo_bar":4}'
+      klass = eval_scaffold(described_class.from_json(json)).const_get(:Generated)
+
+      expect(klass.attribute_names.uniq.size).to eq(4)
+      expect(klass.from_json(json).to_json).to eq(json)
+    end
+
+    it 'shares the reserved field names with Base' do
+      expect(described_class::RESERVED).to include(*FieldStruct::Base::RESERVED_FIELD_NAMES.map(&:to_s))
+    end
+  end
+
   describe 'input handling' do
     it 'accepts a JSON object string' do
       expect(described_class.from_json('{"a":"x"}')).to include('class Generated < FieldStruct::Base')

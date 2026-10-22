@@ -36,7 +36,10 @@ Gem::Specification.new do |spec|
   spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|
     ls.readlines("\x0", chomp: true).reject do |f|
       (f == gemspec) ||
-        f.start_with?(*%w[bin/ test/ spec/ features/ .git .github appveyor Gemfile])
+        f.start_with?(*%w[bin/ test/ spec/ features/ .git .github appveyor Gemfile]) ||
+        # Contributor-only: agent config and plugin manifest, the design
+        # record, build/lint config.
+        f.start_with?(*%w[.claude CLAUDE.md docs/origin/ Rakefile .rubocop .yardopts .rspec rbs_collection])
     end
   end
   spec.bindir = 'exe'
@@ -44,7 +47,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   spec.add_dependency 'bigdecimal', '>= 3.0'
-  spec.add_dependency 'oj', '>= 3.0'
+  spec.add_dependency 'oj', '>= 3.11.2'
 
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html

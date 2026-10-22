@@ -68,7 +68,8 @@ Steps when asked to build one:
    - `format:` → string-shaped + `:date`/`:time`/`:datetime` (regex, strftime string, or preset Symbol)
    - `enum:` → `:string`/`:symbol` (and subtypes) only — an `Array` of allowed values
    - `in:` → `:integer`/`:float`/`:decimal`/`:date`/`:time`/`:datetime` — an `Array` or `Range`
-   - `round:` → `:float`/`:decimal` (Integer places)
+   - `round:` → `:float`/`:decimal` (Integer places, half up; keeps the field's type)
+   - `base:` → `:integer` (radix 2..36 for strings; default 10, so `"010"` is 10)
    - `values:` → `:boolean` (a `{truthy:, falsy:}` Hash or a preset Symbol)
 6. **Cross-field rules use `validate` + `errors.add(:base, …)`**, run at `valid?`.
    `errors[:base]` is cleared each `valid?`; per-field errors are owned by the setter.

@@ -22,6 +22,20 @@ module FieldStruct
     VALID_COERCION_POLICIES = %i[keep_raw replace raise].freeze
     # Accepted values for the +unknown_attributes+ macro.
     VALID_UNKNOWN_POLICIES = %i[ignore raise].freeze
+    # Field names {.field} refuses because Base itself calls a method of
+    # that name on its own instances — a field would define a reader that
+    # shadows it (+field :errors+ broke validation, +field :hash+ broke
+    # equality). Curated, not +instance_methods+: names Base never calls on
+    # itself (+:method+, +:name+, +:type+) stay legal. {Scaffold::RESERVED}
+    # renames these too.
+    RESERVED_FIELD_NAMES = %i[
+      errors attributes attribute_names assign_attributes
+      as_json to_json to_h to_model model_name inspect hash class
+      send public_send freeze instance_variable_set initialize initialize_copy raise
+      deconstruct deconstruct_keys
+      json_value temporal_json_value apply_defaults run_cross_field_validators
+      validate_field apply_coercion_policy record_coercion_failure
+    ].freeze
     UNSET = Object.new.freeze
     private_constant :UNSET
 
@@ -153,6 +167,7 @@ module FieldStruct
       #   fields rather than just the most recently added one). The
       #   added Field is still available as +metadata[name]+.
       def field(name, type_arg, **options)
+        refuse_reserved_name!(name)
         type_class, type_instance = resolve_type_arg(type_arg)
         if type_class <= FieldStruct::Types::Union
           type_instance, options = build_union_instance(type_class, options)
@@ -286,11 +301,16 @@ module FieldStruct
       # surfaces the underlying Oj parse error; a non-object root
       # (+[...]+, +"hi"+, +42+) raises +ArgumentError+.
       #
+      # JSON numbers with a fraction or exponent parse as +BigDecimal+, never
+      # through a Float, so a +:decimal+ field gets the exact digits sent.
+      # +:float+ fields still convert to Float; +:value+ fields (and numbers
+      # inside their Hashes and Arrays) receive the +BigDecimal+.
+      #
       # @param json_string [String]
       # @return [Base]
       # @raise [ArgumentError] when the parsed root is not a JSON object
       def from_json(json_string)
-        parsed = Oj.load(json_string, mode: :compat)
+        parsed = Oj.load(json_string, mode: :compat, decimal_class: ::BigDecimal)
         unless parsed.is_a?(::Hash)
           raise ArgumentError,
             "from_json expects a JSON object root, got #{parsed.class}: #{parsed.inspect}"
@@ -330,6 +350,8 @@ module FieldStruct
 
         if value.is_a?(::Hash) && field.type <= FieldStruct::Types::Nested
           field.type_instance.struct_class.canonicalize_serialized_hash(value)
+        elsif value.is_a?(::Hash) && field.type <= FieldStruct::Types::Union
+          canonicalize_serialized_union_hash(value, field.type_instance)
         elsif value.is_a?(::Array) && field.type <= FieldStruct::Types::Array
           of_type = field.options[:of_type]
           if of_type.is_a?(FieldStruct::Types::Nested)
@@ -341,6 +363,33 @@ module FieldStruct
         else
           value
         end
+      end
+
+      # Which external names apply depends on which member the Hash is for,
+      # so try the members in declared order, as {Types::Union#coerce} does:
+      # a struct member gets the Hash reverse-mapped through its own
+      # +serialize :json+ mapping, and the first member that accepts wins. A
+      # winning struct is returned built (the union's coerce passes it
+      # through to that member); a winning non-struct member gets the Hash
+      # unchanged. When nothing accepts it, the Hash goes on as-is and the
+      # setter's +coercion_policy+ handles the failure.
+      #
+      # @api private
+      # @param hash [Hash] parsed JSON object for a union field
+      # @param union [Types::Union]
+      # @return [Base, Hash]
+      def canonicalize_serialized_union_hash(hash, union)
+        union.member_types.each do |member|
+          if member.is_a?(FieldStruct::Types::Nested)
+            return member.coerce(member.struct_class.canonicalize_serialized_hash(hash))
+          end
+
+          member.coerce(hash)
+          return hash
+        rescue *FieldStruct::Types::Union::RESCUABLE
+          next
+        end
+        hash
       end
 
       private
@@ -489,6 +538,16 @@ module FieldStruct
         type_class.name.to_s.split('::').last
       end
 
+      def refuse_reserved_name!(name)
+        sym = name.to_sym
+        return unless RESERVED_FIELD_NAMES.include?(sym)
+
+        raise ArgumentError,
+          "field :#{sym} is reserved: FieldStruct::Base relies on ##{sym}, and a field " \
+          'would shadow it. Pick another name; serialize :json can keep the external key ' \
+          "(e.g. serialize :json, #{sym}_field: '#{sym}')."
+      end
+
       def validate_serialize_mapping!(name, mapping)
         unknown = mapping.keys.reject { |key| metadata[key] }
         return if unknown.empty?
@@ -515,7 +574,10 @@ module FieldStruct
 
           begin
             coerced = field.type_instance.coerce(value, **field.options)
-          rescue ArgumentError, TypeError => e
+          # RangeError covers FloatDomainError (Float#to_i / Integer() on NaN
+          # or Infinity) and Complex-to-real conversion — coercion failures
+          # like any other, not exceptions to escape the setter.
+          rescue ArgumentError, TypeError, RangeError => e
             return apply_coercion_policy(field, value, e)
           end
 
@@ -591,11 +653,16 @@ module FieldStruct
       end
     end
 
-    # @param attrs [Hash{Symbol,String=>Object}] input values, by symbol or string key
+    # @param attrs [Hash{Symbol,String=>Object}, #to_hash, nil] input values,
+    #   by symbol or string key. Anything responding to +to_hash+ (e.g. a
+    #   permitted +ActionController::Parameters+) is converted first; +nil+
+    #   is treated as no input.
+    # @raise [ArgumentError] when +attrs+ is neither +nil+, a Hash, nor
+    #   convertible to one via +to_hash+
     def initialize(attrs = {})
       @errors = Errors.new
       apply_defaults
-      assign_attributes(attrs)
+      assign_attributes(hash_input!(attrs.nil? ? {} : attrs, '.new'))
       run_cross_field_validators if self.class.validators.any?
       @_initialized = true
       freeze if self.class.frozen_on_construct?
@@ -610,9 +677,13 @@ module FieldStruct
     # in an external naming convention, see {Base.serialize} and
     # {Base.from_json}.
     #
-    # @param attrs [Hash{Symbol,String=>Object}]
+    # @param attrs [Hash{Symbol,String=>Object}, #to_hash] anything
+    #   responding to +to_hash+ is converted first
     # @return [self]
+    # @raise [ArgumentError] when +attrs+ is not a Hash and does not
+    #   respond to +to_hash+ (including +nil+)
     def assign_attributes(attrs)
+      attrs = hash_input!(attrs, '#assign_attributes')
       reject_unknown_attributes!(attrs)
       attrs.each do |key, value|
         sym = key.to_sym
@@ -780,6 +851,25 @@ module FieldStruct
     end
 
     private
+
+    # Ruby hook behind +dup+ / +clone+: give the copy its own {Errors},
+    # seeded with the original's messages, so validating or reassigning
+    # one instance never changes the other's validity.
+    def initialize_copy(source)
+      super
+      @errors = source.errors.dup
+    end
+
+    # Return +attrs+ as a Hash, converting via +to_hash+ when it isn't one.
+    # The message names the input's class, never its value.
+    def hash_input!(attrs, method_label)
+      return attrs if attrs.is_a?(::Hash)
+      return attrs.to_hash if attrs.respond_to?(:to_hash)
+
+      raise ArgumentError,
+        "#{self.class.name || "AnonymousFieldStruct"}#{method_label} expects a Hash " \
+        "(or an object responding to #to_hash), got #{attrs.class}"
+    end
 
     def json_value(value, field = nil)
       case value

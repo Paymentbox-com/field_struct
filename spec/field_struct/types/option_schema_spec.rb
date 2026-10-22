@@ -53,9 +53,10 @@ RSpec.describe 'Types option_schema' do
   end
 
   describe FieldStruct::Types::Integer do
-    it 'accepts only in:' do
-      expect(described_class.option_schema.keys).to eq([:in])
+    it 'accepts in: and base: (Integer)' do
+      expect(described_class.option_schema.keys).to contain_exactly(:in, :base)
       expect(described_class.option_schema[:in][:type]).to contain_exactly(Array, Range)
+      expect(described_class.option_schema[:base][:type]).to eq([Integer])
     end
   end
 

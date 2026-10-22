@@ -44,9 +44,17 @@ module FieldStruct
       # @param value [Object, nil] anything — each member type's coerce
       #   is tried in declared order; the first that doesn't raise wins
       # @return [Object, nil] whatever the first successful member returns
-      # @raise [TypeError] when no member can coerce
+      # @raise [TypeError] when no member can coerce, or the value is a
+      #   non-finite number (NaN or ±Infinity), which no member may accept
       def coerce(value, **)
         return nil if value.nil?
+        # Refused before any member sees it: a numeric member rejects a
+        # non-finite value with an ArgumentError, which is RESCUABLE, so a
+        # later :string member would otherwise store "NaN" as valid.
+        if value.is_a?(::Numeric) && !value.finite?
+          # The class, never the value — see Types::Time#coerce.
+          raise ::TypeError, "Union fields expect a finite number, got a non-finite #{value.class}"
+        end
 
         @member_types.each do |type|
           return type.coerce(value)

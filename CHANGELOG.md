@@ -6,6 +6,57 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-22
+
+Correctness and safer input. A number field holds a finite number of its own
+type, read the same way regardless of how the host process is configured;
+`from_json` reads decimals exactly; input that isn't a Hash, and field names
+`Base` relies on, are refused up front.
+
+### Breaking-ish (visible behaviour changes)
+
+- **`:integer` strings parse in base 10.** `Kernel#Integer` with no radix honours Ruby literal prefixes, so `"010"` became 8 and `"0x1A"` / `"0b11"` were accepted as hex and binary. Now `"010"` is 10, `"007"` is 7, and prefixed strings are refused. Whitespace and digit underscores still parse (`" 42 "`, `"1_000"`). Floats still truncate; Integers pass through.
+- **`round: 0` returns a `BigDecimal` / `Float`, not an `Integer`.** `:decimal` and `:float` fields with `round: 0` used to hold an Integer; they now keep the field's type (`BigDecimal('4')`, `4.0`).
+- **`:decimal` rounding ignores the global `BigDecimal.mode`.** It followed the process-wide rounding mode, so a host calling `BigDecimal.mode(BigDecimal::ROUND_MODE, :banker)` turned `12.345` at `round: 2` into `12.34`. Rounding is now pinned half up (ties away from zero) per call, for `:float` too.
+- **NaN and ±Infinity are refused.** `:float` and `:decimal` stored them as valid values (`:decimal` accepted `"NaN"` and emitted `"NaN"` in JSON); `:integer` raised `FloatDomainError` out of `.new` and `from_json('{"n": 1e400}')`. All three now treat a non-finite value — Float, BigDecimal, String or JSON `1e400` — as an ordinary coercion failure under the field's `coercion_policy`. A `:union` refuses a non-finite Float or BigDecimal outright, before any member sees it, so `of: [:integer, :string]` no longer falls through to storing `"NaN"` / `"Infinity"` as a valid String.
+- **`:integer`, `:float` and `:decimal` coercion messages name the input class, never the value.** That covers the new non-finite refusals and the parse failures these types re-raise from `Kernel#Integer` / `#Float` / `#BigDecimal`, whose own messages echoed the input (`invalid value for Float(): "NaN"`, a Rational's `"1/3"`). It is not yet true everywhere: the field error a `:union` records when no member matches, and the `CoercionError` raised under `coercion_policy :raise`, still include the raw value.
+- **`new` and `assign_attributes` refuse input that isn't a Hash.** Anything that is not a Hash and does not respond to `to_hash` raises `ArgumentError` naming its class (`Person.new expects a Hash (or an object responding to #to_hash), got Array`). **Breaking:** an array of pairs (`new([[:name, "Ann"]])`) used to work and now raises; pass `pairs.to_h`, as ActiveModel's `assign_attributes` also requires. `new([])` used to build an empty instance silently, and `new("x")` / `new(5)` raised `NoMethodError`. Objects responding to `to_hash` are converted first, so a permitted `ActionController::Parameters` keeps working — an *unpermitted* one now raises Rails' own `UnfilteredParameters` instead of being read key by key. `new(nil)` is now the same as `new` (it raised `NoMethodError`); `assign_attributes(nil)` raises `ArgumentError`, as ActiveModel's does.
+- **Field names `Base` relies on are refused at declaration.** `field :errors` raised a `NoMethodError` from deep inside the class body, `field :class` likewise, and `field :hash` / `field :attributes` were accepted but silently broke equality, `inspect` and validation by shadowing the methods `Base` calls on itself. These names (`FieldStruct::Base::RESERVED_FIELD_NAMES`: `errors`, `attributes`, `hash`, `class`, `send`, `to_h`, `inspect`, `as_json`, `raise`, … and `Base`'s private helpers) now raise `ArgumentError` naming the field and suggesting a `serialize :json` mapping. The list is curated, not `instance_methods`: `method`, `name` and `type` stay legal. `Scaffold` renames the same names with a `_field` suffix.
+- **`from_json` parses JSON decimals as `BigDecimal`, not Float.** It parsed with Oj's default, so `{"d": 1234567890123.4567}` reached a `:decimal` field as `1234567890123.46` — rounded through a Float before the field ever saw it. Numbers with a fraction or exponent now parse as `BigDecimal` (`decimal_class: BigDecimal`), so `:decimal` gets the exact digits. Visible elsewhere:
+  - `:float` fields are unchanged (still a Float). `:integer` fields still truncate (`3.7` → `3`).
+  - **`:value` fields, and numbers inside a `:value` Hash or Array, now receive `BigDecimal` instead of `Float`** — and since `to_json` writes a `BigDecimal` as a string, a `:value` that passed `2.25` through now emits `"2.25"`.
+  - JSON `1e400` is now a finite number rather than a Float overflowing to Infinity: a `:decimal` field reads it exactly (as it already read the String `"1e400"`), an `:integer` field reads it as `10**400`, and a `:float` field still refuses it.
+  - An `:integer` field refuses a decimal whose integer part has more than 4300 digits (`Types::Integer::MAX_DECIMAL_DIGITS`, Python's CVE-2020-10735 limit). Without it, JSON `1e10000000` (18 bytes) built a 33-million-bit Integer in seconds of CPU.
+  - The `oj` dependency floor rises from `>= 3.0` to `>= 3.11.2`, the release that fixed the `decimal_class` option; an older Oj would ignore it and quietly keep the Float.
+- **`base:` is now a reserved option name, like `round:`.** FieldStruct treats every option some registered type declares as its own. So a custom type that reads `base:` from its `coerce` kwargs without declaring it in `own_option_schema` used to receive it as a pass-through option (`optional :x, :my_type, base: 16` worked), and now raises at declaration: `base: option does not apply to MyType fields. It applies to: Integer.` That is how `round:` already behaves. The fix is to declare it: `def self.own_option_schema = {base: option(type: [::Integer])}`. For the same reason, a foreign `base:` on any other built-in type (e.g. `optional :code, :string, base: 16`, kept as metadata for downstream tooling) now raises instead of being stored on the Field.
+
+### Added
+
+- **`base:` option on `:integer`** — an Integer radix (2..36, checked at class load) for string input: `field :code, :integer, base: 16` reads `"1A"` as 26. `base:` on any other type raises at declaration, naming `Integer`.
+
+### Fixed
+
+- **`dup` and `clone` give the copy its own `errors`.** The copy shared the original's `Errors` object, so `b = a.dup; b.name = ''` made `a.valid?` false too. The copy now starts with a copy of the original's messages and owns them; `clone` of a `frozen!` instance stays frozen, and `clone(freeze: false)` / `dup` give an independent mutable copy. The copy is still shallow: a nested struct is shared, so mutating `b.address` changes `a.address` too.
+- **`Scaffold.from_json` output evaluates when keys need renaming.** It emitted `serialize :json, first_name: "firstName"` *before* the field lines, and `serialize` refuses undeclared fields, so the generated class raised `ArgumentError` the moment it was loaded. The mapping now follows the fields. Keys that normalize to the same name (`fooBar` and `foo_bar`, or `errors` and `errors_field`) get distinct fields (`foo_bar2`) instead of one silently overwriting the other.
+- **`from_json` reverse-maps `serialize :json` names for struct members of a `:union`.** It reverse-mapped nested structs and arrays of them, but handed a union's object over with its external keys, so a struct member saw `{"cardNumber" => ...}` instead of `card_number:` and `Payment.from_json(payment.to_json)` came back invalid — breaking the README's round-trip promise. Members are now tried in declared order, as the union's own coercion does, with each struct member reverse-mapping through its own mapping; the first that accepts the object wins.
+- **The field setter treats `RangeError` as a coercion failure.** `FloatDomainError` (one of its subclasses) and Complex-to-real conversion (`Complex(1, 2)` into `:integer` or `:float`) used to raise out of `.new`; they are now handled by `coercion_policy`, including when a custom type raises them.
+
+### Docs
+
+- **README corrections** (#8): `in:` with a Range is a bounds check via `cover?`,
+  and `:iso8601` round-trips as RFC 3339 rather than via `strptime`/`strftime`.
+- **Install from GitHub.** The README installs from a release tag; the gem is
+  not on RubyGems yet.
+
+### Tooling / CI
+
+- **Ruby 4.0 lane and one aggregate `ci` check.** The full battery now also
+  runs on Ruby 4.0, and a `ci` job passes only when every job passed;
+  `main` and `develop` require it.
+- **The packaged gem leaves out contributor-only files** (`.claude/`,
+  `.claude-plugin/`, `CLAUDE.md`, `docs/origin/`, build and lint config).
+- **The commit guard recognizes `git commit` by its command text** (#7).
+
 ## [0.10.0] - 2026-09-03
 
 Temporal types: one behaviour whether or not ActiveSupport is loaded, a

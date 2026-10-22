@@ -179,6 +179,7 @@ Each type accepts a small set of customization options at the field level. Value
 class Order < FieldStruct::Base
   required :total,        :decimal,  round: 2                  # round to 2 decimals
   required :discount,     :float,    round: 4
+  required :sku_hex,      :integer,  base: 16                 # "1A" → 26 (strings default to base 10)
   required :paid,         :boolean,  values: :english_yes_no   # symbol preset
   required :priority,     :boolean,  values: {truthy: %w[high urgent], falsy: %w[low normal]}
   required :placed_at,    :datetime, format: :db               # '%Y-%m-%d %H:%M:%S'
@@ -192,7 +193,8 @@ What each type supports:
 
 | Type | Option | Form | Built-in presets |
 |---|---|---|---|
-| `:big_decimal` / `:decimal`, `:float` | `round:` | Integer | — |
+| `:big_decimal` / `:decimal`, `:float` | `round:` | Integer (half up; result keeps the field's type) | — |
+| `:integer` | `base:` | Integer 2..36 (string radix; default 10) | — |
 | `:boolean` | `values:` | `{truthy:, falsy:}` Hash, or Symbol | `:english_yes_no`, `:english`, `:numeric` |
 | `:date` | `format:` | strftime String, or Symbol | `:iso8601`, `:us`, `:eu` |
 | `:datetime`, `:time` | `format:` | strftime String, or Symbol | `:iso8601`, `:rfc2822`, `:db` |
@@ -217,6 +219,8 @@ module Acme
   end
 end
 ```
+
+Numeric coercion is strict about what a number is: `:integer` reads strings in base 10 (`"010"` is 10, `"0x1A"` is refused) unless the field declares `base:`; `:integer`, `:float` and `:decimal` refuse NaN and ±Infinity (including JSON `1e400`) as a coercion failure; and `round:` rounds half up whatever the global `BigDecimal.mode`, returning a `Float` / `BigDecimal` even at `round: 0`.
 
 ### Restricting values — `enum:` and `in:`
 

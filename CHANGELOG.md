@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Numeric correctness: a number field holds a finite number of its own type,
+read the same way regardless of how the host process is configured.
+
+### Breaking-ish (visible behaviour changes)
+
+- **`:integer` strings parse in base 10.** `Kernel#Integer` with no radix honours Ruby literal prefixes, so `"010"` became 8 and `"0x1A"` / `"0b11"` were accepted as hex and binary. Now `"010"` is 10, `"007"` is 7, and prefixed strings are refused. Whitespace and digit underscores still parse (`" 42 "`, `"1_000"`). Floats still truncate; Integers pass through.
+- **`round: 0` returns a `BigDecimal` / `Float`, not an `Integer`.** `:decimal` and `:float` fields with `round: 0` used to hold an Integer; they now keep the field's type (`BigDecimal('4')`, `4.0`).
+- **`:decimal` rounding ignores the global `BigDecimal.mode`.** It followed the process-wide rounding mode, so a host calling `BigDecimal.mode(BigDecimal::ROUND_MODE, :banker)` turned `12.345` at `round: 2` into `12.34`. Rounding is now pinned half up (ties away from zero) per call, for `:float` too.
+- **NaN and ±Infinity are refused.** `:float` and `:decimal` stored them as valid values (`:decimal` accepted `"NaN"` and emitted `"NaN"` in JSON); `:integer` raised `FloatDomainError` out of `.new` and `from_json('{"n": 1e400}')`. All three now treat a non-finite value — Float, BigDecimal, String or JSON `1e400` — as an ordinary coercion failure under the field's `coercion_policy`, with a message that names the input class and never echoes the value.
+
+### Added
+
+- **`base:` option on `:integer`** — an Integer radix (2..36, checked at class load) for string input: `field :code, :integer, base: 16` reads `"1A"` as 26. `base:` on any other type raises at declaration, naming `Integer`.
+
+### Fixed
+
+- **The field setter treats `FloatDomainError` as a coercion failure**, so a custom type that hits one is handled by `coercion_policy` instead of raising out of `.new`.
+
 ## [0.10.0] - 2026-09-03
 
 Temporal types: one behaviour whether or not ActiveSupport is loaded, a

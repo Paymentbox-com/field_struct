@@ -34,9 +34,9 @@ as `nil`). "Missing" is what counts as absent for presence checks.
 |------|-----------|--------------|--------------|--------------|
 | `:string` | `String` | `value.to_s` | `format:`, `enum:` | nil / empty / whitespace-only |
 | `:immutable_string` | `String` (frozen) | `to_s`, then frozen dup | `format:`, `enum:` | nil / empty / whitespace |
-| `:integer` | `Integer` | `Kernel.Integer` (floats truncate; `"3.14"`/non-digits raise) | `in:` | nil |
-| `:float` | `Float` | `Kernel.Float` (strict) | `round:`, `in:` | nil |
-| `:big_decimal` (alias `:decimal`) | `BigDecimal` | BigDecimal/Integer/Float/numeric string | `round:`, `in:` | nil |
+| `:integer` | `Integer` | strings in base 10 (`"010"` → 10; `"0x1A"`/`"3.14"` raise), or `base:`; floats truncate | `in:`, `base:` | nil |
+| `:float` | `Float` | `Kernel.Float` (strict; NaN/±Infinity refused) | `round:`, `in:` | nil |
+| `:big_decimal` (alias `:decimal`) | `BigDecimal` | BigDecimal/Integer/Float/numeric string (NaN/±Infinity refused) | `round:`, `in:` | nil |
 | `:boolean` | `true`/`false` | `true`/`false`, `1`/`0`, truthy/falsy strings | `values:` | nil |
 | `:date` | `Date` | `Date`, `DateTime`/`Time` (narrowed), String | `format:`, `in:` | nil |
 | `:time` | `Time` | `Time`, `Date`/`DateTime` (from components), String | `format:`, `in:` | nil |
@@ -58,6 +58,7 @@ optional :email,     :email                       # default regex
 required :status,    :symbol, enum: %i[active archived]
 required :score,     :integer, in: 0..100
 required :price,     :big_decimal, round: 2
+required :code,      :integer, base: 16           # "1A" → 26
 optional :tags,      :array, of: :string
 required :ref,       :union, of: %i[string integer]
 optional :address,   Address                       # nested FieldStruct
@@ -93,6 +94,7 @@ end
 
 Type-specific options: `format:` (string-shaped + date/time/datetime — a regex or a
 strftime string or a preset Symbol), `round:` (float/decimal — Integer places),
+`base:` (integer — radix 2..36 for string input, default 10),
 `values:` (boolean — a `{truthy:, falsy:}` Hash or a preset Symbol), `of:` (array
 element type / union member array), `enum:` (string-like — Array of allowed values),
 `in:` (numeric/temporal — Array or Range).
@@ -106,6 +108,23 @@ required :flag,   :boolean, values: { truthy: %w[on], falsy: %w[off] }
 Boolean presets: `:english_yes_no`/`:english` (`true yes y on 1` / `false no n off 0`),
 `:numeric` (`1`/`0`). Date presets: `:iso8601 :us :eu`. Time/DateTime presets:
 `:iso8601 :rfc2822 :db`.
+
+### The numeric contract
+
+- **Integer strings are base 10.** `"010"` is 10 and `"007"` is 7 — not octal —
+  and `"0x1A"` / `"0b11"` are refused rather than read as hex/binary. Surrounding
+  whitespace and digit underscores are fine (`" 42 "` → 42, `"1_000"` → 1000).
+  Declare `base:` (2..36, checked at class load) for another radix:
+  `field :code, :integer, base: 16` reads `"1A"` as 26. Integers pass through and
+  Floats still truncate; `base:` only affects strings.
+- **NaN and ±Infinity are never valid.** `:integer`, `:float` and `:decimal` refuse
+  them — as a Float, a BigDecimal, a String (`"NaN"`, `"Infinity"`) or JSON `1e400` —
+  as an ordinary coercion failure under the field's `coercion_policy`. Messages name
+  the input class, never the value.
+- **`round:` keeps the field's type and rounds half up** (ties away from zero).
+  `round: 0` returns a `Float` / `BigDecimal`, not an Integer, and `:decimal`
+  ignores the process-global `BigDecimal.mode` — a host that sets banker's rounding
+  still gets `12.345` → `12.35` at `round: 2`.
 
 ### The temporal contract
 
@@ -359,7 +378,7 @@ RBS for nested/element classes too so `::Address` references resolve. See the RE
 - `:array` requires `of:`; `:union` requires `of: [...]` with ≥2 members.
 - Option scoping: `format:` → string-shaped + date/time/datetime; `enum:` →
   string/symbol; `in:` → integer/float/decimal/date/time/datetime; `round:` →
-  float/decimal; `values:` → boolean. Misapplying raises `ArgumentError` at declaration.
+  float/decimal; `base:` → integer; `values:` → boolean. Misapplying raises `ArgumentError` at declaration.
 - `description:`/`desc:` is documentation only — absent from `attributes`, `as_json`,
   and pattern-match keys.
 - Unknown input keys are dropped by default (`unknown_attributes :ignore`); set

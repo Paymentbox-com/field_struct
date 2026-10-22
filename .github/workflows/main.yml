@@ -22,6 +22,7 @@ jobs:
           - '3.2'
           - '3.3'
           - '3.4'
+          - '4.0'
 
     steps:
     - uses: actions/checkout@v4
@@ -113,3 +114,17 @@ jobs:
         bundler-cache: true
     - name: Run the library specs against an ActiveSupport host
       run: bundle exec rspec
+
+  # One stable check name for branch protection: it passes only when every
+  # job above passed, so the required check survives matrix changes.
+  ci:
+    runs-on: ubuntu-latest
+    name: ci
+    needs: [build, floor, activesupport]
+    if: always()
+    steps:
+    - name: Require every job to pass
+      run: |
+        test "${{ needs.build.result }}" = "success"
+        test "${{ needs.floor.result }}" = "success"
+        test "${{ needs.activesupport.result }}" = "success"

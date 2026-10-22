@@ -1469,13 +1469,16 @@ module FieldStruct
 
       # _@param_ `value` — +nil+ → +nil+; everything else flows through +Kernel#Float+ — strict on string parsing, rejects non-numeric strings, Symbols, Booleans, Arrays.
       # 
-      # _@param_ `round` — decimal places; +nil+ leaves the value unrounded
+      # _@param_ `round` — decimal places, rounding half up (ties away from zero); +nil+ leaves the value unrounded. The result is a Float even at +round: 0+.
       # 
       # _@return_ — +nil+ for +nil+ input, otherwise the parsed float
       def coerce: ((Numeric | ::String)? value, ?round: ::Integer?) -> Float?
 
       # _@return_ — the top-level +::Float+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value` — a non-Float value
+      def parse: (Object value) -> ::Float
     end
 
     # Union type — a value that may be any of several types. Each
@@ -1696,21 +1699,38 @@ module FieldStruct
       def truthy_and_falsy_for: (untyped values) -> untyped
     end
 
-    # Integer type. Coerces numerics and digit-strings via +Kernel#Integer+,
-    # so float-shaped strings like "3.14" deliberately raise rather than
+    # Integer type. Strings parse in base 10 unless the field declares a
+    # +base:+, so "010" is ten (not octal eight) and "0x1A" is refused rather
+    # than read as hex. Float-shaped strings like "3.14" raise rather than
     # silently truncate. Float numerics, by contrast, are truncated — that
     # matches +Kernel#Integer+'s own behavior on numeric input.
     class Integer < FieldStruct::Types::Base
-      # Native options: an +in:+ Array or Range of allowed values.
+      # Native options: an +in:+ Array or Range of allowed values, and a
+      # +base:+ Integer radix (2..36) for string input.
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
-      # _@param_ `value` — +nil+ → +nil+; +Integer+ passes through; everything else flows through +Kernel#Integer+ — Floats are truncated, digit-strings parse, float-shaped strings ("3.14") and non-digit strings raise ArgumentError, Symbols/Booleans/Arrays raise TypeError.
+      # Refuse a +base:+ outside 2..36 at field-declaration time. A
+      # non-Integer +base:+ is left for the option-shape check to report.
+      # 
+      # _@param_ `options` — the per-field options hash
+      # 
+      # _@return_ — the options, unchanged
+      def self.resolve_options: (::Hash[untyped, untyped] options) -> ::Hash[untyped, untyped]
+
+      # _@param_ `value` — +nil+ → +nil+; +Integer+ passes through; a String parses in +base+ (surrounding whitespace and digit underscores allowed; float-shaped or out-of-base strings raise ArgumentError); other numerics flow through +Kernel#Integer+ — Floats are truncated; Symbols/Booleans/Arrays raise TypeError.
+      # 
+      # _@param_ `base` — radix (2..36) for String input; +nil+ means 10
       # 
       # _@return_ — +nil+ for +nil+ input, otherwise the parsed integer
-      def coerce: ((Integer | Numeric | ::String)? value) -> Integer?
+      def coerce: ((Integer | Numeric | ::String)? value, ?base: ::Integer?) -> Integer?
 
       # _@return_ — the top-level +::Integer+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value`
+      # 
+      # _@param_ `base`
+      def parse_string: (::String value, ::Integer base) -> ::Integer
     end
 
     # DateTime type. Returns a +DateTime+ as-is, builds one from a +Date+ or
@@ -1792,11 +1812,14 @@ module FieldStruct
 
       # _@param_ `value` — +nil+ → +nil+; a +BigDecimal+ passes through; +Float+ uses +Float::DIG+ precision; everything else goes through +Kernel.BigDecimal(value.to_s)+ — non-numeric strings raise ArgumentError.
       # 
-      # _@param_ `round` — decimal places; +nil+ leaves the value unrounded
+      # _@param_ `round` — decimal places, rounding half up (ties away from zero) whatever the global +BigDecimal.mode+; +nil+ leaves the value unrounded. The result is a BigDecimal even at +round: 0+.
       def coerce: ((::BigDecimal | Numeric | ::String)? value, ?round: ::Integer?) -> ::BigDecimal?
 
       # _@return_ — the top-level +::BigDecimal+ class
       def ruby_type: () -> Class
+
+      # _@param_ `value` — a value that is neither a BigDecimal nor a Float
+      def parse: (Object value) -> ::BigDecimal
     end
 
     # RFC 3339 — the profile of ISO 8601 that "ISO-8601" means in an API

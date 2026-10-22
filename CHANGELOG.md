@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-22
+
+Valid, guarded RBS. The gem's own signatures go from 215 `untyped` to 5 and
+can only get more typed (CI ratchet); generated RBS for your structs carries
+real element types, typed setters and an `rbs_type:` escape hatch. No runtime
+behaviour changes beyond `rbs_type:` becoming a recognized option.
+
 ### Added
 
 - **`rbs_type:` field option.** `optional :scope, :value, rbs_type: '::ActiveRecord::Relation'` makes `FieldStruct::RBS` emit that type for the field's reader and writer instead of the derived one. Signatures only — no effect on coercion or validation. Must be a non-blank String (`ArgumentError` at declaration otherwise); it is not parsed, since `rbs` is not a runtime dependency. Readable as `Field#rbs_type` and shown in `Field#inspect`; kept out of `Field#options`.
@@ -37,6 +44,7 @@ adheres to [Semantic Versioning](https://semver.org/).
   - `sigs:validate` runs `rbs validate` over the whole `sig/` directory, not just the generated file.
 - **Sord runs without `--replace-errors-with-untyped`.** The output is byte-identical today; an unresolvable YARD type now lands in the sig as its own name (which `rbs validate` rejects) instead of a quiet `untyped`, on top of the existing generation-time guard.
 - **Report-only Steep lane.** A `types` job on Ruby 3.4 runs `steep check` (Steep 2.1 / rbs 4.2 via `gemfiles/types.gemfile`, since both need Ruby >= 3.3) and prints the problem count. It never fails the build and is not part of the required `ci` check.
+- **The packaged gem also leaves out `gemfiles/`** (CI-only Gemfiles).
 
 ## [0.11.0] - 2026-10-22
 

@@ -1733,6 +1733,9 @@ module FieldStruct
       def ruby_type: () -> Class
 
       # _@param_ `value`
+      def refuse_huge_decimal!: (Object value) -> void
+
+      # _@param_ `value`
       # 
       # _@param_ `base`
       def parse_string: (::String value, ::Integer base) -> ::Integer

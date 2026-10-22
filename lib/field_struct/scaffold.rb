@@ -37,12 +37,13 @@ module FieldStruct
     NUMERIC_STRING = /\A-?\d+(?:\.\d+)?\z/
     # Most distinct repeated string values before a field is flagged as an enum candidate.
     ENUM_MAX_DISTINCT = 6
-    # Ruby keywords that can't be used as attribute names (suffixed with +_field+).
-    RESERVED = %w[
+    # Names a scaffolded attribute can't take (suffixed with +_field+): Ruby
+    # keywords, plus {Base::RESERVED_FIELD_NAMES}, which +field+ refuses.
+    RESERVED = (%w[
       BEGIN END alias and begin break case class def defined? do else elsif end
       ensure false for if in module next nil not or redo rescue retry return self
       super then true undef unless until when while yield __FILE__ __LINE__
-    ].freeze
+    ] + Base::RESERVED_FIELD_NAMES.map(&:to_s)).uniq.freeze
 
     # Generate FieldStruct class source from JSON example(s).
     #
@@ -178,14 +179,14 @@ module FieldStruct
     end
     private_class_method :scalar_kind
 
+    # +serialize+ refuses undeclared fields, so the mapping goes after them.
     def self.build_class(name, mappings, lines)
-      body = []
-      unless mappings.empty?
-        body << "  serialize :json, #{mappings.map { |attr, key| "#{attr}: #{key.inspect}" }.join(", ")}"
-        body << ''
-      end
-      body.concat(lines)
+      body = lines.dup
       body << '  # (no fields detected in samples)' if body.empty?
+      unless mappings.empty?
+        body << ''
+        body << "  serialize :json, #{mappings.map { |attr, key| "#{attr}: #{key.inspect}" }.join(", ")}"
+      end
       "class #{name} < FieldStruct::Base\n#{body.join("\n")}\nend"
     end
     private_class_method :build_class

@@ -115,9 +115,6 @@ OMIT (FieldStruct::Scaffold.camelize) no YARD return type given, using untyped
 OMIT (FieldStruct::Scaffold.camelize) no YARD type given for "str", using untyped
 OMIT (FieldStruct::Scaffold.class_name_for) no YARD return type given, using untyped
 OMIT (FieldStruct::Scaffold.class_name_for) no YARD type given for "key", using untyped
-OMIT (FieldStruct::Scaffold.decorate) no YARD return type given, using untyped
-OMIT (FieldStruct::Scaffold.decorate) no YARD type given for "*comment_parts", using untyped
-OMIT (FieldStruct::Scaffold.decorate) no YARD type given for "declaration", using untyped
 OMIT (FieldStruct::Scaffold.emit_object) no YARD return type given, using untyped
 OMIT (FieldStruct::Scaffold.emit_object) no YARD type given for "class_name", using untyped
 OMIT (FieldStruct::Scaffold.emit_object) no YARD type given for "classes", using untyped

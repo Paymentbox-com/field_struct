@@ -157,8 +157,8 @@ module FieldStruct
       #   a registered name in the resolving registry, OR a +Types::Base+
       #   subclass, OR a +FieldStruct::Base+ subclass (auto-wrapped in
       #   {Types::Nested})
-      # @param options [Hash{Symbol=>Object}] +required:+ (Boolean),
-      #   +default:+ (literal or callable), +coercion_policy:+ (Symbol),
+      # @param options [Object] each keyword option's value: +required:+
+      #   (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol),
       #   plus type-specific options (e.g. +format:+, +round:+, +of:+,
       #   +values:+, +enum:+, +in:+) — see each type's +coerce+ for the
       #   options it consumes
@@ -195,7 +195,7 @@ module FieldStruct
       #
       # @param name [Symbol, String]
       # @param type_name [Symbol, Class<Types::Base>, Class<FieldStruct::Base>]
-      # @param options [Hash{Symbol=>Object}]
+      # @param options [Object] keyword options, as for {.field}
       # @return [Metadata]
       def required(name, type_name, **options)
         field(name, type_name, **options, required: true)
@@ -205,7 +205,7 @@ module FieldStruct
       #
       # @param name [Symbol, String]
       # @param type_name [Symbol, Class<Types::Base>, Class<FieldStruct::Base>]
-      # @param options [Hash{Symbol=>Object}]
+      # @param options [Object] keyword options, as for {.field}
       # @return [Metadata]
       def optional(name, type_name, **options)
         field(name, type_name, **options, required: false)
@@ -233,8 +233,9 @@ module FieldStruct
       # by downstream gems reading the same metadata.
       #
       # @param name [Symbol, String] the format name (e.g. +:json+)
-      # @param mapping [Hash{Symbol=>String,Symbol}] internal field name
-      #   → external key. Symbol values are normalized to Strings.
+      # @param mapping [String, Symbol] each external key, passed as a
+      #   keyword named for the internal field. Symbol values are
+      #   normalized to Strings.
       # @return [self]
       # @raise [ArgumentError] when a mapping key is not a declared field
       def serialize(name, **mapping)
@@ -628,7 +629,7 @@ module FieldStruct
       # auto-clearing; the user is then responsible for clearing those
       # entries.
       #
-      # @param method_names [Array<Symbol>] zero or more instance method
+      # @param method_names [Symbol] zero or more instance method
       #   names to invoke on each record at +valid?+ time
       # @yield [record] optional block validator
       # @yieldparam record [Base] the instance being validated

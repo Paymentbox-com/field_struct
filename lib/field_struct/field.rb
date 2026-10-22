@@ -53,7 +53,7 @@ module FieldStruct
     #   "use whatever the class says"
     # @param description [String, nil] human-readable description of the
     #   field; for documentation purposes only
-    # @param options [Hash{Symbol=>Object}] extra type/field options
+    # @param options [Object] extra keyword type/field options
     #   forwarded to coerce (e.g. +format:+, +of_type:+, +round:+,
     #   +values:+, +enum:+, +in:+)
     def initialize(name:, type:, type_instance: nil, required: false, default: nil, coercion_policy: nil, description: nil, **options)

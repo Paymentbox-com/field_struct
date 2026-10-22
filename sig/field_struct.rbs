@@ -250,13 +250,13 @@ module FieldStruct
     # 
     # _@param_ `type_arg` — a registered name in the resolving registry, OR a +Types::Base+ subclass, OR a +FieldStruct::Base+ subclass (auto-wrapped in {Types::Nested})
     # 
-    # _@param_ `options` — +required:+ (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol), plus type-specific options (e.g. +format:+, +round:+, +of:+, +values:+, +enum:+, +in:+) — see each type's +coerce+ for the options it consumes
+    # _@param_ `options` — each keyword option's value: +required:+ (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol), plus type-specific options (e.g. +format:+, +round:+, +of:+, +values:+, +enum:+, +in:+) — see each type's +coerce+ for the options it consumes
     # 
     # _@return_ — the class-level metadata, so the DSL reads
     # cleanly in IRB (each line prints the running set of declared
     # fields rather than just the most recently added one). The
     # added Field is still available as +metadata[name]+.
-    def self.field: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_arg, **::Hash[Symbol, Object] options) -> Metadata
+    def self.field: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_arg, **Object options) -> Metadata
 
     # Sugar for {.field} with +required: true+.
     # 
@@ -264,8 +264,8 @@ module FieldStruct
     # 
     # _@param_ `type_name`
     # 
-    # _@param_ `options`
-    def self.required: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_name, **::Hash[Symbol, Object] options) -> Metadata
+    # _@param_ `options` — keyword options, as for {.field}
+    def self.required: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_name, **Object options) -> Metadata
 
     # Sugar for {.field} with +required: false+ (the default).
     # 
@@ -273,8 +273,8 @@ module FieldStruct
     # 
     # _@param_ `type_name`
     # 
-    # _@param_ `options`
-    def self.optional: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_name, **::Hash[Symbol, Object] options) -> Metadata
+    # _@param_ `options` — keyword options, as for {.field}
+    def self.optional: ((Symbol | String) name, (Symbol | singleton(Types::Base) | singleton(FieldStruct::Base)) type_name, **Object options) -> Metadata
 
     # Declare an external-name mapping for a serialization format.
     # The mapping reads internal-field-name (Symbol) on the left, the
@@ -299,8 +299,8 @@ module FieldStruct
     # 
     # _@param_ `name` — the format name (e.g. +:json+)
     # 
-    # _@param_ `mapping` — internal field name → external key. Symbol values are normalized to Strings.
-    def self.serialize: ((Symbol | String) name, **::Hash[Symbol, (String | Symbol)] mapping) -> self
+    # _@param_ `mapping` — each external key, passed as a keyword named for the internal field. Symbol values are normalized to Strings.
+    def self.serialize: ((Symbol | String) name, **(String | Symbol) mapping) -> self
 
     # Resolve a type name through the registry chain visible to this
     # class. Walks the containing modules of the class's name in
@@ -483,7 +483,7 @@ module FieldStruct
     # entries.
     # 
     # _@param_ `method_names` — zero or more instance method names to invoke on each record at +valid?+ time
-    def self.validate: (*::Array[Symbol] method_names) ?{ (Base record) -> void } -> self
+    def self.validate: (*Symbol method_names) ?{ (Base record) -> void } -> self
 
     # Ruby hook: give each subclass its own metadata seeded from the
     # parent's (merged copy) plus inherited macro settings, so field
@@ -721,7 +721,7 @@ module FieldStruct
     # 
     # _@param_ `description` — human-readable description of the field; for documentation purposes only
     # 
-    # _@param_ `options` — extra type/field options forwarded to coerce (e.g. +format:+, +of_type:+, +round:+, +values:+, +enum:+, +in:+)
+    # _@param_ `options` — extra keyword type/field options forwarded to coerce (e.g. +format:+, +of_type:+, +round:+, +values:+, +enum:+, +in:+)
     def initialize: (
                       name: (Symbol | String),
                       _type: singleton(Types::Base),
@@ -730,7 +730,7 @@ module FieldStruct
                       ?default: (Object | untyped)?,
                       ?coercion_policy: Symbol?,
                       ?description: String?,
-                      **::Hash[Symbol, Object] options
+                      **Object options
                     ) -> void
 
     def required?: () -> bool
@@ -1127,7 +1127,12 @@ module FieldStruct
     # +serialize+ refuses undeclared fields, so the mapping goes after them.
     def self.build_class: (untyped name, untyped mappings, untyped lines) -> untyped
 
-    def self.decorate: (untyped declaration, *untyped comment_parts) -> untyped
+    # _@param_ `declaration` — the DSL call, without indentation
+    # 
+    # _@param_ `comment_parts` — trailing-comment fragments; nil and empty ones are dropped
+    # 
+    # _@return_ — the indented line, with a +#+ comment when any part remains
+    def self.decorate: (String declaration, *String? comment_parts) -> String
 
     def self.availability_comment: (untyped present, untyped total, untyped missing) -> untyped
 
@@ -1507,7 +1512,7 @@ module FieldStruct
       # _@param_ `round` — decimal places, rounding half up (ties away from zero); +nil+ leaves the value unrounded. The result is a Float even at +round: 0+.
       # 
       # _@return_ — +nil+ for +nil+ input, otherwise the parsed float
-      def coerce: ((Numeric | ::String)? value, ?round: ::Integer?) -> Float?
+      def coerce: ((Numeric | ::String)? value, ?round: ::Integer?) -> ::Float?
 
       # _@return_ — the top-level +::Float+ class
       def ruby_type: () -> Class
@@ -1661,7 +1666,7 @@ module FieldStruct
       # _@param_ `value` — anything stringable (everything in Ruby responds to +to_s+); +nil+ stays +nil+
       # 
       # _@return_ — +nil+ when input is +nil+, otherwise +value.to_s+
-      def coerce: (_ToS? value) -> String?
+      def coerce: (_ToS? value) -> ::String?
 
       # Missing if nil, empty, or whitespace-only.
       # 
@@ -1683,7 +1688,7 @@ module FieldStruct
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@param_ `value` — anything else raises TypeError
-      def coerce: ((Symbol | ::String)? value) -> Symbol?
+      def coerce: ((::Symbol | ::String)? value) -> ::Symbol?
 
       # _@return_ — the top-level +::Symbol+ class
       def ruby_type: () -> Class
@@ -1757,7 +1762,7 @@ module FieldStruct
       # _@param_ `base` — radix (2..36) for String input; +nil+ means 10
       # 
       # _@return_ — +nil+ for +nil+ input, otherwise the parsed integer
-      def coerce: ((Integer | Numeric | ::String)? value, ?base: ::Integer?) -> Integer?
+      def coerce: ((::Integer | Numeric | ::String)? value, ?base: ::Integer?) -> ::Integer?
 
       # _@return_ — the top-level +::Integer+ class
       def ruby_type: () -> Class

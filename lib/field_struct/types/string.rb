@@ -21,7 +21,7 @@ module FieldStruct
 
       # @param value [#to_s, nil] anything stringable (everything in
       #   Ruby responds to +to_s+); +nil+ stays +nil+
-      # @return [String, nil] +nil+ when input is +nil+, otherwise +value.to_s+
+      # @return [::String, nil] +nil+ when input is +nil+, otherwise +value.to_s+
       def coerce(value, **)
         return nil if value.nil?
 

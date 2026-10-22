@@ -194,6 +194,10 @@ module FieldStruct
     end
     private_class_method :build_class
 
+    # @param declaration [String] the DSL call, without indentation
+    # @param comment_parts [String, nil] trailing-comment fragments; nil and
+    #   empty ones are dropped
+    # @return [String] the indented line, with a +#+ comment when any part remains
     def self.decorate(declaration, *comment_parts)
       parts = comment_parts.compact.reject(&:empty?)
       line = "  #{declaration}"

@@ -18,8 +18,8 @@ module FieldStruct
         {enum: option(type: [::Array])}
       end
 
-      # @param value [Symbol, ::String, nil] anything else raises TypeError
-      # @return [Symbol, nil]
+      # @param value [::Symbol, ::String, nil] anything else raises TypeError
+      # @return [::Symbol, nil]
       # @raise [TypeError] when input is not nil/Symbol/String
       def coerce(value, **)
         return nil if value.nil?

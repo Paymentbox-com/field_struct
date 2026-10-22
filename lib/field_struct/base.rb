@@ -594,11 +594,16 @@ module FieldStruct
       end
     end
 
-    # @param attrs [Hash{Symbol,String=>Object}] input values, by symbol or string key
+    # @param attrs [Hash{Symbol,String=>Object}, #to_hash, nil] input values,
+    #   by symbol or string key. Anything responding to +to_hash+ (e.g. a
+    #   permitted +ActionController::Parameters+) is converted first; +nil+
+    #   is treated as no input.
+    # @raise [ArgumentError] when +attrs+ is neither +nil+, a Hash, nor
+    #   convertible to one via +to_hash+
     def initialize(attrs = {})
       @errors = Errors.new
       apply_defaults
-      assign_attributes(attrs)
+      assign_attributes(hash_input!(attrs.nil? ? {} : attrs, '.new'))
       run_cross_field_validators if self.class.validators.any?
       @_initialized = true
       freeze if self.class.frozen_on_construct?
@@ -613,9 +618,13 @@ module FieldStruct
     # in an external naming convention, see {Base.serialize} and
     # {Base.from_json}.
     #
-    # @param attrs [Hash{Symbol,String=>Object}]
+    # @param attrs [Hash{Symbol,String=>Object}, #to_hash] anything
+    #   responding to +to_hash+ is converted first
     # @return [self]
+    # @raise [ArgumentError] when +attrs+ is not a Hash and does not
+    #   respond to +to_hash+ (including +nil+)
     def assign_attributes(attrs)
+      attrs = hash_input!(attrs, '#assign_attributes')
       reject_unknown_attributes!(attrs)
       attrs.each do |key, value|
         sym = key.to_sym
@@ -783,6 +792,25 @@ module FieldStruct
     end
 
     private
+
+    # Ruby hook behind +dup+ / +clone+: give the copy its own {Errors},
+    # seeded with the original's messages, so validating or reassigning
+    # one instance never changes the other's validity.
+    def initialize_copy(source)
+      super
+      @errors = source.errors.dup
+    end
+
+    # Return +attrs+ as a Hash, converting via +to_hash+ when it isn't one.
+    # The message names the input's class, never its value.
+    def hash_input!(attrs, method_label)
+      return attrs if attrs.is_a?(::Hash)
+      return attrs.to_hash if attrs.respond_to?(:to_hash)
+
+      raise ArgumentError,
+        "#{self.class.name || "AnonymousFieldStruct"}#{method_label} expects a Hash " \
+        "(or an object responding to #to_hash), got #{attrs.class}"
+    end
 
     def json_value(value, field = nil)
       case value

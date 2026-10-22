@@ -31,8 +31,9 @@ module FieldStruct
       #   precision; everything else goes through
       #   +Kernel.BigDecimal(value.to_s)+ — non-numeric strings raise
       #   ArgumentError.
-      # @param round [::Integer, nil] decimal places; +nil+ leaves the
-      #   value unrounded
+      # @param round [::Integer, nil] decimal places, rounding half up (ties
+      #   away from zero) whatever the global +BigDecimal.mode+; +nil+ leaves
+      #   the value unrounded. The result is a BigDecimal even at +round: 0+.
       # @return [::BigDecimal, nil]
       # @raise [ArgumentError] when a string cannot be parsed, or the value
       #   is NaN or ±Infinity (as a Float, a BigDecimal, or a String like "NaN")
@@ -49,7 +50,10 @@ module FieldStruct
         # The class, never the value — see Types::Time#coerce.
         raise ArgumentError, "BigDecimal fields expect a finite number, got a non-finite #{value.class}" unless result.finite?
 
-        round ? result.round(round) : result
+        # An explicit mode keeps the result a BigDecimal (bare round(0)
+        # returns an Integer) and ignores the process-global
+        # BigDecimal.mode, which a host may have set to banker's rounding.
+        round ? result.round(round, ::BigDecimal::ROUND_HALF_UP) : result
       end
 
       # @return [Class] the top-level +::BigDecimal+ class

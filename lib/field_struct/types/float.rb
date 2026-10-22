@@ -26,7 +26,9 @@ module FieldStruct
       # @param value [Numeric, ::String, nil] +nil+ → +nil+; everything
       #   else flows through +Kernel#Float+ — strict on string parsing,
       #   rejects non-numeric strings, Symbols, Booleans, Arrays.
-      # @param round [::Integer, nil] decimal places; +nil+ leaves the value unrounded
+      # @param round [::Integer, nil] decimal places, rounding half up (ties
+      #   away from zero); +nil+ leaves the value unrounded. The result is a
+      #   Float even at +round: 0+.
       # @return [Float, nil] +nil+ for +nil+ input, otherwise the parsed float
       # @raise [ArgumentError, TypeError] when the value cannot be coerced,
       #   or coerces to NaN or ±Infinity (including a String like "1e400")
@@ -37,7 +39,9 @@ module FieldStruct
         # The class, never the value — see Types::Time#coerce.
         raise ArgumentError, "Float fields expect a finite number, got a non-finite #{value.class}" unless result.finite?
 
-        round ? result.round(round) : result
+        # Float#round returns an Integer at round: 0; .to_f keeps the
+        # field's type. half: :up pins ties away from zero.
+        round ? result.round(round, half: :up).to_f : result
       end
 
       # @return [Class] the top-level +::Float+ class

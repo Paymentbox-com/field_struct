@@ -1469,7 +1469,7 @@ module FieldStruct
 
       # _@param_ `value` — +nil+ → +nil+; everything else flows through +Kernel#Float+ — strict on string parsing, rejects non-numeric strings, Symbols, Booleans, Arrays.
       # 
-      # _@param_ `round` — decimal places; +nil+ leaves the value unrounded
+      # _@param_ `round` — decimal places, rounding half up (ties away from zero); +nil+ leaves the value unrounded. The result is a Float even at +round: 0+.
       # 
       # _@return_ — +nil+ for +nil+ input, otherwise the parsed float
       def coerce: ((Numeric | ::String)? value, ?round: ::Integer?) -> Float?
@@ -1792,7 +1792,7 @@ module FieldStruct
 
       # _@param_ `value` — +nil+ → +nil+; a +BigDecimal+ passes through; +Float+ uses +Float::DIG+ precision; everything else goes through +Kernel.BigDecimal(value.to_s)+ — non-numeric strings raise ArgumentError.
       # 
-      # _@param_ `round` — decimal places; +nil+ leaves the value unrounded
+      # _@param_ `round` — decimal places, rounding half up (ties away from zero) whatever the global +BigDecimal.mode+; +nil+ leaves the value unrounded. The result is a BigDecimal even at +round: 0+.
       def coerce: ((::BigDecimal | Numeric | ::String)? value, ?round: ::Integer?) -> ::BigDecimal?
 
       # _@return_ — the top-level +::BigDecimal+ class

@@ -6,7 +6,7 @@ module FieldStruct
   module Types
     # String type. Coerces any non-nil value via +to_s+; treats nil, empty,
     # and whitespace-only strings as missing. A field declared +strict: true+
-    # accepts only scalars (String, Symbol, a finite real Numeric) and objects
+    # accepts only scalars (String, Symbol, Integer) and objects
     # responding to +to_str+, so a Hash or Array is refused rather than stored
     # as its +inspect+ text.
     class String < Base
@@ -26,7 +26,8 @@ module FieldStruct
       # @param value [#to_s, nil] anything stringable (everything in
       #   Ruby responds to +to_s+); +nil+ stays +nil+
       # @param strict [Boolean, nil] when true, refuse anything but a String,
-      #   Symbol, finite real Numeric or +to_str+ object. Strict never changes
+      #   Symbol, Integer or +to_str+ object (a Float, BigDecimal or Rational
+      #   is refused: its +to_s+ is +"0.12e2"+ / +"1/2"+, not the caller's text). Strict never changes
       #   what an accepted value becomes — it is still +value.to_s+.
       # @return [::String, nil] +nil+ when input is +nil+, otherwise +value.to_s+
       # @raise [TypeError] under +strict:+, for any other value
@@ -57,19 +58,14 @@ module FieldStruct
 
       # @param value [Object] a non-nil value
       # @return [void]
-      # @raise [TypeError] unless +value+ is a String, Symbol, finite real
-      #   Numeric, or responds to +to_str+; the message names the class,
-      #   never the value (see Types::Time#coerce)
+      # @raise [TypeError] unless +value+ is a String, Symbol, Integer, or
+      #   responds to +to_str+; the message names the class, never the value
+      #   (see Types::Time#coerce)
       def refuse_non_scalar!(value)
-        return if value.is_a?(::String) || value.is_a?(::Symbol) || value.respond_to?(:to_str)
+        return if value.is_a?(::String) || value.is_a?(::Symbol) || value.is_a?(::Integer)
+        return if value.respond_to?(:to_str)
 
-        if value.is_a?(::Numeric) && value.real?
-          return if value.finite?
-
-          raise ::TypeError, "String fields with strict: true expect a finite number, got a non-finite #{value.class}"
-        end
-
-        raise ::TypeError, 'String fields with strict: true expect a String, Symbol, finite Numeric ' \
+        raise ::TypeError, 'String fields with strict: true expect a String, Symbol, Integer ' \
                            "or an object responding to #to_str, got a #{value.class}"
       end
     end

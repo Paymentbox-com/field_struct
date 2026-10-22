@@ -144,17 +144,19 @@ anything it accepts becomes exactly what the default would make of it.
 |-------|-----------|-------------------------|------------|--------------------------|
 | `"abc"` / `"42"` | `"abc"` / `"42"` | same | — / 42 | — / 42 |
 | `:abc` | `"abc"` | `"abc"` | `TypeError` | `TypeError` |
-| `42` / `12.0` / `BigDecimal("12.0")` | `"42"` / `"12.0"` / `"0.12e2"` | same | 42 / 12 / 12 | 42 / 12 / 12 |
-| `12.7` / `Rational(25, 2)` | `"12.7"` / `"25/2"` | same | 12 (truncated) | `ArgumentError` |
+| `42` | `"42"` | `"42"` | 42 | 42 |
+| `12.0` / `BigDecimal("12.0")` | `"12.0"` / `"0.12e2"` | `TypeError` | 12 / 12 | 12 / 12 |
+| `12.7` / `Rational(25, 2)` | `"12.7"` / `"25/2"` | `TypeError` | 12 (truncated) | `ArgumentError` |
 | `"12.7"` / `"12.0"` / `"1e3"` / `"0x1A"` | as-is | as-is | `ArgumentError` | `ArgumentError` |
 | object with `to_str` | `to_s` | `to_s` | read as its `to_str` string | read as its `to_str` string |
 | `{a: 1}` / `[1]` / `true` / `Time` / `Object.new` | their `to_s` | `TypeError` | `TypeError` (a `Time` reads as its epoch) | `TypeError` (a `Time` → `ArgumentError`) |
 | `Float::NAN` / `Infinity` | `"NaN"` / `"Infinity"` | `TypeError` | `ArgumentError` | `ArgumentError` |
 
-- **`:string` strict** accepts a String, a Symbol, a finite real Numeric (Integer,
-  Float, BigDecimal, Rational) and anything responding to `to_str`. Numerics count
-  as scalars because a JSON payload often carries an identifier as a number
-  (`"account": 12345`) and its decimal text is unambiguous. Booleans, Hashes,
+- **`:string` strict** accepts a String, a Symbol, an Integer and anything
+  responding to `to_str`. An Integer counts because a JSON payload often carries an
+  identifier as a number (`"account": 12345`) and its text is unambiguous. A Float,
+  BigDecimal or Rational is refused: its `to_s` (`"1.0e+20"`, `"0.12e2"`, `"1/2"`)
+  is not the text the sender meant. Booleans, Hashes,
   Arrays, Complex and other objects are refused — their `to_s` is a rendering, not
   a value. It applies to the string subtypes too (`:immutable_string`, `:uuid`,
   `:url`, `:email`, `:binary`).

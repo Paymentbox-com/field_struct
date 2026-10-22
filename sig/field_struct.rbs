@@ -1973,7 +1973,7 @@ module FieldStruct
 
     # String type. Coerces any non-nil value via +to_s+; treats nil, empty,
     # and whitespace-only strings as missing. A field declared +strict: true+
-    # accepts only scalars (String, Symbol, a finite real Numeric) and objects
+    # accepts only scalars (String, Symbol, Integer) and objects
     # responding to +to_str+, so a Hash or Array is refused rather than stored
     # as its +inspect+ text.
     class String < FieldStruct::Types::Base
@@ -1984,7 +1984,7 @@ module FieldStruct
 
       # _@param_ `value` — anything stringable (everything in Ruby responds to +to_s+); +nil+ stays +nil+
       # 
-      # _@param_ `strict` — when true, refuse anything but a String, Symbol, finite real Numeric or +to_str+ object. Strict never changes what an accepted value becomes — it is still +value.to_s+.
+      # _@param_ `strict` — when true, refuse anything but a String, Symbol, Integer or +to_str+ object (a Float, BigDecimal or Rational is refused: its +to_s+ is +"0.12e2"+ / +"1/2"+, not the caller's text). Strict never changes what an accepted value becomes — it is still +value.to_s+.
       # 
       # _@return_ — +nil+ when input is +nil+, otherwise +value.to_s+
       def coerce: (_ToS? value, ?strict: bool?) -> ::String?

@@ -20,8 +20,8 @@ RSpec.describe 'strict: option' do
         expect(coerce(:hello)).to eq('hello')
       end
 
-      it 'reads a finite real Numeric exactly as the default does' do
-        [42, -7, 3.14, Rational(1, 2), BigDecimal('12.5')].each do |number|
+      it 'reads an Integer exactly as the default does' do
+        [42, -7, 2**70].each do |number|
           expect(coerce(number)).to eq(type.coerce(number))
         end
       end
@@ -44,16 +44,14 @@ RSpec.describe 'strict: option' do
         'false' => false,
         'a plain object' => Object.new,
         'a Time' => Time.at(0),
-        'a Complex' => Complex(1, 2)
+        'a Complex' => Complex(1, 2),
+        # Their to_s isn't the text a caller meant: "0.12e2", "1/2", "1.0e+20".
+        'a Float' => 3.14,
+        'a BigDecimal' => BigDecimal('12'),
+        'a Rational' => Rational(1, 2)
       }.each do |label, value|
         it "refuses #{label} with a TypeError" do
           expect { coerce(value) }.to raise_error(TypeError, /strict: true/)
-        end
-      end
-
-      it 'refuses a non-finite Numeric' do
-        [Float::NAN, Float::INFINITY, BigDecimal('Infinity')].each do |number|
-          expect { coerce(number) }.to raise_error(TypeError, /non-finite/)
         end
       end
 

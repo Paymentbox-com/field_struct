@@ -301,11 +301,16 @@ module FieldStruct
       # surfaces the underlying Oj parse error; a non-object root
       # (+[...]+, +"hi"+, +42+) raises +ArgumentError+.
       #
+      # JSON numbers with a fraction or exponent parse as +BigDecimal+, never
+      # through a Float, so a +:decimal+ field gets the exact digits sent.
+      # +:float+ fields still convert to Float; +:value+ fields (and numbers
+      # inside their Hashes and Arrays) receive the +BigDecimal+.
+      #
       # @param json_string [String]
       # @return [Base]
       # @raise [ArgumentError] when the parsed root is not a JSON object
       def from_json(json_string)
-        parsed = Oj.load(json_string, mode: :compat)
+        parsed = Oj.load(json_string, mode: :compat, decimal_class: ::BigDecimal)
         unless parsed.is_a?(::Hash)
           raise ArgumentError,
             "from_json expects a JSON object root, got #{parsed.class}: #{parsed.inspect}"

@@ -60,6 +60,8 @@ module FieldStruct
           raise ArgumentError, "Integer fields expect a finite number, got a non-finite #{value.class}"
         end
 
+        refuse_huge_decimal!(value)
+
         begin
           ::Kernel.Integer(value)
         rescue ::RangeError
@@ -68,12 +70,30 @@ module FieldStruct
         end
       end
 
+      # The most integer digits a decimal may expand to. +BigDecimal('1e10000000')+
+      # is 11 bytes, but its Integer takes seconds to build, so untrusted JSON
+      # could burn CPU. The same limit as Python's int/str conversion
+      # (CVE-2020-10735).
+      MAX_DECIMAL_DIGITS = 4300
+
       # @return [Class] the top-level +::Integer+ class
       def ruby_type
         ::Integer
       end
 
       private
+
+      # @param value [Object]
+      # @return [void]
+      # @raise [ArgumentError] when +value+ is a decimal whose integer part has
+      #   more than {MAX_DECIMAL_DIGITS} digits
+      def refuse_huge_decimal!(value)
+        return unless defined?(::BigDecimal) && value.is_a?(::BigDecimal)
+        return if value.exponent <= MAX_DECIMAL_DIGITS
+
+        raise ArgumentError, "Integer fields read a decimal of at most #{MAX_DECIMAL_DIGITS} digits, " \
+                             "got a larger #{value.class}"
+      end
 
       # @param value [::String]
       # @param base [::Integer]

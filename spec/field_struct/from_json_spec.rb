@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'bigdecimal'
+
 RSpec.describe FieldStruct::Base, '.from_json' do
   describe 'a simple scalar class' do
     let(:klass) do
@@ -81,6 +83,49 @@ RSpec.describe FieldStruct::Base, '.from_json' do
       ])
       restored = book_class.from_json(original.to_json)
       expect(restored).to eq(original)
+    end
+  end
+
+  describe 'JSON numbers with a fractional part' do
+    let(:klass) do
+      Class.new(described_class) do
+        optional :d, :decimal
+        optional :f, :float
+        optional :v, :value
+        optional :n, :integer
+      end
+    end
+
+    it 'reaches a :decimal field exactly, not through a Float' do
+      instance = klass.from_json('{"d": 1234567890123.4567}')
+      expect(instance.d).to eq(BigDecimal('1234567890123.4567'))
+    end
+
+    it 'keeps a :decimal exact across to_json / from_json' do
+      original = klass.from_json('{"d": 1234567890123.4567}')
+      expect(klass.from_json(original.to_json)).to eq(original)
+    end
+
+    it 'still gives a :float field a Float' do
+      instance = klass.from_json('{"f": 1.5}')
+      expect(instance.f).to be_a(Float).and eq(1.5)
+    end
+
+    it 'gives a :value field a BigDecimal' do
+      expect(klass.from_json('{"v": 2.25}').v).to be_a(BigDecimal).and eq(BigDecimal('2.25'))
+    end
+
+    it 'gives numbers inside a :value Hash or Array BigDecimals' do
+      instance = klass.from_json('{"v": {"a": [1.1]}}')
+      expect(instance.v['a'].first).to be_a(BigDecimal).and eq(BigDecimal('1.1'))
+    end
+
+    it 'leaves whole JSON numbers as Integers' do
+      expect(klass.from_json('{"v": 7}').v).to be_a(Integer)
+    end
+
+    it 'truncates a fractional number into an :integer field as before' do
+      expect(klass.from_json('{"n": 3.7}').n).to eq(3)
     end
   end
 

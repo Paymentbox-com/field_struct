@@ -287,6 +287,10 @@ Pattern matching recurses (`in { address: { city: 'NYC' } }`).
   restore).
 - Conversions in `as_json`: `Date`/`Time`/`DateTime` → ISO-8601 (or the field's
   `format:`), `BigDecimal` → plain string, `Symbol` → String, arrays/nested recurse.
+- `from_json` parses JSON numbers with a fraction or exponent as `BigDecimal`, so a
+  `:decimal` gets the exact digits sent (`1234567890123.4567`, not `…123.46`).
+  `:float` still holds a Float; a `:value` field (and numbers inside its Hashes and
+  Arrays) holds the `BigDecimal` — which `to_json` writes back as a string.
 
 <!-- doctest -->
 ```ruby

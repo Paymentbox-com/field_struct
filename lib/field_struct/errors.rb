@@ -11,6 +11,15 @@ module FieldStruct
       @messages = {}
     end
 
+    # Ruby hook behind +dup+ / +clone+: copy the message lists too, so
+    # adding to the copy never changes the original.
+    #
+    # @api private
+    def initialize_copy(source)
+      super
+      @messages = source.to_h.transform_values(&:dup)
+    end
+
     # @param field_name [Symbol, String]
     # @return [Array<String>] messages for the field, or an empty array
     def [](field_name)

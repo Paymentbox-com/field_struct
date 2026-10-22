@@ -73,7 +73,7 @@ module FieldStruct
           ::Kernel.Integer(value)
         rescue ::RangeError
           # A Complex with an imaginary part; Kernel's message echoes the value.
-          raise ArgumentError, "Integer fields could not read a #{value.class} as a number"
+          raise ArgumentError, "Integer fields could not read a #{value.class} as a number", cause: nil
         end
         refuse_inexact!(value, whole) if strict
         whole
@@ -126,7 +126,7 @@ module FieldStruct
         ::Kernel.Integer(value, base)
       rescue ::ArgumentError
         # The class, never the value — see Types::Time#coerce.
-        raise ArgumentError, "Integer fields expect a base-#{base} integer, got a String that is not one"
+        raise ArgumentError, "Integer fields expect a base-#{base} integer, got a String that is not one", cause: nil
       end
     end
   end

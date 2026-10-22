@@ -2,6 +2,7 @@
 # and per-field validation. Subclass {FieldStruct::Base} to get a value object
 # whose attributes coerce, validate on assignment, and introspect cleanly.
 module FieldStruct
+  FILTERED: String
   VERSION: String
 
   # The library's root directory — the parent of +lib/+. Computed from this
@@ -329,7 +330,7 @@ module FieldStruct
     # 
     # _@param_ `type_arg` — a registered name in the resolving registry, OR a +Types::Base+ subclass, OR a +FieldStruct::Base+ subclass (auto-wrapped in {Types::Nested})
     # 
-    # _@param_ `options` — each keyword option's value: +required:+ (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol), +description:+ / +desc:+ (String), +rbs_type:+ (String — an RBS type expression {RBS.generate} emits for this field instead of the derived one), plus type-specific options (e.g. +format:+, +round:+, +of:+, +values:+, +enum:+, +in:+) — see each type's +coerce+ for the options it consumes
+    # _@param_ `options` — each keyword option's value: +required:+ (Boolean), +default:+ (literal or callable), +coercion_policy:+ (Symbol), +description:+ / +desc:+ (String), +rbs_type:+ (String — an RBS type expression {RBS.generate} emits for this field instead of the derived one), +sensitive:+ (Boolean — mask the value in +inspect+; see {Field#sensitive?}), plus type-specific options (e.g. +format:+, +round:+, +of:+, +values:+, +enum:+, +in:+) — see each type's +coerce+ for the options it consumes
     # 
     # _@return_ — the class-level metadata, so the DSL reads
     # cleanly in IRB (each line prints the running set of declared
@@ -421,8 +422,10 @@ module FieldStruct
     # so the full setter pipeline runs: coercion (strings re-coerce to
     # Date/Time/BigDecimal), nested Hash → Types::Nested instantiation,
     # +unknown_attributes+ policy, +coercion_policy+. Invalid JSON
-    # surfaces the underlying Oj parse error; a non-object root
-    # (+[...]+, +"hi"+, +42+) raises +ArgumentError+.
+    # raises the underlying Oj parse error's class (+EncodingError+ or a
+    # subclass) with its position but not the input, which Oj's own
+    # message quotes; a non-object root (+[...]+, +"hi"+, +42+) raises
+    # +ArgumentError+ naming its class.
     # 
     # JSON numbers with a fraction or exponent parse as +BigDecimal+, never
     # through a Float, so a +:decimal+ field gets the exact digits sent.
@@ -431,6 +434,16 @@ module FieldStruct
     # 
     # _@param_ `json_string`
     def self.from_json: (String json_string) -> Base
+
+    # Oj quotes the whole input in its parse-error message, and that input
+    # may be payments data. Re-raise the same class with Oj's description
+    # and position only, and without the original as +cause+ (which error
+    # reporters print).
+    # 
+    # _@param_ `json_string`
+    # 
+    # _@return_ — the parsed JSON value
+    def self.parse_json: (String json_string) -> Object?
 
     # Walk a parsed JSON hash (string-keyed, possibly with external
     # names) and reverse-map every key to its canonical Symbol via
@@ -571,6 +584,9 @@ module FieldStruct
     # _@param_ `value` — the declared +rbs_type:+
     def self.validate_rbs_type!: (Object value) -> void
 
+    # _@param_ `value` — the declared +sensitive:+
+    def self.validate_sensitive!: (Object value) -> void
+
     # _@param_ `field`
     def self.define_field_accessors: (Field field) -> void
 
@@ -694,6 +710,10 @@ module FieldStruct
     # required"]}>+ — so the most-read debug output never hides invalidity
     # (design invariant 7). This reads the current {#errors}; it does not
     # re-run validation, so printing an instance never mutates it.
+    # 
+    # A +sensitive: true+ field renders {FieldStruct::FILTERED} in place of
+    # a non-nil value (+nil+ still shows, so a missing value stays visible).
+    # +pp+ goes through here too.
     def inspect: () -> String
 
     def model_name: () -> ModelName
@@ -895,6 +915,8 @@ module FieldStruct
     # 
     # _@param_ `rbs_type` — RBS type expression overriding the derived one in generated signatures (see {#rbs_type})
     # 
+    # _@param_ `sensitive` — mask the value in {Base#inspect} (see {#sensitive?})
+    # 
     # _@param_ `options` — extra keyword type/field options forwarded to coerce (e.g. +format:+, +of_type:+, +round:+, +values:+, +enum:+, +in:+)
     def initialize: (
                       name: (Symbol | String),
@@ -905,10 +927,19 @@ module FieldStruct
                       ?coercion_policy: Symbol?,
                       ?description: String?,
                       ?rbs_type: String?,
+                      ?sensitive: bool,
                       **Object? options
                     ) -> void
 
     def required?: () -> bool
+
+    # Whether the field holds data that must not reach a log — a card
+    # number, a CVV, a token. {Base#inspect} (and so +pp+) renders
+    # {FieldStruct::FILTERED} in place of a non-nil value. Data paths —
+    # the reader, +attributes+, +to_h+, +as_json+, +to_json+, pattern
+    # matching — return the real value, so round-trips stay exact.
+    # Declared with the +sensitive:+ field option.
+    def sensitive?: () -> bool
 
     # Concise one-line representation. Designed to be readable in IRB
     # without dumping every ivar (the default Object#inspect is the
@@ -2059,6 +2090,14 @@ module FieldStruct
 
       # _@return_ — +[TrueClass, FalseClass]+
       def ruby_type: () -> [Class, Class]
+
+      # The accepted vocabulary is declared schema, so it is listed; the
+      # refused value is named by class only — it may be payments data.
+      # 
+      # _@param_ `value` — the refused input
+      # 
+      # _@param_ `accepted` — the truthy then falsy strings
+      def refusal_message: (Object value, ::Array[::String] accepted) -> ::String
 
       # _@param_ `values` — the field's +values:+
       # 

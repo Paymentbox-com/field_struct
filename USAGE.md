@@ -85,6 +85,7 @@ can stash and read its own options.
 | `coercion_policy:` | `:keep_raw` (default) \| `:replace` \| `:raise` — per-field override of the class setting |
 | `description:` / `desc:` | human text; introspection only — **never** in `attributes`/`as_json`/pattern match |
 | `rbs_type:` | String of RBS that `FieldStruct::RBS` emits for this field instead of the derived type (`'::ActiveRecord::Relation'`); signatures only, no runtime effect |
+| `sensitive:` | `true` renders `[FILTERED]` for the value in `inspect` / `pp`; data paths unchanged — see [Log safety](#log-safety-error-messages-and-sensitive-fields) |
 
 ```ruby
 class Account < FieldStruct::Base
@@ -126,8 +127,8 @@ Boolean presets: `:english_yes_no`/`:english` (`true yes y on 1` / `false no n o
   them — as a Float, a BigDecimal, a String (`"NaN"`, `"Infinity"`) or JSON `1e400` —
   as an ordinary coercion failure under the field's `coercion_policy`. A `:union`
   refuses a non-finite Float/BigDecimal outright rather than letting a `:string`
-  member store `"NaN"`. The numeric types' messages name the input class, never the
-  value (a union's no-match error and `coercion_policy :raise` still echo it).
+  member store `"NaN"`. Like every FieldStruct message, these name the input class,
+  never the value — see [Log safety](#log-safety-error-messages-and-sensitive-fields).
 - **`round:` keeps the field's type and rounds half up** (ties away from zero).
   `round: 0` returns a `Float` / `BigDecimal`, not an Integer, and `:decimal`
   ignores the process-global `BigDecimal.mode` — a host that sets banker's rounding
@@ -308,6 +309,47 @@ When a value can't be coerced into the field's type:
 | `:keep_raw` (default) | the raw input | yes (`could not be coerced: …`) | nothing lost; inspect & fix |
 | `:replace` | `nil` | yes | clean slate |
 | `:raise` | — | — | raises `FieldStruct::CoercionError` |
+
+Messages name the field, the expected type and the input's *class*, never the value:
+`could not be coerced: Integer fields expect a base-10 integer, got a String that is
+not one`; under `:raise`, `could not coerce String input for cents: …`.
+
+### Log safety: error messages and sensitive fields
+
+Payments data must not reach a log line, so **no message FieldStruct builds echoes an
+input value** — not an `errors` entry, not a raised error (`CoercionError`, a type's
+`ArgumentError`/`TypeError`, `from_json`'s errors), and not their `cause` chain, which
+error reporters print. Kernel conversion errors (`invalid value for Integer(): "…"`)
+are dropped from the chain; an invalid-JSON error from `from_json` keeps Oj's error
+class and position but not the quoted input. Declared schema (a format, a boolean's
+accepted strings, a field name) is still named. A custom type owns its own messages:
+raise with the value's class, not its `inspect`.
+
+`sensitive: true` (any type, `true`/`false` only) masks the value where objects get
+logged — `inspect`, and so `pp`, the `errors:` suffix of an invalid instance, nested
+structs and arrays of them. `nil` still shows, so a missing value stays visible:
+
+<!-- doctest -->
+```ruby
+class Card < FieldStruct::Base
+  required :number, :string, sensitive: true
+  optional :cvv,    :string, sensitive: true
+  optional :brand,  :string
+end
+
+card = Card.new(number: '4111111111111111', brand: 'visa')
+card             # => #<Card number: [FILTERED], cvv: nil, brand: "visa">
+card.inspect.include?('4111')      # => false
+card.number      # => "4111111111111111"
+card.to_h        # => { number: "4111111111111111", cvv: nil, brand: "visa" }
+Card.metadata[:number].sensitive?  # => true
+```
+
+Data paths are **not** masked — the reader, `attributes`/`to_h`, `as_json`/`to_json`,
+`deconstruct_keys` and equality all return the real value, so `from_json(to_json)`
+still round-trips. Masking there would corrupt the data; filter at the log boundary
+if you log those. `Field#inspect`, `Metadata#to_h` (`sensitive: true`) and `describe`
+show the flag only when it is set.
 
 ---
 

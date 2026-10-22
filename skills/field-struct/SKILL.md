@@ -84,6 +84,10 @@ Steps when asked to build one:
    **except `:value`** (no type info to restore). Uses **Oj**, not stdlib JSON.
 8. **Unknown input keys are dropped by default** (`unknown_attributes :ignore`); set
    `unknown_attributes :raise` on the class to reject them.
+9. **Messages never echo values** (payments data stays out of logs): errors and raised
+   errors name the field, expected type and input *class*. `sensitive: true` (any
+   type) shows `[FILTERED]` in `inspect`/`pp`; readers, `to_h`, `as_json`/`to_json`
+   still return the real value.
 
 ## Debugging an invalid instance
 

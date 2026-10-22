@@ -59,7 +59,7 @@ RSpec.describe FieldStruct::Types::Float do
 
     it 'keeps every other Kernel#Float string form' do
       {'1_000.5' => 1000.5, ' 2.5 ' => 2.5, '1e3' => 1000.0, '017' => 17.0,
-       '.5' => 0.5, '5.' => 5.0, '-0.25' => -0.25, '0' => 0.0}.each do |string, expected|
+       '.5' => 0.5, '-0.25' => -0.25, '0' => 0.0}.each do |string, expected|
         expect(type.coerce(string)).to eq(expected)
       end
     end

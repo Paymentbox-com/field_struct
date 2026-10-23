@@ -1250,6 +1250,9 @@ module FieldStruct
     def nested_invalid?(value)
       return value.invalid? if value.is_a?(FieldStruct::Base)
       return false unless value.is_a?(::Array)
+      # The pattern form scans in C, so an array of scalars (the common case)
+      # skips the Ruby block entirely.
+      return false unless value.any?(FieldStruct::Base)
 
       value.any? { |element| element.is_a?(FieldStruct::Base) && element.invalid? }
     end

@@ -1173,8 +1173,9 @@ module FieldStruct
 
       if field_value_invalid?(field, value)
         errors.add(field.name, 'is invalid')
-      elsif (index = invalid_element_index(field, value))
-        errors.add(field.name, "element at index #{index} is invalid")
+      elsif (indexes = invalid_element_indexes(field, value))
+        verb = indexes.size == 1 ? 'is' : 'are'
+        errors.add(field.name, "#{Types::Array.elements_at(indexes)} #{verb} invalid")
       end
     end
 
@@ -1201,14 +1202,22 @@ module FieldStruct
 
     # @param field [Field]
     # @param value [Object, nil] a present coerced value
-    # @return [Integer, nil] the index of the first non-nil element that
-    #   breaks the array field's +element:+ +format:+ / +enum:+ / +in:+, or
-    #   +nil+ when there is none (or the field declares no +element:+)
-    def invalid_element_index(field, value)
+    # @return [Array<Integer>, nil] the indexes of every non-nil element
+    #   that breaks the array field's +element:+ +format:+ / +enum:+ / +in:+,
+    #   or +nil+ when there is none (or the field declares no +element:+)
+    def invalid_element_indexes(field, value)
       element_options = field.options[:element]
       return nil unless element_options && value.is_a?(::Array)
 
-      value.index { |item| !item.nil? && outside_options?(element_options, item) }
+      # Array#index keeps an all-valid array allocation-free; only an
+      # invalid one goes on to collect the rest.
+      first = value.index { |item| !item.nil? && outside_options?(element_options, item) }
+      return nil if first.nil?
+
+      ((first + 1)...value.size).each_with_object([first]) do |index, found|
+        item = value[index]
+        found << index if !item.nil? && outside_options?(element_options, item)
+      end
     end
 
     # `in:` with a Range means a BOUNDS check, so ask the Range for its bounds.

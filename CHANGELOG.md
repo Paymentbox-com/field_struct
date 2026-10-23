@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Breaking-ish (visible behaviour changes)
+
+- **Array errors name every bad index, not only the first.** One bad element reads as before; several list their indexes and show the first one's reason: `could not be coerced: elements at index 1, 4 (index 1 shown): Integer fields expect …` for coercion (every `coercion_policy`, `:raise` included) and `elements at index 1, 4 are invalid` for `element:` validation. Past five indexes the rest are counted (`… 0, 1, 2, 3, 4 and 15 more …`). Indexes only, never values. An all-valid array costs the same as before. <!-- upgrading: array-every-index -->
+- **`describe` lists an array's element options by name only**: `— element accepts in, base, strict` (was `— element accepts in (Array | Range), base (Integer), strict (TrueClass | FalseClass)`). The shapes are the element type's `option_schema`. <!-- upgrading: array-describe-names-only -->
+
 ### Documentation and tooling
 
 - **The UPGRADING.md drift guard asks for a decision on every Changed / Removed bullet.** Each `[Unreleased]` bullet under `### Changed` or `### Removed` must carry a `<!-- upgrading: … -->` slug marker (with its UPGRADING.md entry) or `upgrading: none` (no caller action), so a visible change filed outside a Breaking heading can't skip the guide unnoticed. `none` never satisfies a Breaking bullet, and released sections are not re-checked. Convention in CLAUDE.md.

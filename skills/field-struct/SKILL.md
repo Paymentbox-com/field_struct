@@ -75,7 +75,7 @@ Steps when asked to build one:
    - `zone:` → `:time`/`:datetime` (`"UTC"` or `"±HH:MM"` for zone-less strings; no IANA names)
    - `sensitive:` → any type (mask the value in `inspect`)
    - `element:` → `:array` (a Hash of the element type's own options, e.g.
-     `of: :integer, element: {strict: true}`; a bad element is reported by index)
+     `of: :integer, element: {strict: true}`; bad elements are reported by index — every one, the first five listed)
 6. **Cross-field rules use `validate` + `errors.add(:base, …)`**, run at `valid?`.
    `errors[:base]` is cleared each `valid?`; per-field errors are owned by the setter.
    ```ruby

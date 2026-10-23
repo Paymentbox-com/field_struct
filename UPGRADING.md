@@ -1,6 +1,6 @@
 # Upgrading FieldStruct
 
-<!-- upgrading-range: 0.10.0..0.13.1 -->
+<!-- upgrading-range: 0.10.0..0.14.0 -->
 
 What changes when you move a project from **0.10.x to 0.11, 0.12 or 0.13**, how
 to find the code each change touches, and how to fix it. Written to be followed
@@ -47,6 +47,7 @@ hard to attribute, [bisect by version](#if-something-else-breaks).
 | Message-matching spec fails: `invalid value for Integer()` gone | 0.11 | [Numeric messages](#numeric-messages-name-the-input-class) |
 | Message-matching spec fails: `cannot coerce "…" to boolean`, `no union member could coerce`, `could not coerce "…" for` | 0.13 | [No value echo](#messages-never-echo-the-input-value) |
 | Array error gains `element at index N:` | 0.13 | [Array element index](#array-errors-name-the-element-index) |
+| Array error says `elements at index N, M …` | 0.14 | [Every index](#array-errors-name-every-bad-index) |
 | Mutating a `dup` no longer changes the original's `valid?` | 0.11 | [`dup` errors](#dup-and-clone-own-their-errors) |
 | `RangeError` / `FloatDomainError` no longer raised by `.new` | 0.11 | [RangeError](#rangeerror-is-a-coercion-failure) |
 | Steep: new errors on setters, array elements, unions | 0.12 | [0.12 section](#012--generated-rbs-changes-no-runtime-changes) |
@@ -507,6 +508,45 @@ now checked at declaration.
   ```
 - **Fix:** rename your metadata key, or adopt the real option ([below](#new-opt-in--worth-adopting)).
 - **Why:** a known option is validated so a typo can't silently do nothing.
+
+## 0.13 → 0.14 (unreleased)
+
+Not released yet; these entries describe `develop`.
+
+### Array errors name every bad index
+<!-- upgrading: array-every-index -->
+
+- **Symptom:** with more than one bad element, an `:array` error lists them all:
+  `could not be coerced: elements at index 1, 4 (index 1 shown): Integer fields
+  expect …` (was `element at index 1: …`), the same in `CoercionError` under
+  `:raise`, and `elements at index 2, 3 are invalid` for `element:` validation
+  (was `element at index 2 is invalid`). One bad element reads exactly as before.
+- **Find:**
+  ```sh
+  rg -n 'element at index \d' spec
+  ```
+  Only hits whose input has two or more bad elements change.
+- **Fix:**
+  ```ruby
+  expect(rec.errors[:ids]).to eq(['element at index 2 is invalid'])          # before
+  expect(rec.errors[:ids]).to eq(['elements at index 2, 3 are invalid'])     # after
+  ```
+  Or match the stable part: `/\Aelements? at index /`.
+- **Why:** fixing one element per resubmission is the failure mode this avoids.
+
+### `describe` lists element options by name
+<!-- upgrading: array-describe-names-only -->
+
+- **Symptom:** an `:array` field's `describe` line ends `— element accepts in,
+  base, strict` instead of `— element accepts in (Array | Range), base (Integer),
+  strict (TrueClass | FalseClass)`.
+- **Find:**
+  ```sh
+  rg -n 'element accepts \w+ \(' spec
+  ```
+- **Fix:** drop the shapes from the expectation; read them from the element type
+  (`FieldStruct::Types::Integer.option_schema`) if you need them.
+- **Why:** the shapes doubled every array line's length and belong to the element type.
 
 ---
 

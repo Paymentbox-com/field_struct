@@ -214,8 +214,9 @@ module FieldStruct
       end
     end
 
-    # What an array field's +element:+ may hold — its element type's native
-    # options — so the line answers "what can I pass to each element" too.
+    # What an array field's +element:+ may hold — the names of its element
+    # type's native options — so the line answers "what can I pass to each
+    # element" too.
     #
     # @param field [Field]
     # @return [String, nil] +nil+ for a non-array field, or an element type
@@ -223,8 +224,13 @@ module FieldStruct
     def element_accepts_summary(field)
       return nil unless field.type <= FieldStruct::Types::Array
 
-      accepts = native_options_summary(FieldStruct::Types::Array.element_class(field.options[:of_type]))
-      accepts.empty? ? nil : "element accepts #{accepts}"
+      # Names only: the shapes are the element type's own (its
+      # +option_schema+), and repeating them doubled every array line.
+      element_class = FieldStruct::Types::Array.element_class(field.options[:of_type])
+      return nil unless element_class.respond_to?(:option_schema)
+
+      names = element_class.option_schema.keys
+      names.empty? ? nil : "element accepts #{names.join(", ")}"
     end
 
     # @return [String, nil] the type's native option vocabulary, or +nil+ when

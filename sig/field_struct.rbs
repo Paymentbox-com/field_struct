@@ -873,10 +873,10 @@ module FieldStruct
     # 
     # _@param_ `value` — a present coerced value
     # 
-    # _@return_ — the index of the first non-nil element that
-    # breaks the array field's +element:+ +format:+ / +enum:+ / +in:+, or
-    # +nil+ when there is none (or the field declares no +element:+)
-    def invalid_element_index: (Field field, Object? value) -> Integer?
+    # _@return_ — the indexes of every non-nil element
+    # that breaks the array field's +element:+ +format:+ / +enum:+ / +in:+,
+    # or +nil+ when there is none (or the field declares no +element:+)
+    def invalid_element_indexes: (Field field, Object? value) -> ::Array[Integer]?
 
     # `in:` with a Range means a BOUNDS check, so ask the Range for its bounds.
     # 
@@ -1251,8 +1251,9 @@ module FieldStruct
     # describes.
     def declared_option_repr: (Object? value) -> String
 
-    # What an array field's +element:+ may hold — its element type's native
-    # options — so the line answers "what can I pass to each element" too.
+    # What an array field's +element:+ may hold — the names of its element
+    # type's native options — so the line answers "what can I pass to each
+    # element" too.
     # 
     # _@param_ `field`
     # 
@@ -1874,10 +1875,13 @@ module FieldStruct
     # 
     #   optional :ids, :array, of: :integer, element: {strict: true, base: 16}
     # 
-    # A refused element is reported with its index — +element at index 2: …+.
+    # A refused element is reported with its index — +element at index 2: …+ —
+    # and several with all of theirs (see {.elements_at}).
     # 
     # Missing: +nil+ or empty array. ruby_type: +::Array+.
     class Array < FieldStruct::Types::Base
+      INDEXES_LISTED: ::Integer
+
       # Native options: a required +of:+ naming the element type — a
       # registered Symbol or a Class (a +Types::Base+ or +FieldStruct::Base+
       # subclass) — and an +element:+ Hash of that element type's options.
@@ -1901,6 +1905,14 @@ module FieldStruct
       # _@return_ — each element coerced by +of_type+
       def coerce: (::Array[Object?]? value, ?of_type: (Class | Types::Base)?, ?element: ::Hash[::Symbol, Object?]?) -> ::Array[Object?]?
 
+      # Name a set of element indexes for an error message: one reads
+      # +element at index 2+, several +elements at index 2, 5+, and past
+      # {INDEXES_LISTED} the rest are counted (+… and 7 more+). Indexes only,
+      # never elements, so a message carries no value.
+      # 
+      # _@param_ `indexes` — ascending, at least one
+      def self.elements_at: (::Array[::Integer] indexes) -> ::String
+
       # _@param_ `value`
       # 
       # _@return_ — +true+ when +nil+ or empty
@@ -1908,6 +1920,28 @@ module FieldStruct
 
       # _@return_ — the top-level +::Array+ class
       def ruby_type: () -> Class
+
+      # Coerce the elements after the first refused one, so the error names
+      # every refused index, then raise the first element's error with them.
+      # The same message reaches every coercion_policy, :raise included —
+      # finishing the scan costs a refused array no more than an accepted one.
+      # 
+      # _@param_ `value` — the input array
+      # 
+      # _@param_ `first` — the index of the first refused element
+      # 
+      # _@param_ `error` — what the element type raised for it
+      # 
+      # _@param_ `element_type` — the element type instance
+      # 
+      # _@param_ `element` — element options
+      def raise_refused!: (
+                            ::Array[Object?] value,
+                            ::Integer first,
+                            StandardError error,
+                            Types::Base element_type,
+                            ::Hash[::Symbol, Object?]? element
+                          ) -> void
 
       # +of_type+ may be either a Types::Base subclass (the DSL form for
       # stock types like +:string+) or an already-built Types::Base

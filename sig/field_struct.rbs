@@ -1779,6 +1779,15 @@ module FieldStruct
       # 
       # _@param_ `format` — strptime format, when the field declares one
       def parse_string: (::String value, ::String? format) -> ::Date
+
+      # +Date.parse+ and +Date.strptime+ build the Date straight from year,
+      # month and day whenever the parts carry all three and neither a Julian
+      # day (+:jd+) nor a day of the year (+:yday+) — date_core.c's fast path
+      # in +d_new_by_frags+ — so this returns the same Date. Any other shape is
+      # left to the stdlib (+nil+).
+      # 
+      # _@param_ `parts` — already checked by {TemporalParser}
+      def date_from_parts: (::Hash[::Symbol, Object] parts) -> ::Date?
     end
 
     # Time type. Returns a +Time+ as-is, builds one from a +Date+ or

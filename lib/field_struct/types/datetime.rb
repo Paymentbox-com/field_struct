@@ -67,6 +67,9 @@ module FieldStruct
       # @return [::String, nil] +nil+ when the field declares no format
       # @raise [ArgumentError] when a Symbol names no preset in {.presets}
       def self.resolve_format(format)
+        # Skip building the presets Hash for the common, undeclared case.
+        return format if format.nil? || format.is_a?(::String)
+
         TimeFormatResolver.resolve(format, presets)
       end
 

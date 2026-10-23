@@ -601,6 +601,10 @@ Pattern matching recurses (`in { address: { city: 'NYC' } }`).
 
 A refused array element is named by its index (0-based), never its value:
 `errors[:ids] # => ["could not be coerced: element at index 1: Integer fields expect a base-10 integer, got a String that is not one"]`.
+When several are refused, every index is listed and the first one's reason is
+shown — `elements at index 1, 4, 7 (index 1 shown): …` — up to five indexes, then
+a count (`elements at index 0, 1, 2, 3, 4 and 15 more (index 0 shown): …`). The
+same message reaches every `coercion_policy`, `:raise` included.
 
 ### Element options (`element:`)
 
@@ -621,6 +625,8 @@ end
 Batch.new(ids: %w[ff 10]).ids                    # => [255, 16]
 Batch.new(ids: [1, 2.5]).errors[:ids]            # => ["could not be coerced: element at index 1: Integer fields with strict: true expect a whole number, got a Float that is not one"]
 Batch.new(codes: %w[USD eur]).errors[:codes]     # => ["element at index 1 is invalid"]
+Batch.new(codes: %w[usd EUR gbp]).errors[:codes] # => ["elements at index 0, 2 are invalid"]
+Batch.new(ids: [1.5, 2, 'x']).errors[:ids]       # => ["could not be coerced: elements at index 0, 2 (index 0 shown): Integer fields with strict: true expect a whole number, got a Float that is not one"]
 Batch.new(days: ['22/10/2026']).as_json[:days]   # => ['22/10/2026']
 Batch.metadata.to_h[:ids][:options]              # => { of_type: 'Integer', element: { strict: true, base: 16 } }
 ```
@@ -632,7 +638,8 @@ raises `in element: of array field :ids, base: on Integer expects Integer, got S
 (`round: is not an Integer option. Integer accepts: in, base, strict.`) — unlike a
 field, `element:` passes nothing through. A temporal element's `format:` is also
 what `to_json` writes, so `from_json` reads it back. `describe` lists what each
-array's elements accept (`element accepts in (Array | Range), base (Integer), …`).
+array's elements accept, by name (`element accepts in, base, strict`); the shapes
+are the element type's own (`FieldStruct::Types::Integer.option_schema`).
 Not supported: `element:` on an `:array` of arrays, and on a nested struct element
 (a struct takes no options).
 

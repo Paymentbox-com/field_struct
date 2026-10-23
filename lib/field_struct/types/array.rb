@@ -13,7 +13,8 @@ module FieldStruct
     #
     #   optional :ids, :array, of: :integer, element: {strict: true, base: 16}
     #
-    # A refused element is reported with its index — +element at index 2: …+.
+    # A refused element is reported with its index — +element at index 2: …+ —
+    # and several with all of theirs (see {.elements_at}).
     #
     # Missing: +nil+ or empty array. ruby_type: +::Array+.
     class Array < Base
@@ -54,7 +55,8 @@ module FieldStruct
       # @raise [ArgumentError] when +of_type+ is missing
       # @raise [StandardError] whatever the element type raises on a bad
       #   element; an ArgumentError, TypeError or RangeError keeps its class
-      #   and gains an +element at index N: +  prefix
+      #   and gains an +element at index N: + prefix — or, when several
+      #   elements are refused, +elements at index N, M (index N shown): +
       def coerce(value, of_type: nil, element: nil, **)
         return nil if value.nil?
         raise ::TypeError, "expected Array, got #{value.class}" unless value.is_a?(::Array)
@@ -68,11 +70,28 @@ module FieldStruct
           index += 1
           element ? element_type.coerce(item, **element) : element_type.coerce(item)
         rescue ArgumentError, ::TypeError, ::RangeError => e
-          # Exception#exception keeps the class without calling a custom
-          # initializer; the index, never the element, is added. The cause
-          # chain stays what it was, rather than gaining the unprefixed copy.
-          raise e.exception("element at index #{index}: #{e.message}"), cause: e.cause
+          # Off the hot loop: only a refused array pays for finding the rest.
+          raise_refused!(value, index, e, element_type, element)
         end
+      end
+
+      # How many indexes an element error lists before counting the rest.
+      # @return [::Integer]
+      INDEXES_LISTED = 5
+
+      # Name a set of element indexes for an error message: one reads
+      # +element at index 2+, several +elements at index 2, 5+, and past
+      # {INDEXES_LISTED} the rest are counted (+… and 7 more+). Indexes only,
+      # never elements, so a message carries no value.
+      #
+      # @param indexes [::Array<::Integer>] ascending, at least one
+      # @return [::String]
+      def self.elements_at(indexes)
+        return "element at index #{indexes.first}" if indexes.size == 1
+
+        listed = indexes.first(INDEXES_LISTED).join(', ')
+        rest = indexes.size - INDEXES_LISTED
+        rest.positive? ? "elements at index #{listed} and #{rest} more" : "elements at index #{listed}"
       end
 
       # @param value [Object]
@@ -90,6 +109,33 @@ module FieldStruct
       end
 
       private
+
+      # Coerce the elements after the first refused one, so the error names
+      # every refused index, then raise the first element's error with them.
+      # The same message reaches every coercion_policy, :raise included —
+      # finishing the scan costs a refused array no more than an accepted one.
+      #
+      # @param value [::Array<Object, nil>] the input array
+      # @param first [::Integer] the index of the first refused element
+      # @param error [StandardError] what the element type raised for it
+      # @param element_type [Types::Base] the element type instance
+      # @param element [::Hash{::Symbol => Object, nil}, nil] element options
+      # @return [void]
+      # @raise [StandardError] +error+'s class, prefixed with the indexes
+      def raise_refused!(value, first, error, element_type, element)
+        indexes = [first]
+        (first + 1).upto(value.size - 1) do |index|
+          item = value[index]
+          element ? element_type.coerce(item, **element) : element_type.coerce(item)
+        rescue ArgumentError, ::TypeError, ::RangeError
+          indexes << index
+        end
+        shown = indexes.size == 1 ? '' : " (index #{first} shown)"
+        # Exception#exception keeps the class without calling a custom
+        # initializer; the indexes, never the elements, are added. The cause
+        # chain stays what it was, rather than gaining the unprefixed copy.
+        raise error.exception("#{self.class.elements_at(indexes)}#{shown}: #{error.message}"), cause: error.cause
+      end
 
       # +of_type+ may be either a Types::Base subclass (the DSL form for
       # stock types like +:string+) or an already-built Types::Base

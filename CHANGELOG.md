@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Documentation and tooling
+
+- **UPGRADING.md: only silent changes need a Find on a green suite.** From a
+  dry run against a large app: the TL;DR now lists the eight entries that change
+  values or validity without raising, and says the other Finds cover code the suite
+  doesn't reach. The base-10 Find matches whole literals only (849 hits → the real
+  ones). The non-Hash Find is scoped to your struct classes, and the `dup` Find
+  says when a hit matters. The RBS step names wrapper tasks, ripgrep's PCRE2 check
+  comes first, and the effort estimate counts full suite runs. AGENTS.md and the
+  skill follow.
+
 ## [0.14.0] - 2026-10-23
 
 DST-aware zones and fuller array errors. `zone:` accepts IANA names

@@ -261,6 +261,7 @@ module FieldStruct
     RESERVED_FIELD_NAMES: ::Array[Symbol]
     UNSET: Object
     JSON_LOAD_OPTIONS: ::Hash[Symbol, Object]
+    JSON_DUMP_OPTIONS: ::Hash[Symbol, Object]
     UNIVERSAL_FIELD_OPTIONS: ::Array[Symbol]
 
     # _@return_ — the per-class field collection (memoized)
@@ -744,6 +745,9 @@ module FieldStruct
     # to ISO-8601 strings, BigDecimal to its plain-form string,
     # Symbol to String. Arrays recurse. Nested FieldStructs walk
     # through their own +as_json+, applying their own mapping.
+    # Covers exactly the declared fields, each read through its reader
+    # (as {#attributes} reads them) in one pass; an override of
+    # {#attributes} does not change it.
     def as_json: (?Object? _options) -> ::Hash[Symbol, Object?]
 
     # _@param_ `_options` — unused — accepted for ActiveSupport-style symmetry

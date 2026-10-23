@@ -304,6 +304,39 @@ RSpec.describe FieldStruct::Base, 'serialize :json wiring' do
     end
   end
 
+  # as_json reads each declared field through its reader, in one pass; it does
+  # not go through #attributes.
+  describe 'what as_json reads' do
+    let(:klass) do
+      Class.new(described_class) do
+        required :first_name, :string
+        optional :note, :string
+        serialize :json, first_name: 'firstName'
+      end
+    end
+
+    it 'ignores an attributes override' do
+      sub = Class.new(klass) do
+        def attributes
+          super.merge(kind: 'person').except(:note)
+        end
+      end
+      record = sub.new(first_name: 'Al', note: 'n')
+      expect(record.as_json).to eq(firstName: 'Al', note: 'n')
+      expect(record.to_json).to eq('{"firstName":"Al","note":"n"}')
+      expect(record.attributes).to eq(first_name: 'Al', kind: 'person')
+    end
+
+    it 'honours a reader override' do
+      sub = Class.new(klass) do
+        def note
+          super&.upcase
+        end
+      end
+      expect(sub.new(first_name: 'Al', note: 'n').to_json).to eq('{"firstName":"Al","note":"N"}')
+    end
+  end
+
   describe 'to_h and attributes stay canonical regardless of serialize :json' do
     let(:klass) do
       Class.new(described_class) do

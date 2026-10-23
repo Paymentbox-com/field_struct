@@ -48,6 +48,10 @@ module FieldStruct
     # @return [Hash{Symbol=>Object}]
     JSON_LOAD_OPTIONS = {mode: :compat, decimal_class: ::BigDecimal}.freeze
     private_constant :JSON_LOAD_OPTIONS
+    # Oj options for {#to_json}.
+    # @return [Hash{Symbol=>Object}]
+    JSON_DUMP_OPTIONS = {mode: :compat}.freeze
+    private_constant :JSON_DUMP_OPTIONS
 
     class << self
       # @return [Metadata] the per-class field collection (memoized)
@@ -957,19 +961,23 @@ module FieldStruct
     #   to ISO-8601 strings, BigDecimal to its plain-form string,
     #   Symbol to String. Arrays recurse. Nested FieldStructs walk
     #   through their own +as_json+, applying their own mapping.
+    #   Covers exactly the declared fields, each read through its reader
+    #   (as {#attributes} reads them) in one pass; an override of
+    #   {#attributes} does not change it.
     def as_json(_options = nil)
-      mapping = self.class.metadata.serialization(:json)
-      attributes.each_with_object({}) do |(field_name, value), out|
-        key = mapping.key?(field_name) ? mapping[field_name].to_sym : field_name
-        field = self.class.metadata[field_name]
-        out[key] = json_value(value, field)
+      metadata = self.class.metadata
+      mapping = metadata.serialization(:json)
+      metadata.each_with_object({}) do |field, out|
+        name = field.name
+        key = mapping.key?(name) ? mapping[name].to_sym : name
+        out[key] = json_value(public_send(name), field)
       end
     end
 
     # @param _options [Object] unused — accepted for ActiveSupport-style symmetry
     # @return [String] JSON representation, via Oj
     def to_json(_options = nil)
-      Oj.dump(as_json, mode: :compat)
+      Oj.dump(as_json, JSON_DUMP_OPTIONS)
     end
 
     # Readable representation. Valid instances render as

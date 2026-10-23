@@ -44,6 +44,10 @@ module FieldStruct
     # @return [Object]
     UNSET = Object.new.freeze
     private_constant :UNSET
+    # Oj options for {.from_json}, built once rather than as a literal per call.
+    # @return [Hash{Symbol=>Object}]
+    JSON_LOAD_OPTIONS = {mode: :compat, decimal_class: ::BigDecimal}.freeze
+    private_constant :JSON_LOAD_OPTIONS
 
     class << self
       # @return [Metadata] the per-class field collection (memoized)
@@ -345,7 +349,7 @@ module FieldStruct
       # @return [Object, nil] the parsed JSON value
       # @raise [EncodingError] when the input is not valid JSON
       def parse_json(json_string)
-        Oj.load(json_string, mode: :compat, decimal_class: ::BigDecimal)
+        Oj.load(json_string, JSON_LOAD_OPTIONS)
       rescue ::EncodingError => e
         description = e.message[/\A[^(\[]*/].to_s.strip
         position = e.message[/line \d+, column \d+/]
@@ -364,8 +368,7 @@ module FieldStruct
       # @param hash [Hash{String, Symbol=>Object, nil}] parsed JSON object
       # @return [Hash{Symbol=>Object, nil}] canonical-keyed input ready for +.new+
       def canonicalize_serialized_hash(hash)
-        mapping = metadata.serialization(:json)
-        reverse = mapping.each_with_object({}) { |(internal, external), out| out[external] = internal }
+        reverse = metadata.reverse_serialization(:json)
 
         hash.each_with_object({}) do |(raw_key, value), result|
           canonical = reverse[raw_key.to_s] || raw_key.to_sym

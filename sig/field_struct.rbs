@@ -260,6 +260,7 @@ module FieldStruct
     VALID_UNKNOWN_POLICIES: ::Array[Symbol]
     RESERVED_FIELD_NAMES: ::Array[Symbol]
     UNSET: Object
+    JSON_LOAD_OPTIONS: ::Hash[Symbol, Object]
     UNIVERSAL_FIELD_OPTIONS: ::Array[Symbol]
 
     # _@return_ — the per-class field collection (memoized)
@@ -1202,6 +1203,17 @@ module FieldStruct
     # 
     # _@return_ — frozen mapping (empty hash when undeclared)
     def serialization: ((Symbol | String) name) -> ::Hash[Symbol, String]
+
+    # The reverse of {#serialization}: external name → field name, which
+    # {Base.from_json} needs on every call. Built once per mapping and reused
+    # while {#serialization} still returns that same frozen mapping, so any
+    # writer that installs a new one ({#add_serialization}, {#merge}, or a
+    # direct write to {#serializations}) is picked up on the next call.
+    # 
+    # _@param_ `name`
+    # 
+    # _@return_ — frozen; empty when the format is undeclared
+    def reverse_serialization: ((Symbol | String) name) -> ::Hash[String, Symbol]
 
     # Copy fields and serializations from +parent+ into self, leaving
     # already-declared entries untouched (child wins). Order: existing

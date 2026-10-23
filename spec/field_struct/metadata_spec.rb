@@ -96,4 +96,31 @@ RSpec.describe FieldStruct::Metadata do
       end
     end
   end
+
+  # Reused between from_json calls; every way a mapping can be installed must
+  # show up in the next read.
+  describe '#reverse_serialization' do
+    let(:meta) { described_class.new }
+
+    it 'is empty for an undeclared format' do
+      expect(meta.reverse_serialization(:json)).to eq({})
+    end
+
+    it 'follows add_serialization, merge and a direct write to serializations' do
+      meta.add_serialization(:json, name: 'fullName')
+      expect(meta.reverse_serialization(:json)).to eq('fullName' => :name)
+
+      meta.add_serialization(:json, name: 'n')
+      expect(meta.reverse_serialization('json')).to eq('n' => :name)
+
+      parent = described_class.new.add_serialization(:xml, age: 'AGE')
+      meta.merge(parent)
+      expect(meta.reverse_serialization(:xml)).to eq('AGE' => :age)
+
+      meta.serializations[:json] = {name: 'given'}
+      expect(meta.reverse_serialization(:json)).to eq('given' => :name)
+      meta.serializations[:json][:age] = 'years'
+      expect(meta.reverse_serialization(:json)).to eq('given' => :name, 'years' => :age)
+    end
+  end
 end

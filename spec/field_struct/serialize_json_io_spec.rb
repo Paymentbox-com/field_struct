@@ -84,6 +84,42 @@ RSpec.describe FieldStruct::Base, 'serialize :json wiring' do
     end
   end
 
+  # from_json reuses the reverse (external -> field) map between calls, so
+  # each of these reads once BEFORE the mapping changes and checks that the
+  # read after it sees the change.
+  describe 'from_json after a mapping changes' do
+    let(:parent) do
+      Class.new(described_class) do
+        required :first_name, :string
+        optional :nick, :string
+        serialize :json, first_name: 'firstName'
+      end
+    end
+
+    it 'honours a serialize the subclass declares after the parent was read' do
+      parent.from_json('{"firstName":"Al"}')
+      child = Class.new(parent)
+      child.from_json('{"firstName":"Al"}')
+      child.serialize :json, first_name: 'given', nick: 'handle'
+
+      expect(child.from_json('{"given":"Al","handle":"A"}').attributes).to eq(first_name: 'Al', nick: 'A')
+      expect(parent.from_json('{"firstName":"Al","handle":"A"}').attributes).to eq(first_name: 'Al', nick: nil)
+    end
+
+    it 'honours a serialize that replaces the mapping on the class already read' do
+      parent.from_json('{"firstName":"Al"}')
+      parent.serialize :json, first_name: 'given'
+
+      expect(parent.from_json('{"given":"Al"}').first_name).to eq('Al')
+      expect(parent.from_json('{"firstName":"Al"}').first_name).to be_nil
+    end
+
+    it 'gives a subclass created after a read the mapping it inherits' do
+      parent.from_json('{"firstName":"Al"}')
+      expect(Class.new(parent).from_json('{"firstName":"Al"}').first_name).to eq('Al')
+    end
+  end
+
   describe 'round-trip — to_json then from_json' do
     let(:klass) do
       Class.new(described_class) do

@@ -57,13 +57,19 @@ Why), keyed by an invisible marker that appears in both files:
 - A CHANGELOG bullet under a `### …Breaking…` heading ends its first line with
   `<!-- upgrading: some-slug -->`; the UPGRADING.md entry carries the same marker
   under its heading. A visible `Changed`/`Fixed` bullet may opt in the same way.
+- Every `[Unreleased]` bullet under `### Changed` or `### Removed` records a
+  decision: a slug marker (with its UPGRADING.md entry, as above) or
+  `<!-- upgrading: none -->` when no caller has to act. `none` is not a slug:
+  it needs no guide entry and never satisfies a Breaking bullet. Released
+  sections are not retro-checked.
 - The slug is the key, so either file can be reworded freely. Never reuse a slug.
 - Each release raises `<!-- upgrading-range: 0.10.0..X.Y.Z -->` at the top of
   UPGRADING.md to the new version and adds its section (even "no changes").
 - Verify every Find command matches a "before" snippet before committing it.
 
-`spec/upgrading_spec.rb` fails on a Breaking bullet without a marker, a marker
-missing from UPGRADING.md, a range short of `VERSION`, or a broken anchor.
+`spec/upgrading_spec.rb` fails on a Breaking bullet without a marker, an
+`[Unreleased]` Changed/Removed bullet with neither marker, a marker missing
+from UPGRADING.md, a range short of `VERSION`, or a broken anchor.
 
 ### Linting
 

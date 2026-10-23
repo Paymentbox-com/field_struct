@@ -260,6 +260,8 @@ module FieldStruct
     VALID_UNKNOWN_POLICIES: ::Array[Symbol]
     RESERVED_FIELD_NAMES: ::Array[Symbol]
     UNSET: Object
+    JSON_LOAD_OPTIONS: ::Hash[Symbol, Object]
+    JSON_DUMP_OPTIONS: ::Hash[Symbol, Object]
     UNIVERSAL_FIELD_OPTIONS: ::Array[Symbol]
 
     # _@return_ — the per-class field collection (memoized)
@@ -743,6 +745,9 @@ module FieldStruct
     # to ISO-8601 strings, BigDecimal to its plain-form string,
     # Symbol to String. Arrays recurse. Nested FieldStructs walk
     # through their own +as_json+, applying their own mapping.
+    # Covers exactly the declared fields, each read through its reader
+    # (as {#attributes} reads them) in one pass; an override of
+    # {#attributes} does not change it.
     def as_json: (?Object? _options) -> ::Hash[Symbol, Object?]
 
     # _@param_ `_options` — unused — accepted for ActiveSupport-style symmetry
@@ -845,7 +850,13 @@ module FieldStruct
     # element type, or the field's own
     def temporal_format_source: (Field? field) -> ([::Hash[Symbol, Object?], Class] | [NilClass, Class] | [NilClass, NilClass])
 
-    def apply_defaults: () -> void
+    # Give every field its default, through the setter. A field with no
+    # default whose key +attrs+ carries only gets its ivar (so the ivar order
+    # stays the declaration order): the assignment that follows runs its
+    # setter, so a nil pass first would only be undone.
+    # 
+    # _@param_ `attrs` — the input about to be assigned
+    def apply_defaults: (::Hash[(Symbol | String), Object?] attrs) -> void
 
     def run_cross_field_validators: () -> void
 
@@ -1072,6 +1083,14 @@ module FieldStruct
     # +nil+ to derive it. Declared with the +rbs_type:+ field option;
     # signatures only — it never affects coercion or validation.
     attr_reader rbs_type: String?
+
+    # _@return_ — the setter's method name (+:name=+), built once here
+    # so the setter pipeline doesn't intern a dynamic Symbol per call
+    attr_reader setter_name: Symbol
+
+    # _@return_ — the instance variable holding the value (+:@name+),
+    # built once for the same reason as {#setter_name}
+    attr_reader ivar_name: Symbol
   end
 
   # Per-instance collection of validation messages, keyed by field name.
@@ -1194,6 +1213,17 @@ module FieldStruct
     # 
     # _@return_ — frozen mapping (empty hash when undeclared)
     def serialization: ((Symbol | String) name) -> ::Hash[Symbol, String]
+
+    # The reverse of {#serialization}: external name → field name, which
+    # {Base.from_json} needs on every call. Built once per mapping and reused
+    # while {#serialization} still returns that same frozen mapping, so any
+    # writer that installs a new one ({#add_serialization}, {#merge}, or a
+    # direct write to {#serializations}) is picked up on the next call.
+    # 
+    # _@param_ `name`
+    # 
+    # _@return_ — frozen; empty when the format is undeclared
+    def reverse_serialization: ((Symbol | String) name) -> ::Hash[String, Symbol]
 
     # Copy fields and serializations from +parent+ into self, leaving
     # already-declared entries untouched (child wins). Order: existing
@@ -1759,6 +1789,15 @@ module FieldStruct
       # 
       # _@param_ `format` — strptime format, when the field declares one
       def parse_string: (::String value, ::String? format) -> ::Date
+
+      # +Date.parse+ and +Date.strptime+ build the Date straight from year,
+      # month and day whenever the parts carry all three and neither a Julian
+      # day (+:jd+) nor a day of the year (+:yday+) — date_core.c's fast path
+      # in +d_new_by_frags+ — so this returns the same Date. Any other shape is
+      # left to the stdlib (+nil+).
+      # 
+      # _@param_ `parts` — already checked by {TemporalParser}
+      def date_from_parts: (::Hash[::Symbol, Object] parts) -> ::Date?
     end
 
     # Time type. Returns a +Time+ as-is, builds one from a +Date+ or

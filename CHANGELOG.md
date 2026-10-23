@@ -6,6 +6,34 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-23
+
+Faster, with two small behaviour changes. `new` is about 45% faster and
+allocates 11 objects instead of 39 for five fields; `to_json` takes about a
+third less time; validation-heavy structs are nearly twice as fast (medians of
+interleaved runs on an M4, PR #41). Two changes are
+visible, both silent and both in `UPGRADING.md` "0.14 → 0.15": `new` no longer
+runs a field's setter with `nil` before the value you gave it, and `as_json`
+reads the fields directly, so an `attributes` override no longer shapes the
+JSON. Every other change keeps output byte-identical.
+
+### Changed
+
+- **`new` skips the nil default for keys it is given.** A field with no `default:` whose key the input carries is no longer first set to `nil` through its setter: an overridden setter runs once, with the given value, and under `coercion_policy :raise` a custom type that refuses `nil` no longer raises from `new` for a given key. Non-Hash input is refused before callable defaults run. Values, errors and ivar order are unchanged. <!-- upgrading: defaults-skip-nil-pass -->
+- **`as_json` / `to_json` read the declared fields, not `attributes`.** One pass over the fields, each read through its reader, instead of building `attributes` and walking it again. An `attributes` override no longer changes the JSON; a reader override still does. `attributes` and `to_h` are unchanged. <!-- upgrading: as-json-reads-fields -->
+- **Faster `new`, `from_json` and `:date` parsing; fewer allocations.** Setter and ivar names are built once per field instead of per assignment, a `:date` string is parsed once rather than twice, `from_json` reuses its reverse `serialize :json` map, arrays without nested structs skip the per-element validity scan, `Errors#empty?` no longer allocates, and the inherited class macros stop walking at `FieldStruct::Base`. A 5-field `new` drops from 39 to 19 allocations. Values, errors and messages are unchanged. <!-- upgrading: none -->
+
+### Documentation and tooling
+
+- **UPGRADING.md: only silent changes need a Find on a green suite.** From a
+  dry run against a large app: the TL;DR now lists the eight entries that change
+  values or validity without raising, and says the other Finds cover code the suite
+  doesn't reach. The base-10 Find matches whole literals only (849 hits → the real
+  ones). The non-Hash Find is scoped to your struct classes, and the `dup` Find
+  says when a hit matters. The RBS step names wrapper tasks, ripgrep's PCRE2 check
+  comes first, and the effort estimate counts full suite runs. AGENTS.md and the
+  skill follow.
+
 ## [0.14.0] - 2026-10-23
 
 DST-aware zones and fuller array errors. `zone:` accepts IANA names

@@ -44,6 +44,14 @@ module FieldStruct
     # @return [Object]
     UNSET = Object.new.freeze
     private_constant :UNSET
+    # Oj options for {.from_json}, built once rather than as a literal per call.
+    # @return [Hash{Symbol=>Object}]
+    JSON_LOAD_OPTIONS = {mode: :compat, decimal_class: ::BigDecimal}.freeze
+    private_constant :JSON_LOAD_OPTIONS
+    # Oj options for {#to_json}.
+    # @return [Hash{Symbol=>Object}]
+    JSON_DUMP_OPTIONS = {mode: :compat}.freeze
+    private_constant :JSON_DUMP_OPTIONS
 
     class << self
       # @return [Metadata] the per-class field collection (memoized)
@@ -64,9 +72,9 @@ module FieldStruct
       #   (locally or via an ancestor)
       def immutable?
         return @immutable if defined?(@immutable)
-        return superclass.immutable? if superclass.respond_to?(:immutable?)
+        return false if equal?(FieldStruct::Base)
 
-        false
+        superclass.immutable?
       end
 
       # Mark this class (and its descendants) frozen-on-construct.
@@ -88,9 +96,9 @@ module FieldStruct
       #   the end of {#initialize} (locally or via an ancestor)
       def frozen_on_construct?
         return @frozen_on_construct if defined?(@frozen_on_construct)
-        return superclass.frozen_on_construct? if superclass.respond_to?(:frozen_on_construct?)
+        return false if equal?(FieldStruct::Base)
 
-        false
+        superclass.frozen_on_construct?
       end
 
       # Class macro: get or set the policy used by the setter pipeline
@@ -108,9 +116,9 @@ module FieldStruct
       def coercion_policy(value = UNSET)
         if value.equal?(UNSET)
           return @coercion_policy if defined?(@coercion_policy)
-          return superclass.coercion_policy if superclass.respond_to?(:coercion_policy)
+          return :keep_raw if equal?(FieldStruct::Base)
 
-          :keep_raw
+          superclass.coercion_policy
         else
           unless VALID_COERCION_POLICIES.include?(value)
             raise ArgumentError, "unknown coercion policy #{value.inspect} " \
@@ -134,9 +142,9 @@ module FieldStruct
       def unknown_attributes(value = UNSET)
         if value.equal?(UNSET)
           return @unknown_attributes if defined?(@unknown_attributes)
-          return superclass.unknown_attributes if superclass.respond_to?(:unknown_attributes)
+          return :ignore if equal?(FieldStruct::Base)
 
-          :ignore
+          superclass.unknown_attributes
         else
           unless VALID_UNKNOWN_POLICIES.include?(value)
             raise ArgumentError, "unknown unknown_attributes policy #{value.inspect} " \
@@ -345,7 +353,7 @@ module FieldStruct
       # @return [Object, nil] the parsed JSON value
       # @raise [EncodingError] when the input is not valid JSON
       def parse_json(json_string)
-        Oj.load(json_string, mode: :compat, decimal_class: ::BigDecimal)
+        Oj.load(json_string, JSON_LOAD_OPTIONS)
       rescue ::EncodingError => e
         description = e.message[/\A[^(\[]*/].to_s.strip
         position = e.message[/line \d+, column \d+/]
@@ -364,8 +372,7 @@ module FieldStruct
       # @param hash [Hash{String, Symbol=>Object, nil}] parsed JSON object
       # @return [Hash{Symbol=>Object, nil}] canonical-keyed input ready for +.new+
       def canonicalize_serialized_hash(hash)
-        mapping = metadata.serialization(:json)
-        reverse = mapping.each_with_object({}) { |(internal, external), out| out[external] = internal }
+        reverse = metadata.reverse_serialization(:json)
 
         hash.each_with_object({}) do |(raw_key, value), result|
           canonical = reverse[raw_key.to_s] || raw_key.to_sym
@@ -715,7 +722,8 @@ module FieldStruct
       def define_field_accessors(field)
         attr_reader field.name
 
-        define_method(:"#{field.name}=") do |value|
+        ivar = field.ivar_name
+        define_method(field.setter_name) do |value|
           if @_initialized && self.class.immutable?
             raise ImmutableError, "#{self.class} is immutable; cannot reassign #{field.name}"
           end
@@ -729,7 +737,7 @@ module FieldStruct
             return apply_coercion_policy(field, value, e)
           end
 
-          instance_variable_set(:"@#{field.name}", coerced)
+          instance_variable_set(ivar, coerced)
           validate_field(field, coerced)
           coerced
         end
@@ -811,8 +819,9 @@ module FieldStruct
     #   convertible to one via +to_hash+
     def initialize(attrs = {})
       @errors = Errors.new
-      apply_defaults
-      assign_attributes(hash_input!(attrs.nil? ? {} : attrs, '.new'))
+      attrs = hash_input!(attrs.nil? ? {} : attrs, '.new')
+      apply_defaults(attrs)
+      assign_attributes(attrs)
       run_cross_field_validators if self.class.validators.any?
       @_initialized = true
       freeze if self.class.frozen_on_construct?
@@ -836,10 +845,10 @@ module FieldStruct
       attrs = hash_input!(attrs, '#assign_attributes')
       reject_unknown_attributes!(attrs)
       attrs.each do |key, value|
-        sym = key.to_sym
-        next unless self.class.metadata[sym]
+        field = self.class.metadata[key.to_sym]
+        next unless field
 
-        public_send(:"#{sym}=", value)
+        public_send(field.setter_name, value)
       end
       self
     end
@@ -952,19 +961,23 @@ module FieldStruct
     #   to ISO-8601 strings, BigDecimal to its plain-form string,
     #   Symbol to String. Arrays recurse. Nested FieldStructs walk
     #   through their own +as_json+, applying their own mapping.
+    #   Covers exactly the declared fields, each read through its reader
+    #   (as {#attributes} reads them) in one pass; an override of
+    #   {#attributes} does not change it.
     def as_json(_options = nil)
-      mapping = self.class.metadata.serialization(:json)
-      attributes.each_with_object({}) do |(field_name, value), out|
-        key = mapping.key?(field_name) ? mapping[field_name].to_sym : field_name
-        field = self.class.metadata[field_name]
-        out[key] = json_value(value, field)
+      metadata = self.class.metadata
+      mapping = metadata.serialization(:json)
+      metadata.each_with_object({}) do |field, out|
+        name = field.name
+        key = mapping.key?(name) ? mapping[name].to_sym : name
+        out[key] = json_value(public_send(name), field)
       end
     end
 
     # @param _options [Object] unused — accepted for ActiveSupport-style symmetry
     # @return [String] JSON representation, via Oj
     def to_json(_options = nil)
-      Oj.dump(as_json, mode: :compat)
+      Oj.dump(as_json, JSON_DUMP_OPTIONS)
     end
 
     # Readable representation. Valid instances render as
@@ -1130,12 +1143,23 @@ module FieldStruct
       [field.options[:element], Types::Array.element_class(field.options[:of_type])]
     end
 
+    # Give every field its default, through the setter. A field with no
+    # default whose key +attrs+ carries only gets its ivar (so the ivar order
+    # stays the declaration order): the assignment that follows runs its
+    # setter, so a nil pass first would only be undone.
+    #
+    # @param attrs [Hash{Symbol, String=>Object, nil}] the input about to be assigned
     # @return [void]
-    def apply_defaults
+    def apply_defaults(attrs)
       self.class.metadata.each do |field|
         value = field.default
+        if value.nil? && (attrs.key?(field.name) || attrs.key?(field.name.name))
+          instance_variable_set(field.ivar_name, nil)
+          next
+        end
+
         value = value.call if value.respond_to?(:call)
-        public_send(:"#{field.name}=", value)
+        public_send(field.setter_name, value)
       end
     end
 
@@ -1249,6 +1273,9 @@ module FieldStruct
     def nested_invalid?(value)
       return value.invalid? if value.is_a?(FieldStruct::Base)
       return false unless value.is_a?(::Array)
+      # The pattern form scans in C, so an array of scalars (the common case)
+      # skips the Ruby block entirely.
+      return false unless value.any?(FieldStruct::Base)
 
       value.any? { |element| element.is_a?(FieldStruct::Base) && element.invalid? }
     end
@@ -1281,7 +1308,7 @@ module FieldStruct
     # @param error [StandardError] what the type raised
     # @return [void]
     def record_coercion_failure(field, stored_value, error)
-      instance_variable_set(:"@#{field.name}", stored_value)
+      instance_variable_set(field.ivar_name, stored_value)
       errors.clear(field.name)
       errors.add(field.name, "could not be coerced: #{error.message}")
     end

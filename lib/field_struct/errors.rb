@@ -47,7 +47,10 @@ module FieldStruct
 
     # @return [Boolean] true when no field has any messages
     def empty?
-      @messages.each_value.all?(&:empty?)
+      # A block loop, not each_value.all?: that builds an Enumerator per call,
+      # and every validity check asks this.
+      @messages.each_value { |messages| return false unless messages.empty? }
+      true
     end
 
     # @return [Hash{Symbol=>Array<String>}] snapshot of field → messages,

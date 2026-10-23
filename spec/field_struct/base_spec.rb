@@ -95,6 +95,24 @@ RSpec.describe FieldStruct::Base do
       instance.age = '99'
       expect(instance.age).to eq(99)
     end
+
+    # The setter and ivar names are built once per field, at declaration.
+    # Pin what they resolve to, so that can't drift from the field name.
+    it 'stores each field in an ivar named for it, in declaration order' do
+      named = Class.new(described_class) do
+        field 'nick', :string
+        field :age, :integer
+      end
+      instance = named.new(age: '7', 'nick' => 'Al')
+      expect(instance.instance_variables).to eq(%i[@errors @nick @age @_initialized])
+      expect(instance.instance_variable_get(:@nick)).to eq('Al')
+    end
+
+    it 'stores the raw value in the field ivar when coercion fails' do
+      instance = klass.new(age: 'abc')
+      expect(instance.instance_variable_get(:@age)).to eq('abc')
+      expect(instance.errors[:age]).to eq(['could not be coerced: Integer fields expect a base-10 integer, got a String that is not one'])
+    end
   end
 
   describe 'instance-level attributes / attribute_names' do

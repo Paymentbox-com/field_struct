@@ -53,5 +53,10 @@ RSpec.describe FieldStruct::Field do
       field = described_class.new(name: :first_name, type: type_class)
       expect(field.type_instance).to be_a(type_class)
     end
+
+    it 'names its setter and instance variable after the field' do
+      field = described_class.new(name: 'first_name', type: type_class)
+      expect([field.setter_name, field.ivar_name]).to eq(%i[first_name= @first_name])
+    end
   end
 end

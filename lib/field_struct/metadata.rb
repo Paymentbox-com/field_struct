@@ -14,6 +14,7 @@ module FieldStruct
     def initialize
       @fields = {}
       @serializations = {}
+      @reverse_serializations = {}
     end
 
     # @return [Hash{Symbol=>Hash{Symbol=>String}}] declared
@@ -92,6 +93,27 @@ module FieldStruct
     # @return [Hash{Symbol=>String}] frozen mapping (empty hash when undeclared)
     def serialization(name)
       @serializations[name.to_sym] || EMPTY_SERIALIZATION
+    end
+
+    # The reverse of {#serialization}: external name → field name, which
+    # {Base.from_json} needs on every call. Built once per mapping and reused
+    # while {#serialization} still returns that same frozen mapping, so any
+    # writer that installs a new one ({#add_serialization}, {#merge}, or a
+    # direct write to {#serializations}) is picked up on the next call.
+    #
+    # @api private
+    # @param name [Symbol, String]
+    # @return [Hash{String=>Symbol}] frozen; empty when the format is undeclared
+    def reverse_serialization(name)
+      key = name.to_sym
+      mapping = serialization(key)
+      cached = @reverse_serializations[key]
+      return cached.last if cached && cached.first.equal?(mapping)
+
+      reverse = mapping.each_with_object({}) { |(internal, external), out| out[external] = internal }.freeze
+      # A mapping that isn't frozen could change in place, so it isn't cached.
+      @reverse_serializations[key] = [mapping, reverse] if mapping.frozen?
+      reverse
     end
 
     # The identity mapping {#serialization} returns for an undeclared format.

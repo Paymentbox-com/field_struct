@@ -72,7 +72,7 @@ Steps when asked to build one:
    - `base:` → `:integer` (radix 2..36 for strings; default 10, so `"010"` is 10)
    - `values:` → `:boolean` (a `{truthy:, falsy:}` Hash or a preset Symbol)
    - `strict:` → `:string` (and subtypes) / `:integer` (Boolean — refuse loose input instead of `to_s` / truncating)
-   - `zone:` → `:time`/`:datetime` (`"UTC"` or `"±HH:MM"` for zone-less strings; no IANA names)
+   - `zone:` → `:time`/`:datetime` (`"UTC"`, `"±HH:MM"` or an IANA name like `"America/Denver"` for zone-less strings; no Rails names or abbreviations)
    - `sensitive:` → any type (mask the value in `inspect`)
    - `element:` → `:array` (a Hash of the element type's own options, e.g.
      `of: :integer, element: {strict: true}`; bad elements are reported by index — every one, the first five listed)

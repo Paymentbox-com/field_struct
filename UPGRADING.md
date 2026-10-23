@@ -51,6 +51,8 @@ hard to attribute, [bisect by version](#if-something-else-breaks).
 | Mutating a `dup` no longer changes the original's `valid?` | 0.11 | [`dup` errors](#dup-and-clone-own-their-errors) |
 | `RangeError` / `FloatDomainError` no longer raised by `.new` | 0.11 | [RangeError](#rangeerror-is-a-coercion-failure) |
 | Steep: new errors on setters, array elements, unions | 0.12 | [0.12 section](#012--generated-rbs-changes-no-runtime-changes) |
+| Bundler adds `tzinfo` and `concurrent-ruby`, or can't resolve `tzinfo` | 0.14 | [tzinfo dependency](#new-runtime-dependency-tzinfo) |
+| `zone: 'America/Denver'` no longer raises; refusal message reworded | 0.14 | [IANA names](#zone-accepts-iana-names) |
 
 ---
 
@@ -511,6 +513,53 @@ now checked at declaration.
 
 ## 0.13 → 0.14 (unreleased)
 
+Not released yet; these entries describe `develop`. Fields that declare `"UTC"` or a
+fixed offset behave exactly as in 0.13.
+
+### New runtime dependency: tzinfo
+<!-- upgrading: tzinfo-dependency -->
+
+- **Symptom:** `bundle install` adds `tzinfo` (2.0.x) and `concurrent-ruby` to
+  `Gemfile.lock` in an app that did not already have them (Rails apps do), so a
+  frozen / deployment install refuses the stale lockfile. An app whose lock pins
+  `tzinfo` 1.x (Rails 6.0 and older) can't resolve: `Bundler could not find
+  compatible versions for gem "tzinfo"`.
+- **Find:**
+  ```sh
+  rg -n '^\s+tzinfo \(' Gemfile.lock
+  ```
+  No hit: you gain it. A `1.` version: see Fix.
+- **Fix:** `bundle update field_struct --conservative` and commit the lockfile.
+  With tzinfo 1.x pinned by an older Rails, stay on 0.13 until Rails is on 6.1+.
+  On a system without OS zoneinfo (Windows, slim containers) also add
+  `gem 'tzinfo-data'` — needed only if you declare IANA names, and the declaration
+  tells you so.
+- **Why:** `zone: 'America/Denver'` needs a zone database and Ruby's stdlib has
+  none. tzinfo is required lazily, only when a field declares a name, so a
+  `"UTC"` / `"±HH:MM"` field never loads it.
+
+### `zone:` accepts IANA names
+<!-- upgrading: zone-accepts-iana-names -->
+
+- **Symptom:** a spec expecting `ArgumentError` for `zone: 'America/Denver'` fails
+  — it now declares fine. A spec matching the refusal message fails; it was
+  `zone: on Time expects "UTC" or a UTC offset like "+00:00" or "-06:00", got "MST".
+  Zone names such as "America/Denver" are not accepted: …` and is now
+  `zone: on Time expects an IANA name like "America/Denver", "UTC" or a UTC offset
+  like "-06:00", got "MST". Use an Area/Location name: …`.
+- **Find:**
+  ```sh
+  rg -n 'expects "UTC" or a UTC offset|no time zone database' spec
+  ```
+- **Fix:**
+  ```ruby
+  expect { decl }.to raise_error(ArgumentError, /expects "UTC" or a UTC offset/)    # before
+  expect { decl }.to raise_error(ArgumentError, /expects an IANA name like/)        # after
+  ```
+  If you declared a fixed offset because names were refused, consider the name:
+  `zone: 'America/Denver'` follows DST where `'-06:00'` does not (see
+  [USAGE](USAGE.md#zones-zone) for the gap and overlap rules).
+- **Why:** a fixed offset is wrong for half the year in any DST zone.
 Not released yet; these entries describe `develop`.
 
 ### Array errors name every bad index
@@ -558,7 +607,7 @@ None of these change defaults. Each is a one-line change per field.
 |---|---|---|---|
 | `strict: true` | 0.13 | money and id fields where `12.7` must not become `12`, or a Hash must not become a String | [USAGE](USAGE.md#strict-coercion-strict-true) |
 | `sensitive: true` | 0.13 | card data, tokens, PII — masks the value in `inspect` / `pp` / error suffixes | [USAGE](USAGE.md#log-safety-error-messages-and-sensitive-fields) |
-| `zone: '-06:00'` | 0.13 | zone-less timestamps that must mean the same instant on every server | [USAGE](USAGE.md#zones-zone) |
+| `zone: '-06:00'`, `zone: 'America/Denver'` | 0.13, 0.14 | zone-less timestamps that must mean the same instant on every server (a name follows DST) | [USAGE](USAGE.md#zones-zone) |
 | `#with(**changes)` | 0.13 | "updating" an `immutable!` / frozen instance, or re-validating after a nested change | [USAGE](USAGE.md#copying-with-changes-with) |
 | `element: {…}` | 0.13 | per-element options on an array (`of: :integer, element: {strict: true}`) | [USAGE](USAGE.md#element-options-element) |
 | `unknown_attributes :raise` | — | every struct that reads payment or API input (nested classes don't inherit it) | [USAGE](USAGE.md#payment-and-api-boundaries-unknown_attributes-raise) |

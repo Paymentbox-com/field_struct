@@ -181,7 +181,6 @@ RSpec.describe 'zone: option' do
     end
 
     {
-      'an IANA name' => 'America/Denver',
       'an abbreviation' => 'MST',
       'a lowercase utc' => 'utc',
       'Z' => 'Z',
@@ -192,13 +191,13 @@ RSpec.describe 'zone: option' do
       'a blank string' => ''
     }.each do |label, zone|
       it "refuses #{label} with an ArgumentError naming the option" do
-        expect { declare(zone) }.to raise_error(ArgumentError, /\Azone: on Time expects "UTC" or a UTC offset/)
+        expect { declare(zone) }.to raise_error(ArgumentError, %r{\Azone: on Time expects an IANA name like "America/Denver", "UTC" or a UTC offset})
         expect { declare(zone, :datetime) }.to raise_error(ArgumentError, /\Azone: on DateTime expects/)
       end
     end
 
-    it 'says why an IANA name is refused' do
-      expect { declare('America/Denver') }.to raise_error(ArgumentError, /no time zone database/)
+    it 'accepts an IANA name (see iana_zone_spec.rb)' do
+      expect { declare('America/Denver') }.not_to raise_error
     end
 
     it 'refuses a non-String' do

@@ -15,7 +15,7 @@ module FieldStruct
     class Time < Base
       # Native options: a +format:+ strftime/strptime String (or Symbol
       # preset; see {.presets}), an +in:+ Array or Range of allowed values,
-      # and a +zone:+ String (+"UTC"+ or +"±HH:MM"+; see {ZoneOption}).
+      # and a +zone:+ String (+"UTC"+, +"±HH:MM"+ or an IANA name; see {ZoneOption}).
       #
       # @return [::Hash{::Symbol => ::Hash{::Symbol => Object}}]
       def self.own_option_schema
@@ -91,7 +91,7 @@ module FieldStruct
       #   Anything else is refused.
       # @param format [::String, nil] strptime/strftime format; +nil+ uses
       #   {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
-      # @param zone [::String, nil] +"UTC"+ or +"±HH:MM"+: the offset for a
+      # @param zone [::String, nil] +"UTC"+, +"±HH:MM"+ or an IANA name: the offset for a
       #   String that names none, and for a +Date+'s midnight. Input carrying
       #   its own offset keeps it. +nil+ means the process zone. See {ZoneOption}.
       # @return [::Time, nil]
@@ -142,13 +142,13 @@ module FieldStruct
 
         if format
           parts = TemporalParser.strptime_parts(value, format)
-          return ZoneOption.time_at(value, format, zone) if zone && ZoneOption.zoneless?(parts)
+          return ZoneOption.time_at(value, format, zone, parts) if zone && ZoneOption.zoneless?(parts)
 
           return ::Time.strptime(value, format)
         end
 
         parts = TemporalParser.parse_parts(value)
-        return ZoneOption.time_at(value, nil, zone) if zone && ZoneOption.zoneless?(parts)
+        return ZoneOption.time_at(value, nil, zone, parts) if zone && ZoneOption.zoneless?(parts)
 
         ::Time.parse(value)
       end

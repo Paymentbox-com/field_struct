@@ -8,13 +8,20 @@
 # - UPGRADING.md carries the same marker under the entry that explains it.
 #   Any other CHANGELOG bullet (a visible Changed or Fixed item) may opt in
 #   with a marker, and is then held to the same rule.
+# - Every top-level bullet under a "### Changed" or "### Removed" heading in
+#   [Unreleased] records a decision: a slug marker (held to the rule above)
+#   or `<!-- upgrading: none -->`, the author's "no caller action". `none` is
+#   not a slug and never satisfies a Breaking bullet. Released sections are
+#   not retro-checked.
 # - UPGRADING.md declares the range it covers in
 #   `<!-- upgrading-range: FROM..TO -->`; TO must reach the gem's VERSION.
 #
 # The slug is the key, not the bullet's wording, so either file can be
 # reworded freely without breaking the link.
 module UpgradingGuide
-  MARKER = /<!--\s*upgrading:\s*([a-z0-9][a-z0-9-]*)\s*-->/
+  MARKER = /<!--\s*upgrading:\s*(?!none\s*-->)([a-z0-9][a-z0-9-]*)\s*-->/
+  NONE = /<!--\s*upgrading:\s*none\s*-->/
+  DECIDED = /\A###\s+(?:Changed|Removed)\b/i
   RANGE = /<!--\s*upgrading-range:\s*(\d+\.\d+\.\d+)\.\.(\d+\.\d+\.\d+)\s*-->/
   FIRST_GUARDED = Gem::Version.new('0.11.0')
 
@@ -38,16 +45,20 @@ module UpgradingGuide
   end
 
   # Top-level bullets (with their continuation lines) under a Breaking heading.
-  def breaking_bullets(lines)
+  def breaking_bullets(lines) = bullets_under(lines, /\A### .*breaking/i).map(&:last)
+
+  # Top-level bullets (with their continuation lines) under a heading that
+  # matches +heading+, as [heading, bullet] pairs.
+  def bullets_under(lines, heading)
     bullets = []
-    in_breaking = false
+    current = nil
     lines.each do |line|
       if line.start_with?('### ')
-        in_breaking = line.match?(/breaking/i)
-      elsif in_breaking && line.start_with?('- ')
-        bullets << +line
-      elsif in_breaking && bullets.any? && !line.strip.empty?
-        bullets.last << line
+        current = line.match?(heading) ? line.strip : nil
+      elsif current && line.start_with?('- ')
+        bullets << [current, +line]
+      elsif current && bullets.any? && !line.strip.empty?
+        bullets.last.last << line
       end
     end
     bullets
@@ -63,6 +74,14 @@ module UpgradingGuide
 
         found << "CHANGELOG [#{name}] Breaking bullet has no `<!-- upgrading: slug -->` marker: " \
                  "#{bullet.lines.first.strip[0, 90]}"
+      end
+      if name == 'Unreleased'
+        bullets_under(lines, DECIDED).each do |heading, bullet|
+          next if bullet.match?(MARKER) || bullet.match?(NONE)
+
+          found << "CHANGELOG [Unreleased] #{heading} bullet needs `<!-- upgrading: slug -->` (with an " \
+                   "UPGRADING.md entry) or `<!-- upgrading: none -->`: #{bullet.lines.first.strip[0, 90]}"
+        end
       end
       markers.concat(lines.join.scan(MARKER).flatten.map { |slug| [name, slug] })
     end
@@ -138,6 +157,61 @@ RSpec.describe 'UPGRADING.md' do
       bullet = "## [Unreleased]\n\n### Breaking-ish (visible behaviour changes)\n\n- **Something new.** Details.\n\n"
       expect(problems.call(changelog: changelog.sub("## [Unreleased]\n", bullet)))
         .to include(a_string_including('[Unreleased] Breaking bullet has no'))
+    end
+
+    # A fixture, not the live files: [Unreleased] is often empty.
+    describe 'every [Unreleased] Changed / Removed bullet records a decision' do
+      let(:changelog) do
+        <<~MD
+          ## [Unreleased]
+
+          ## [0.20.0] - 2026-01-01
+
+          ### Changed
+
+          - **Old.** Released history is not retro-checked.
+
+          ### Breaking-ish (visible behaviour changes)
+
+          - **Alpha.** Details. <!-- upgrading: alpha -->
+        MD
+      end
+      let(:upgrading) { "<!-- upgrading-range: 0.10.0..0.20.0 -->\n\n### Alpha\n<!-- upgrading: alpha -->\n" }
+
+      def unreleased(heading, bullet)
+        problems.call(changelog: changelog.sub("## [Unreleased]\n", "## [Unreleased]\n\n#{heading}\n\n#{bullet}\n"),
+          version: '0.20.0')
+      end
+
+      it 'passes the fixture as it stands' do
+        expect(problems.call(version: '0.20.0')).to eq([])
+      end
+
+      it 'fails on an unmarked bullet under Changed or Removed' do
+        ['### Changed', '### Removed'].each do |heading|
+          expect(unreleased(heading, "- **Renamed.** `a` is now `b`.\n  More detail."))
+            .to eq(["CHANGELOG [Unreleased] #{heading} bullet needs `<!-- upgrading: slug -->` (with an " \
+                    'UPGRADING.md entry) or `<!-- upgrading: none -->`: - **Renamed.** `a` is now `b`.'])
+        end
+      end
+
+      it 'passes a bullet marked `none`, with no guide entry' do
+        expect(unreleased('### Changed', "- **Faster.** No caller action.\n  <!-- upgrading: none -->")).to eq([])
+      end
+
+      it 'fails a slug with no guide entry' do
+        expect(unreleased('### Removed', '- **Gone.** `c` is removed. <!-- upgrading: gone-c -->'))
+          .to eq(['CHANGELOG [Unreleased] marks `gone-c` but UPGRADING.md has no `<!-- upgrading: gone-c -->` entry'])
+      end
+
+      it 'does not let `none` stand in for a Breaking bullet\'s slug' do
+        expect(unreleased('### Breaking-ish (visible behaviour changes)', '- **X.** Details. <!-- upgrading: none -->'))
+          .to include(a_string_including('[Unreleased] Breaking bullet has no'))
+      end
+
+      it 'leaves other headings alone' do
+        expect(unreleased('### Added', '- **New.** A method.')).to eq([])
+      end
     end
 
     it 'fails when the version moves past the covered range' do

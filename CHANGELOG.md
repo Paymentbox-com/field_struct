@@ -15,6 +15,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 - **New runtime dependency: `tzinfo` (`~> 2.0`).** Apps without Rails gain `tzinfo` and `concurrent-ruby` in `Gemfile.lock`; a lock pinning tzinfo 1.x no longer resolves. It is required only when a field declares an IANA name, so `require 'field_struct'` and `"UTC"` / `"±HH:MM"` fields don't load it. <!-- upgrading: tzinfo-dependency -->
 - **`zone:` no longer refuses IANA names, and its refusal message is reworded**: `zone: on Time expects an IANA name like "America/Denver", "UTC" or a UTC offset like "-06:00", got "MST". …` (was `… expects "UTC" or a UTC offset like "+00:00" or "-06:00", got … Zone names such as "America/Denver" are not accepted …`). <!-- upgrading: zone-accepts-iana-names -->
 
+### Documentation and tooling
+
+- **The UPGRADING.md drift guard asks for a decision on every Changed / Removed bullet.** Each `[Unreleased]` bullet under `### Changed` or `### Removed` must carry a `<!-- upgrading: … -->` slug marker (with its UPGRADING.md entry) or `upgrading: none` (no caller action), so a visible change filed outside a Breaking heading can't skip the guide unnoticed. `none` never satisfies a Breaking bullet, and released sections are not re-checked. Convention in CLAUDE.md.
+
 ## [0.13.1] - 2026-10-22
 
 Upgrade guidance, no code changes. `UPGRADING.md` walks a project from 0.10 to

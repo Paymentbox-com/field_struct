@@ -1,8 +1,8 @@
 # Upgrading FieldStruct
 
-<!-- upgrading-range: 0.10.0..0.14.0 -->
+<!-- upgrading-range: 0.10.0..0.15.0 -->
 
-What changes when you move a project from **0.10.x to 0.11, 0.12, 0.13 or 0.14**, how
+What changes when you move a project from **0.10.x to 0.11, 0.12, 0.13, 0.14 or 0.15**, how
 to find the code each change touches, and how to fix it. Written to be followed
 step by step by a person or an AI agent. [`CHANGELOG.md`](CHANGELOG.md) has the
 full history; this page is only what a caller can see.
@@ -10,7 +10,7 @@ full history; this page is only what a caller can see.
 ## TL;DR
 
 1. **Who must act:** every project on field_struct 0.10.x. Most will change a few spec expectations and nothing else; Steep users also regenerate RBS.
-2. **Bump** the tag in your Gemfile (`tag: 'v0.14.0'`). If you also use **actionable**: its gemspec from v1.6.0 on requires `field_struct >= 0.12` (v1.5.x needs `>= 0.11`), so bump field_struct first or Bundler will refuse to resolve.
+2. **Bump** the tag in your Gemfile (`tag: 'v0.15.0'`). If you also use **actionable**: its gemspec from v1.6.0 on requires `field_struct >= 0.12` (v1.5.x needs `>= 0.11`), so bump field_struct first or Bundler will refuse to resolve.
 3. **Run your suite**, then match each failure against the [symptom index](#symptom-index) and apply that entry's Fix.
 4. **Run the Find of every silent entry, even if the suite is green.** These change a value or a field's validity without raising, so a passing suite proves nothing:
    [base 10](#integer-strings-parse-in-base-10), [`round: 0`](#round-0-keeps-the-fields-type),
@@ -29,12 +29,13 @@ run the commands, with `rg --pcre2-version`; an agent's `bash -c` may not see a
 shell function or alias that wraps `rg`. Run them from your project root. A
 pattern finds *candidates*; read each hit, and use the narrowing rule an entry gives.
 
-## Straight from 0.10 to 0.14
+## Straight from 0.10 to 0.15
 
-You don't have to stop at 0.11, 0.12 or 0.13: bump straight to `v0.14.0`, then walk
+You don't have to stop at 0.11–0.14: bump straight to `v0.15.0`, then walk
 the [0.11](#011--correctness-and-safer-input), [0.12](#012--generated-rbs-changes-no-runtime-changes),
-[0.13](#013--safer-input-and-log-safety) and [0.14](#013--014) sections in that order,
-running every Find. The [reserved field names](#reserved-field-names) pattern already includes
+[0.13](#013--safer-input-and-log-safety), [0.14](#013--014) and [0.15](#014--015) sections
+in that order. Run the Find of every silent entry (TL;DR step 4) and read each hit;
+the other entries raise or fail a spec, so the suite finds them. The [reserved field names](#reserved-field-names) pattern already includes
 the names 0.13 added, so a hit there covers both versions. If the failures are
 hard to attribute, [bisect by version](#if-something-else-breaks).
 
@@ -615,7 +616,7 @@ fixed offset behave exactly as in 0.13.
   (`FieldStruct::Types::Integer.option_schema`) if you need them.
 - **Why:** the shapes doubled every array line's length and belong to the element type.
 
-## 0.14 → 0.15 (unreleased)
+## 0.14 → 0.15
 
 This release changes behaviour in two places (both silent); otherwise it is faster, with identical output.
 
@@ -625,7 +626,7 @@ This release changes behaviour in two places (both silent); otherwise it is fast
 | [`as_json` reads the fields, not `attributes`](#as_json-reads-the-fields-not-attributes) | Structs that override `attributes` | **Silent:** `as_json` / `to_json` no longer pick up the override's added, renamed or dropped keys | `as_json` built the whole `attributes` Hash and then walked it again; it now reads each field once |
 
 **From 0.14.0:**
-1. Bump the tag to `v0.15.0` once it is released.
+1. Bump the tag to `v0.15.0`.
 2. Run the Find in each entry below.
 3. Run the suite.
 

@@ -36,7 +36,7 @@ FieldStruct isn't on RubyGems yet. Add it to your Gemfile from GitHub,
 pinned to a release tag:
 
 ```ruby
-gem 'field_struct', git: 'https://github.com/Paymentbox-com/field_struct', tag: 'v0.14.0'
+gem 'field_struct', git: 'https://github.com/Paymentbox-com/field_struct', tag: 'v0.15.0'
 ```
 
 Requires Ruby 3.0+.

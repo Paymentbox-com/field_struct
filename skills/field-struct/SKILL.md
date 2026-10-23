@@ -102,6 +102,29 @@ Steps when asked to build one:
 11. **Immutable/frozen instances change by copy**: `rec.with(field: value)` returns a
     new instance; changed fields run the setter pipeline. Shallow, like `dup`.
 
+## Upgrading field_struct
+
+When bumping the gem, follow `UPGRADING.md` (shipped with the gem, next to
+`USAGE.md`; or https://github.com/Paymentbox-com/field_struct/blob/main/UPGRADING.md).
+It lists every visible change since 0.10 as **Symptom / Find / Fix / Why**; don't
+guess from memory.
+
+1. Read your old version from `Gemfile.lock` (`field_struct (x.y.z)`) and the target
+   tag. Open `UPGRADING.md` (repo root, or `bundle show field_struct` after bumping)
+   and read every section from the one after your old version to the target.
+2. Bump the Gemfile tag. If the project uses **actionable** >= 1.6, field_struct
+   must be >= 0.12 (its gemspec says so); if `oj` is pinned below 3.11.2, loosen it.
+   `bundle update field_struct`.
+3. Run every **Find** command in those sections from the project root; read each hit.
+4. Apply the matching **Fix** to each real hit. Don't change behaviour you weren't
+   asked to — e.g. keep a renamed reserved field's wire name with `serialize :json`.
+5. Run the full suite. Match each failure against UPGRADING.md's symptom index and
+   fix it; if nothing matches, follow its "If something else breaks" section.
+6. If the project generates RBS with `FieldStruct::RBS.generate`, regenerate it and
+   run Steep if the project does.
+7. Report: old → new version, each entry that applied (file:line, fix), each Find
+   with no hits, and anything left unexplained.
+
 ## Debugging an invalid instance
 
 ```ruby
@@ -146,10 +169,11 @@ Solargraph can check `user.name`:
 puts FieldStruct::RBS.generate(User)
 # class User < ::FieldStruct::Base
 #   attr_reader name: ::String
-#   def name=: (untyped value) -> untyped
+#   def name=: (::String? value) -> ::String?
 #   ...
 ```
 
-Reader = the field's Ruby type, nullable when `optional`; setter is `untyped`
-(coercion). Generate RBS for nested/element classes too so references resolve. See
+Reader = the field's Ruby type, nullable when `optional`; the setter takes and
+returns that type, nilable (since 0.12 — pass loose input through `new` /
+`assign_attributes`, whose values are `Object?`). `rbs_type:` overrides a field's type. Generate RBS for nested/element classes too so references resolve. See
 the README "Type signatures" section for a Rake-task wiring example.

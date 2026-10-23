@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-10-22
+
+Upgrade guidance, no code changes. `UPGRADING.md` walks a project from 0.10 to
+0.13 step by step — symptom, an `rg` command to find the affected code, the fix
+— for people and AI agents alike, and a spec keeps it in step with this
+CHANGELOG.
+
 ### Documentation and tooling
 
 - **`UPGRADING.md`: moving from 0.10 to 0.11, 0.12 and 0.13.** Every visible change as Symptom (the exception or failure you'll see) / Find (an `rg` command, each checked against a "before" snippet) / Fix (before/after) / Why, a symptom index, a straight 0.10 → 0.13 path, the opt-in options worth adopting, and how to bisect a failure by version. Its runnable fixes are doctested. AGENTS.md and the skill gain an "Upgrading" procedure for agents; the README links it from Installation; it ships in the gem. The skill's RBS example now shows the typed setter 0.12 generates.

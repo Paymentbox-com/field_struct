@@ -629,7 +629,7 @@ This release changes behaviour in two places (both silent); otherwise it is fast
 2. Run the Find in each entry below.
 3. Run the suite.
 
-The other five changes are internal (same output, fewer allocations); no caller acts on them.
+The other six changes are internal (same output, fewer allocations); no caller acts on them.
 
 ### `new` skips the nil default for keys it is given
 <!-- upgrading: defaults-skip-nil-pass -->
@@ -642,8 +642,9 @@ The other five changes are internal (same output, fewer allocations); no caller 
   custom type whose `coerce(nil)` raises no longer raises from `new` when the key
   is given; a key left out still gets the `nil` pass, and still raises. Input
   that is not a Hash (and has no `to_hash`) is now refused before any callable
-  `default:` runs. Values, errors, error order and instance-variable order are
-  unchanged.
+  `default:` runs. Values, errors, error order and JSON are unchanged, and so is
+  instance-variable order unless a setter override never assigns its own ivar
+  (that field's `@name` now exists, holding `nil`).
 - **Find:** overridden setters, and `:raise` policies, in your struct classes:
   ```sh
   rg -nP '^\s*def [a-z_]+=\s*\(?' app lib

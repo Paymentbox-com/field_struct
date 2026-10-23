@@ -49,6 +49,22 @@ Standard `lib/field_struct.rb` entry point with explicit `require_relative` for 
 
 Public methods are documented with YARD comments. Keep them tight — purpose, params, return, and any non-obvious behavior. Don't restate what the code already shows.
 
+#### Upgrade guide (`UPGRADING.md`)
+
+Every change a caller can see gets an `UPGRADING.md` entry (Symptom / Find / Fix /
+Why), keyed by an invisible marker that appears in both files:
+
+- A CHANGELOG bullet under a `### …Breaking…` heading ends its first line with
+  `<!-- upgrading: some-slug -->`; the UPGRADING.md entry carries the same marker
+  under its heading. A visible `Changed`/`Fixed` bullet may opt in the same way.
+- The slug is the key, so either file can be reworded freely. Never reuse a slug.
+- Each release raises `<!-- upgrading-range: 0.10.0..X.Y.Z -->` at the top of
+  UPGRADING.md to the new version and adds its section (even "no changes").
+- Verify every Find command matches a "before" snippet before committing it.
+
+`spec/upgrading_spec.rb` fails on a Breaking bullet without a marker, a marker
+missing from UPGRADING.md, a range short of `VERSION`, or a broken anchor.
+
 ### Linting
 
 Rubocop must pass before commit. Coverage is tracked via SimpleCov (`COVERAGE=1 bin/rspec`).

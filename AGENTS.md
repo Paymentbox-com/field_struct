@@ -11,6 +11,7 @@ things most often gotten wrong. (For *contributing to the gem itself*, see
   (general Ruby + Rails): a task→API map, an error→fix table, and a worked example.
 - **[`USAGE.md`](USAGE.md)** — dense reference: every type, option, and macro.
 - **[`README.md`](README.md)** — feature overview.
+- **[`UPGRADING.md`](UPGRADING.md)** — moving to a newer version: symptom, Find, fix.
 - `skills/field-struct/SKILL.md` — the bundled Claude Code skill.
 
 ## The six gotchas
@@ -21,6 +22,27 @@ things most often gotten wrong. (For *contributing to the gem itself*, see
 4. **`:array` needs `of:`; `:union` needs `of: [...]`** (≥2 members).
 5. **Option scoping**: `format:`→string/date-ish, `enum:`→string/symbol, `in:`→numeric/temporal, `round:`→float/decimal, `base:`→integer, `strict:`→string-shaped/integer, `zone:`→time/datetime, `values:`→boolean, `element:`→array (a Hash of the element type's options); `sensitive:` works on any type. A misapplied known option raises at class load and names the types it applies to; an *unknown* option passes through onto the Field untouched (kept for downstream tooling). You don't have to memorize this table — ask the type (next section).
 6. **`valid?` is computed on assignment, not on read.** Mutating a nested struct or an array element in place doesn't refresh the parent's errors. Assign the field again (or use `with`) to re-validate. See [USAGE](USAGE.md#validity-is-computed-on-assignment-shallow-valid-staleness).
+
+## Upgrading
+
+Moving a project to a newer field_struct? [`UPGRADING.md`](UPGRADING.md) lists every
+visible change since 0.10 with a symptom, a Find command, and a fix. Procedure:
+
+1. Read your old version from `Gemfile.lock` (`field_struct (x.y.z)`) and the target
+   tag. Open `UPGRADING.md` (repo root, or `bundle show field_struct` after bumping)
+   and read every section from the one after your old version to the target.
+2. Bump the Gemfile tag. If the project uses **actionable** >= 1.6, field_struct
+   must be >= 0.12 (its gemspec says so); if `oj` is pinned below 3.11.2, loosen it.
+   `bundle update field_struct`.
+3. Run every **Find** command in those sections from the project root; read each hit.
+4. Apply the matching **Fix** to each real hit. Don't change behaviour you weren't
+   asked to — e.g. keep a renamed reserved field's wire name with `serialize :json`.
+5. Run the full suite. Match each failure against UPGRADING.md's symptom index and
+   fix it; if nothing matches, follow its "If something else breaks" section.
+6. If the project generates RBS with `FieldStruct::RBS.generate`, regenerate it and
+   run Steep if the project does.
+7. Report: old → new version, each entry that applied (file:line, fix), each Find
+   with no hits, and anything left unexplained.
 
 ## Fast paths
 

@@ -78,7 +78,7 @@ module DocExamples
 end
 
 RSpec.describe 'Documentation examples' do
-  %w[README.md USAGE.md docs/getting_started.md].each do |doc|
+  %w[README.md USAGE.md UPGRADING.md docs/getting_started.md].each do |doc|
     path = File.expand_path("../#{doc}", __dir__)
     blocks = DocExamples.blocks(path)
 

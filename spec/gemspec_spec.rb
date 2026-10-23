@@ -5,7 +5,7 @@ RSpec.describe 'the packaged gem' do
 
   it 'ships the library, signatures and user-facing docs' do
     expect(files).to include('lib/field_struct.rb', 'sig/field_struct.rbs', 'README.md', 'USAGE.md',
-      'CHANGELOG.md', 'AGENTS.md', 'docs/getting_started.md',
+      'CHANGELOG.md', 'UPGRADING.md', 'AGENTS.md', 'docs/getting_started.md',
       'skills/field-struct/SKILL.md')
   end
 

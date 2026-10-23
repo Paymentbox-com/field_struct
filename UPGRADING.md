@@ -2,7 +2,7 @@
 
 <!-- upgrading-range: 0.10.0..0.14.0 -->
 
-What changes when you move a project from **0.10.x to 0.11, 0.12 or 0.13**, how
+What changes when you move a project from **0.10.x to 0.11, 0.12, 0.13 or 0.14**, how
 to find the code each change touches, and how to fix it. Written to be followed
 step by step by a person or an AI agent. [`CHANGELOG.md`](CHANGELOG.md) has the
 full history; this page is only what a caller can see.
@@ -10,7 +10,7 @@ full history; this page is only what a caller can see.
 ## TL;DR
 
 1. **Who must act:** every project on field_struct 0.10.x. Most will change a few spec expectations and nothing else; Steep users also regenerate RBS.
-2. **Bump** the tag in your Gemfile (`tag: 'v0.13.1'`). If you also use **actionable**: its gemspec from v1.6.0 on requires `field_struct >= 0.12` (v1.5.x needs `>= 0.11`), so bump field_struct first or Bundler will refuse to resolve.
+2. **Bump** the tag in your Gemfile (`tag: 'v0.14.0'`). If you also use **actionable**: its gemspec from v1.6.0 on requires `field_struct >= 0.12` (v1.5.x needs `>= 0.11`), so bump field_struct first or Bundler will refuse to resolve.
 3. **Run your suite**, then match each failure against the [symptom index](#symptom-index) and apply that entry's Fix. Run every **Find** in the sections between your old and new version, even if nothing failed: some changes (rounding, base 10, BigDecimal from JSON) change values without raising.
 4. **Regenerate any RBS you produce** with `FieldStruct::RBS.generate`, and fix hand-written sigs that copied the old output ([0.12](#012--generated-rbs-changes-no-runtime-changes)).
 5. **How long:** about 15–60 minutes for a typical app. The fixes are mostly renames, a `.to_h`, and updated message expectations.
@@ -19,12 +19,12 @@ Find patterns use [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`); the
 ones with `-P` need ripgrep built with PCRE2 (`rg --pcre2-version`). Run them
 from your project root. A pattern finds *candidates*; read each hit.
 
-## Straight from 0.10 to 0.13
+## Straight from 0.10 to 0.14
 
-You don't have to stop at 0.11 and 0.12: bump straight to `v0.13.1`, then walk
-the [0.11](#011--correctness-and-safer-input), [0.12](#012--generated-rbs-changes-no-runtime-changes)
-and [0.13](#013--safer-input-and-log-safety) sections in that order, running every
-Find. The [reserved field names](#reserved-field-names) pattern already includes
+You don't have to stop at 0.11, 0.12 or 0.13: bump straight to `v0.14.0`, then walk
+the [0.11](#011--correctness-and-safer-input), [0.12](#012--generated-rbs-changes-no-runtime-changes),
+[0.13](#013--safer-input-and-log-safety) and [0.14](#013--014) sections in that order,
+running every Find. The [reserved field names](#reserved-field-names) pattern already includes
 the names 0.13 added, so a hit there covers both versions. If the failures are
 hard to attribute, [bisect by version](#if-something-else-breaks).
 
@@ -511,9 +511,9 @@ now checked at declaration.
 - **Fix:** rename your metadata key, or adopt the real option ([below](#new-opt-in--worth-adopting)).
 - **Why:** a known option is validated so a typo can't silently do nothing.
 
-## 0.13 → 0.14 (unreleased)
+## 0.13 → 0.14
 
-Not released yet; these entries describe `develop`. Fields that declare `"UTC"` or a
+Fields that declare `"UTC"` or a
 fixed offset behave exactly as in 0.13.
 
 ### New runtime dependency: tzinfo
@@ -560,7 +560,6 @@ fixed offset behave exactly as in 0.13.
   `zone: 'America/Denver'` follows DST where `'-06:00'` does not (see
   [USAGE](USAGE.md#zones-zone) for the gap and overlap rules).
 - **Why:** a fixed offset is wrong for half the year in any DST zone.
-Not released yet; these entries describe `develop`.
 
 ### Array errors name every bad index
 <!-- upgrading: array-every-index -->

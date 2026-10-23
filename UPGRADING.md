@@ -1,8 +1,8 @@
 # Upgrading FieldStruct
 
-<!-- upgrading-range: 0.10.0..0.13.1 -->
+<!-- upgrading-range: 0.10.0..0.14.0 -->
 
-What changes when you move a project from **0.10.x to 0.11, 0.12 or 0.13**, how
+What changes when you move a project from **0.10.x to 0.11, 0.12, 0.13 or 0.14**, how
 to find the code each change touches, and how to fix it. Written to be followed
 step by step by a person or an AI agent. [`CHANGELOG.md`](CHANGELOG.md) has the
 full history; this page is only what a caller can see.
@@ -10,7 +10,7 @@ full history; this page is only what a caller can see.
 ## TL;DR
 
 1. **Who must act:** every project on field_struct 0.10.x. Most will change a few spec expectations and nothing else; Steep users also regenerate RBS.
-2. **Bump** the tag in your Gemfile (`tag: 'v0.13.1'`). If you also use **actionable**: its gemspec from v1.6.0 on requires `field_struct >= 0.12` (v1.5.x needs `>= 0.11`), so bump field_struct first or Bundler will refuse to resolve.
+2. **Bump** the tag in your Gemfile (`tag: 'v0.14.0'`). If you also use **actionable**: its gemspec from v1.6.0 on requires `field_struct >= 0.12` (v1.5.x needs `>= 0.11`), so bump field_struct first or Bundler will refuse to resolve.
 3. **Run your suite**, then match each failure against the [symptom index](#symptom-index) and apply that entry's Fix. Run every **Find** in the sections between your old and new version, even if nothing failed: some changes (rounding, base 10, BigDecimal from JSON) change values without raising.
 4. **Regenerate any RBS you produce** with `FieldStruct::RBS.generate`, and fix hand-written sigs that copied the old output ([0.12](#012--generated-rbs-changes-no-runtime-changes)).
 5. **How long:** about 15–60 minutes for a typical app. The fixes are mostly renames, a `.to_h`, and updated message expectations.
@@ -19,12 +19,12 @@ Find patterns use [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`); the
 ones with `-P` need ripgrep built with PCRE2 (`rg --pcre2-version`). Run them
 from your project root. A pattern finds *candidates*; read each hit.
 
-## Straight from 0.10 to 0.13
+## Straight from 0.10 to 0.14
 
-You don't have to stop at 0.11 and 0.12: bump straight to `v0.13.1`, then walk
-the [0.11](#011--correctness-and-safer-input), [0.12](#012--generated-rbs-changes-no-runtime-changes)
-and [0.13](#013--safer-input-and-log-safety) sections in that order, running every
-Find. The [reserved field names](#reserved-field-names) pattern already includes
+You don't have to stop at 0.11, 0.12 or 0.13: bump straight to `v0.14.0`, then walk
+the [0.11](#011--correctness-and-safer-input), [0.12](#012--generated-rbs-changes-no-runtime-changes),
+[0.13](#013--safer-input-and-log-safety) and [0.14](#013--014) sections in that order,
+running every Find. The [reserved field names](#reserved-field-names) pattern already includes
 the names 0.13 added, so a hit there covers both versions. If the failures are
 hard to attribute, [bisect by version](#if-something-else-breaks).
 
@@ -47,9 +47,12 @@ hard to attribute, [bisect by version](#if-something-else-breaks).
 | Message-matching spec fails: `invalid value for Integer()` gone | 0.11 | [Numeric messages](#numeric-messages-name-the-input-class) |
 | Message-matching spec fails: `cannot coerce "…" to boolean`, `no union member could coerce`, `could not coerce "…" for` | 0.13 | [No value echo](#messages-never-echo-the-input-value) |
 | Array error gains `element at index N:` | 0.13 | [Array element index](#array-errors-name-the-element-index) |
+| Array error says `elements at index N, M …` | 0.14 | [Every index](#array-errors-name-every-bad-index) |
 | Mutating a `dup` no longer changes the original's `valid?` | 0.11 | [`dup` errors](#dup-and-clone-own-their-errors) |
 | `RangeError` / `FloatDomainError` no longer raised by `.new` | 0.11 | [RangeError](#rangeerror-is-a-coercion-failure) |
 | Steep: new errors on setters, array elements, unions | 0.12 | [0.12 section](#012--generated-rbs-changes-no-runtime-changes) |
+| Bundler adds `tzinfo` and `concurrent-ruby`, or can't resolve `tzinfo` | 0.14 | [tzinfo dependency](#new-runtime-dependency-tzinfo) |
+| `zone: 'America/Denver'` no longer raises; refusal message reworded | 0.14 | [IANA names](#zone-accepts-iana-names) |
 
 ---
 
@@ -508,6 +511,91 @@ now checked at declaration.
 - **Fix:** rename your metadata key, or adopt the real option ([below](#new-opt-in--worth-adopting)).
 - **Why:** a known option is validated so a typo can't silently do nothing.
 
+## 0.13 → 0.14
+
+Fields that declare `"UTC"` or a
+fixed offset behave exactly as in 0.13.
+
+### New runtime dependency: tzinfo
+<!-- upgrading: tzinfo-dependency -->
+
+- **Symptom:** `bundle install` adds `tzinfo` (2.0.x) and `concurrent-ruby` to
+  `Gemfile.lock` in an app that did not already have them (Rails apps do), so a
+  frozen / deployment install refuses the stale lockfile. An app whose lock pins
+  `tzinfo` 1.x (Rails 6.0 and older) can't resolve: `Bundler could not find
+  compatible versions for gem "tzinfo"`.
+- **Find:**
+  ```sh
+  rg -n '^\s+tzinfo \(' Gemfile.lock
+  ```
+  No hit: you gain it. A `1.` version: see Fix.
+- **Fix:** `bundle update field_struct --conservative` and commit the lockfile.
+  With tzinfo 1.x pinned by an older Rails, stay on 0.13 until Rails is on 6.1+.
+  On a system without OS zoneinfo (Windows, slim containers) also add
+  `gem 'tzinfo-data'` — needed only if you declare IANA names, and the declaration
+  tells you so.
+- **Why:** `zone: 'America/Denver'` needs a zone database and Ruby's stdlib has
+  none. tzinfo is required lazily, only when a field declares a name, so a
+  `"UTC"` / `"±HH:MM"` field never loads it.
+
+### `zone:` accepts IANA names
+<!-- upgrading: zone-accepts-iana-names -->
+
+- **Symptom:** a spec expecting `ArgumentError` for `zone: 'America/Denver'` fails
+  — it now declares fine. A spec matching the refusal message fails; it was
+  `zone: on Time expects "UTC" or a UTC offset like "+00:00" or "-06:00", got "MST".
+  Zone names such as "America/Denver" are not accepted: …` and is now
+  `zone: on Time expects an IANA name like "America/Denver", "UTC" or a UTC offset
+  like "-06:00", got "MST". Use an Area/Location name: …`.
+- **Find:**
+  ```sh
+  rg -n 'expects "UTC" or a UTC offset|no time zone database' spec
+  ```
+- **Fix:**
+  ```ruby
+  expect { decl }.to raise_error(ArgumentError, /expects "UTC" or a UTC offset/)    # before
+  expect { decl }.to raise_error(ArgumentError, /expects an IANA name like/)        # after
+  ```
+  If you declared a fixed offset because names were refused, consider the name:
+  `zone: 'America/Denver'` follows DST where `'-06:00'` does not (see
+  [USAGE](USAGE.md#zones-zone) for the gap and overlap rules).
+- **Why:** a fixed offset is wrong for half the year in any DST zone.
+
+### Array errors name every bad index
+<!-- upgrading: array-every-index -->
+
+- **Symptom:** with more than one bad element, an `:array` error lists them all:
+  `could not be coerced: elements at index 1, 4 (index 1 shown): Integer fields
+  expect …` (was `element at index 1: …`), the same in `CoercionError` under
+  `:raise`, and `elements at index 2, 3 are invalid` for `element:` validation
+  (was `element at index 2 is invalid`). One bad element reads exactly as before.
+- **Find:**
+  ```sh
+  rg -n 'element at index \d' spec
+  ```
+  Only hits whose input has two or more bad elements change.
+- **Fix:**
+  ```ruby
+  expect(rec.errors[:ids]).to eq(['element at index 2 is invalid'])          # before
+  expect(rec.errors[:ids]).to eq(['elements at index 2, 3 are invalid'])     # after
+  ```
+  Or match the stable part: `/\Aelements? at index /`.
+- **Why:** fixing one element per resubmission is the failure mode this avoids.
+
+### `describe` lists element options by name
+<!-- upgrading: array-describe-names-only -->
+
+- **Symptom:** an `:array` field's `describe` line ends `— element accepts in,
+  base, strict` instead of `— element accepts in (Array | Range), base (Integer),
+  strict (TrueClass | FalseClass)`.
+- **Find:**
+  ```sh
+  rg -n 'element accepts \w+ \(' spec
+  ```
+- **Fix:** drop the shapes from the expectation; read them from the element type
+  (`FieldStruct::Types::Integer.option_schema`) if you need them.
+- **Why:** the shapes doubled every array line's length and belong to the element type.
+
 ---
 
 ## New, opt-in — worth adopting
@@ -518,7 +606,7 @@ None of these change defaults. Each is a one-line change per field.
 |---|---|---|---|
 | `strict: true` | 0.13 | money and id fields where `12.7` must not become `12`, or a Hash must not become a String | [USAGE](USAGE.md#strict-coercion-strict-true) |
 | `sensitive: true` | 0.13 | card data, tokens, PII — masks the value in `inspect` / `pp` / error suffixes | [USAGE](USAGE.md#log-safety-error-messages-and-sensitive-fields) |
-| `zone: '-06:00'` | 0.13 | zone-less timestamps that must mean the same instant on every server | [USAGE](USAGE.md#zones-zone) |
+| `zone: '-06:00'`, `zone: 'America/Denver'` | 0.13, 0.14 | zone-less timestamps that must mean the same instant on every server (a name follows DST) | [USAGE](USAGE.md#zones-zone) |
 | `#with(**changes)` | 0.13 | "updating" an `immutable!` / frozen instance, or re-validating after a nested change | [USAGE](USAGE.md#copying-with-changes-with) |
 | `element: {…}` | 0.13 | per-element options on an array (`of: :integer, element: {strict: true}`) | [USAGE](USAGE.md#element-options-element) |
 | `unknown_attributes :raise` | — | every struct that reads payment or API input (nested classes don't inherit it) | [USAGE](USAGE.md#payment-and-api-boundaries-unknown_attributes-raise) |

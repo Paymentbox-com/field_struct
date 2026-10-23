@@ -102,8 +102,8 @@ and integer — Boolean; see [Strict coercion](#strict-coercion-strict-true)),
 `values:` (boolean — a `{truthy:, falsy:}` Hash or a preset Symbol), `of:` (array
 element type / union member array), `element:` (array — a Hash of the element
 type's own options; see [Element options](#element-options-element)), `enum:` (string-like — Array of allowed values),
-`in:` (numeric/temporal — Array or Range), `zone:` (time/datetime — `"UTC"` or
-`"±HH:MM"` for zone-less input; see [Zones](#zones-zone)).
+`in:` (numeric/temporal — Array or Range), `zone:` (time/datetime — `"UTC"`,
+`"±HH:MM"` or an IANA name like `"America/Denver"` for zone-less input; see [Zones](#zones-zone)).
 
 ```ruby
 required :joined, :date, format: '%m/%d/%Y'   # custom strftime
@@ -233,30 +233,57 @@ declared: `:time` uses `Time.parse` and lands in the *process* zone, `:datetime`
 uses `DateTime.parse` and lands in **UTC**. So `"2026-10-22 10:00"` in a `:time`
 field is a different instant on a server in Denver than on one in Tokyo.
 
-Declare `zone:` on a `:time` or `:datetime` field to name the offset a zone-less
+Declare `zone:` on a `:time` or `:datetime` field to name the zone a zone-less
 value means. The same input then gives the same answer on any server. `zone:`
 only fills in a **missing** offset — it never changes one the input carries.
 
-| Input | no `zone:` | `zone: "-06:00"` |
-|-------|------------|------------------|
-| `"2026-10-22 10:00"` (no offset) | `:time` process zone; `:datetime` UTC | 10:00 at -06:00 |
-| a `format:` without `%z` (`:db`, `'%H:%M'`) | as above | 10:00 at -06:00; a date the format omits is *today in -06:00* |
-| `"2026-10-22T10:00:00+02:00"`, `"… Z"`, `"… EST"` | its own offset | its own offset (unchanged) |
-| `"2026-10-22 10:00 XYZ"`, `"… America/Denver"` (a zone the stdlib can't read) | `:time` process zone; `:datetime` UTC | refused — `zone:` won't override a stated zone |
-| `Time` / `DateTime` / TimeWithZone | instant and offset kept | instant and offset kept (not converted) |
-| `Date` | midnight: `:time` process zone, `:datetime` UTC | midnight at -06:00 |
-| an epoch string under `format: '%s'` | that instant, in the process zone (`:time`) or UTC (`:datetime`) | that instant, at -06:00 |
-| Integer (epoch seconds) | refused | refused |
+`zone:` takes `"UTC"`, a fixed offset (`"-06:00"`, the same all year) or an IANA
+name (`"America/Denver"`, which follows daylight saving: -06:00 in July, -07:00 in
+January). With a name, a wall-clock time gets the offset in force **at that date**.
 
-- **Accepted values:** `"UTC"` (the `:time` value is then `utc?`) and fixed offsets
-  `"+HH:MM"` / `"-HH:MM"` from `-23:59` to `+23:59`, colon required. Anything else
-  — `"utc"`, `"Z"`, `"-0600"`, `"MST"` — raises `ArgumentError` at declaration,
-  naming the option.
-- **IANA names (`"America/Denver"`) are not accepted**, with or without
-  ActiveSupport. Ruby's stdlib has no time zone database, and accepting a name only
-  when the host loaded Rails would make the same declaration valid in one process
-  and invalid in another. A fixed offset does not follow DST: `zone: "-06:00"` is
-  -06:00 in January too. Declare the offset your input actually means.
+| Input | no `zone:` | `zone: "-06:00"` | `zone: "America/Denver"` |
+|-------|------------|------------------|--------------------------|
+| `"2026-10-22 10:00"` (no offset) | `:time` process zone; `:datetime` UTC | 10:00 at -06:00 | 10:00 at Denver's offset that day (`"2026-01-15 10:00"` → -07:00) |
+| a `format:` without `%z` (`:db`, `'%H:%M'`) | as above | 10:00 at -06:00; a date the format omits is *today in -06:00* | the same, at that date's offset; an omitted date is *today in Denver* |
+| `"2026-10-22T10:00:00+02:00"`, `"… Z"`, `"… EST"` | its own offset | its own offset (unchanged) | its own offset (unchanged) |
+| `"2026-10-22 10:00 XYZ"`, `"… America/Denver"` (a zone in the *string*) | `:time` process zone; `:datetime` UTC | refused — `zone:` won't override a stated zone | refused, likewise |
+| `Time` / `DateTime` / TimeWithZone | instant and offset kept | instant and offset kept (not converted) | instant and offset kept (not converted) |
+| `Date` | midnight: `:time` process zone, `:datetime` UTC | midnight at -06:00 | midnight at that day's offset |
+| an epoch string under `format: '%s'` | that instant, in the process zone (`:time`) or UTC (`:datetime`) | that instant, at -06:00 | that instant, at Denver's offset at that instant |
+| Integer (epoch seconds) | refused | refused | refused |
+
+- **Accepted values:** `"UTC"` (the `:time` value is then `utc?`), fixed offsets
+  `"+HH:MM"` / `"-HH:MM"` from `-23:59` to `+23:59` (colon required), and IANA
+  `Area/Location` names in the zone database (`"America/Denver"`, `"Etc/UTC"`,
+  `"America/Argentina/Buenos_Aires"`). Anything else raises `ArgumentError` at
+  declaration, naming the option: `"utc"`, `"Z"`, `"-0600"`, an unknown name, and
+  abbreviations or legacy aliases with no `/` — `"MST"` is in the zone database,
+  but as a fixed -07:00, not Mountain time with DST, so it is refused rather than
+  quietly meaning something else.
+- **Rails zone names are refused** (`"Mountain Time (US & Canada)"`). They are
+  ActiveSupport aliases that exist only when ActiveSupport is loaded, so accepting
+  them would make the same declaration valid in one process and invalid in another.
+  Use the IANA name they map to (`ActiveSupport::TimeZone::MAPPING[name]`).
+- **Daylight-saving edges** (names only — a fixed offset has none):
+  - A wall-clock time the zone **skips** (`"2026-03-08 02:30"` in Denver, inside the
+    spring-forward hour) is refused: `could not be coerced: names a local time that
+    does not exist in America/Denver (skipped by a daylight-saving change)`. It names
+    no instant, like the 30th of February. ActiveSupport moves it an hour forward
+    (03:30); FieldStruct does not guess.
+  - A wall-clock time the zone **repeats** (`"2026-11-01 01:30"`, which happens at
+    -06:00 and again at -07:00) is read at the **daylight-time** offset, the earlier
+    instant — what ActiveSupport's `TimeWithZone` picks, so a Rails app sees the
+    same answer.
+  - A `Date` whose midnight the zone skips becomes the **first moment** of that day
+    (01:00 -03:00 in `America/Santiago` on 6 September 2026), as `Date#in_time_zone` does.
+- **What you get back** is a plain `Time` (or `DateTime`) with that offset — never a
+  `TZInfo::TimeWithOffset`, and it does not remember the zone: `Time#zone` is `nil`
+  and adding a day keeps the offset rather than following DST. Re-assign to re-read.
+- **Dependency:** the zone database is [tzinfo](https://github.com/tzinfo/tzinfo)'s
+  (a runtime dependency since 0.14), required only when a field declares a name — a
+  `"UTC"` or fixed-offset field never loads it. tzinfo reads the OS zoneinfo
+  (`/usr/share/zoneinfo`); on a system without it (Windows, slim containers) a
+  declaration raises `ArgumentError` saying to add the `tzinfo-data` gem.
 - `zone:` has no effect with `format: :iso8601`, which requires an offset anyway.
   It does not apply to `:date` (a date has no time of day to place).
 
@@ -266,6 +293,7 @@ class Shift < FieldStruct::Base
   required :starts, :time,     zone: '-06:00'
   optional :logged, :datetime, zone: 'UTC'
   optional :ends,   :time,     zone: 'UTC', format: :db
+  optional :local,  :time,     zone: 'America/Denver'
 end
 
 shift = Shift.new(starts: '2026-10-22 10:00', ends: '2026-10-22 18:30:00')
@@ -274,6 +302,12 @@ shift.starts.hour                                          # => 10
 shift.ends.utc?                                            # => true
 Shift.new(starts: '2026-10-22T10:00:00+02:00').starts.utc_offset   # => 7200
 Shift.new(starts: '2026-10-22 10:00', logged: '2026-10-22 10:00').logged.offset   # => 0
+
+Shift.new(starts: '2026-07-01 10:00', local: '2026-07-01 10:00').local.utc_offset  # => -21600
+Shift.new(starts: '2026-01-15 10:00', local: '2026-01-15 10:00').local.utc_offset  # => -25200
+Shift.new(starts: '2026-11-01 10:00', local: '2026-11-01 01:30').local.utc_offset  # => -21600
+gap = Shift.new(starts: '2026-03-08 10:00', local: '2026-03-08 02:30')
+gap.errors[:local].first.end_with?('does not exist in America/Denver (skipped by a daylight-saving change)')  # => true
 ```
 
 ---
@@ -567,6 +601,10 @@ Pattern matching recurses (`in { address: { city: 'NYC' } }`).
 
 A refused array element is named by its index (0-based), never its value:
 `errors[:ids] # => ["could not be coerced: element at index 1: Integer fields expect a base-10 integer, got a String that is not one"]`.
+When several are refused, every index is listed and the first one's reason is
+shown — `elements at index 1, 4, 7 (index 1 shown): …` — up to five indexes, then
+a count (`elements at index 0, 1, 2, 3, 4 and 15 more (index 0 shown): …`). The
+same message reaches every `coercion_policy`, `:raise` included.
 
 ### Element options (`element:`)
 
@@ -587,6 +625,8 @@ end
 Batch.new(ids: %w[ff 10]).ids                    # => [255, 16]
 Batch.new(ids: [1, 2.5]).errors[:ids]            # => ["could not be coerced: element at index 1: Integer fields with strict: true expect a whole number, got a Float that is not one"]
 Batch.new(codes: %w[USD eur]).errors[:codes]     # => ["element at index 1 is invalid"]
+Batch.new(codes: %w[usd EUR gbp]).errors[:codes] # => ["elements at index 0, 2 are invalid"]
+Batch.new(ids: [1.5, 2, 'x']).errors[:ids]       # => ["could not be coerced: elements at index 0, 2 (index 0 shown): Integer fields with strict: true expect a whole number, got a Float that is not one"]
 Batch.new(days: ['22/10/2026']).as_json[:days]   # => ['22/10/2026']
 Batch.metadata.to_h[:ids][:options]              # => { of_type: 'Integer', element: { strict: true, base: 16 } }
 ```
@@ -598,7 +638,8 @@ raises `in element: of array field :ids, base: on Integer expects Integer, got S
 (`round: is not an Integer option. Integer accepts: in, base, strict.`) — unlike a
 field, `element:` passes nothing through. A temporal element's `format:` is also
 what `to_json` writes, so `from_json` reads it back. `describe` lists what each
-array's elements accept (`element accepts in (Array | Range), base (Integer), …`).
+array's elements accept, by name (`element accepts in, base, strict`); the shapes
+are the element type's own (`FieldStruct::Types::Integer.option_schema`).
 Not supported: `element:` on an `:array` of arrays, and on a nested struct element
 (a struct takes no options).
 

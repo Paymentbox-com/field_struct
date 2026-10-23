@@ -58,11 +58,11 @@ RSpec.describe 'array element: options' do
   end
 
   describe 'validating each element with the element options' do
-    it 'names the index of the first element outside in:' do
+    it 'names the index of every element outside in:' do
       klass = struct { optional :ids, :array, of: :integer, element: {in: 1..10} }
       record = klass.new(ids: [1, 5, 11, 12])
-      expect(record.errors[:ids]).to eq(['element at index 2 is invalid'])
-      expect(record.errors.full_messages).to eq(['Ids element at index 2 is invalid'])
+      expect(record.errors[:ids]).to eq(['elements at index 2, 3 are invalid'])
+      expect(record.errors.full_messages).to eq(['Ids elements at index 2, 3 are invalid'])
     end
 
     it 'checks a Regexp format: on each string element' do
@@ -132,7 +132,7 @@ RSpec.describe 'array element: options' do
     end
 
     it 'refuses an invalid zone' do
-      expect { struct { optional :at, :array, of: :time, element: {zone: 'America/Denver'} } }
+      expect { struct { optional :at, :array, of: :time, element: {zone: 'Mars/Olympus_Mons'} } }
         .to raise_error(ArgumentError, /\Ain element: of array field :at, zone:/)
     end
 
@@ -190,8 +190,11 @@ RSpec.describe 'array element: options' do
       expect(klass.describe).to include('ids (Array, optional) — of_type: Integer, element: {strict: true, base: 16}')
     end
 
-    it 'lists what the element type accepts in describe' do
-      expect(klass.describe).to include('element accepts in (Array | Range), base (Integer), strict (TrueClass | FalseClass)')
+    it 'lists what the element type accepts in describe, by name only' do
+      # The shapes are the element type's own (Types::Integer.option_schema);
+      # repeating them made every array line twice as long.
+      expect(klass.describe).to include('— element accepts in, base, strict')
+      expect(klass.describe).not_to include('element accepts in (')
     end
 
     it 'shows the element options in Field#inspect' do

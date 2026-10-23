@@ -22,6 +22,7 @@ RSpec.describe 'Error messages never echo input values' do
     {card: sentinel},
     [sentinel],
     [{card: sentinel}],
+    [sentinel, 1, {card: sentinel}, "0x#{sentinel}"],
     sentinel.to_sym,
     Complex(1, 4111)
   ].freeze

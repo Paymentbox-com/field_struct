@@ -36,7 +36,7 @@ FieldStruct isn't on RubyGems yet. Add it to your Gemfile from GitHub,
 pinned to a release tag:
 
 ```ruby
-gem 'field_struct', git: 'https://github.com/Paymentbox-com/field_struct', tag: 'v0.13.1'
+gem 'field_struct', git: 'https://github.com/Paymentbox-com/field_struct', tag: 'v0.14.0'
 ```
 
 Requires Ruby 3.0+.
@@ -200,7 +200,7 @@ What each type supports:
 | `:integer` | `base:` | Integer 2..36 (string radix; default 10) | — |
 | `:string` (and subtypes), `:integer` | `strict:` | Boolean — refuse loose input instead of `to_s` / truncating ([Strict coercion](USAGE.md#strict-coercion-strict-true)) | — |
 | `:array` | `element:` | Hash of the element type's own options, applied to each element ([Element options](USAGE.md#element-options-element)) | — |
-| `:time`, `:datetime` | `zone:` | `"UTC"` or `"±HH:MM"` — the offset for zone-less input ([Zones](USAGE.md#zones-zone)) | — |
+| `:time`, `:datetime` | `zone:` | `"UTC"`, `"±HH:MM"` or an IANA name (`"America/Denver"`, DST-aware) — the zone for zone-less input ([Zones](USAGE.md#zones-zone)) | — |
 | `:boolean` | `values:` | `{truthy:, falsy:}` Hash, or Symbol | `:english_yes_no`, `:english`, `:numeric` |
 | `:date` | `format:` | strftime String, or Symbol | `:iso8601`, `:us`, `:eu` |
 | `:datetime`, `:time` | `format:` | strftime String, or Symbol | `:iso8601`, `:rfc2822`, `:db` |

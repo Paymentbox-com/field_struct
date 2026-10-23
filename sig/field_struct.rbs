@@ -873,10 +873,10 @@ module FieldStruct
     # 
     # _@param_ `value` — a present coerced value
     # 
-    # _@return_ — the index of the first non-nil element that
-    # breaks the array field's +element:+ +format:+ / +enum:+ / +in:+, or
-    # +nil+ when there is none (or the field declares no +element:+)
-    def invalid_element_index: (Field field, Object? value) -> Integer?
+    # _@return_ — the indexes of every non-nil element
+    # that breaks the array field's +element:+ +format:+ / +enum:+ / +in:+,
+    # or +nil+ when there is none (or the field declares no +element:+)
+    def invalid_element_indexes: (Field field, Object? value) -> ::Array[Integer]?
 
     # `in:` with a Range means a BOUNDS check, so ask the Range for its bounds.
     # 
@@ -1251,8 +1251,9 @@ module FieldStruct
     # describes.
     def declared_option_repr: (Object? value) -> String
 
-    # What an array field's +element:+ may hold — its element type's native
-    # options — so the line answers "what can I pass to each element" too.
+    # What an array field's +element:+ may hold — the names of its element
+    # type's native options — so the line answers "what can I pass to each
+    # element" too.
     # 
     # _@param_ `field`
     # 
@@ -1770,7 +1771,7 @@ module FieldStruct
     class Time < FieldStruct::Types::Base
       # Native options: a +format:+ strftime/strptime String (or Symbol
       # preset; see {.presets}), an +in:+ Array or Range of allowed values,
-      # and a +zone:+ String (+"UTC"+ or +"±HH:MM"+; see {ZoneOption}).
+      # and a +zone:+ String (+"UTC"+, +"±HH:MM"+ or an IANA name; see {ZoneOption}).
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       def self.default_format: () -> ::String?
@@ -1820,7 +1821,7 @@ module FieldStruct
       # 
       # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
       # 
-      # _@param_ `zone` — +"UTC"+ or +"±HH:MM"+: the offset for a String that names none, and for a +Date+'s midnight. Input carrying its own offset keeps it. +nil+ means the process zone. See {ZoneOption}.
+      # _@param_ `zone` — +"UTC"+, +"±HH:MM"+ or an IANA name: the offset for a String that names none, and for a +Date+'s midnight. Input carrying its own offset keeps it. +nil+ means the process zone. See {ZoneOption}.
       def coerce: ((::String | ::Time | ::Date | ::DateTime)? value, ?format: ::String?, ?zone: ::String?) -> ::Time?
 
       # _@return_ — the top-level +::Time+ class
@@ -1874,10 +1875,13 @@ module FieldStruct
     # 
     #   optional :ids, :array, of: :integer, element: {strict: true, base: 16}
     # 
-    # A refused element is reported with its index — +element at index 2: …+.
+    # A refused element is reported with its index — +element at index 2: …+ —
+    # and several with all of theirs (see {.elements_at}).
     # 
     # Missing: +nil+ or empty array. ruby_type: +::Array+.
     class Array < FieldStruct::Types::Base
+      INDEXES_LISTED: ::Integer
+
       # Native options: a required +of:+ naming the element type — a
       # registered Symbol or a Class (a +Types::Base+ or +FieldStruct::Base+
       # subclass) — and an +element:+ Hash of that element type's options.
@@ -1901,6 +1905,14 @@ module FieldStruct
       # _@return_ — each element coerced by +of_type+
       def coerce: (::Array[Object?]? value, ?of_type: (Class | Types::Base)?, ?element: ::Hash[::Symbol, Object?]?) -> ::Array[Object?]?
 
+      # Name a set of element indexes for an error message: one reads
+      # +element at index 2+, several +elements at index 2, 5+, and past
+      # {INDEXES_LISTED} the rest are counted (+… and 7 more+). Indexes only,
+      # never elements, so a message carries no value.
+      # 
+      # _@param_ `indexes` — ascending, at least one
+      def self.elements_at: (::Array[::Integer] indexes) -> ::String
+
       # _@param_ `value`
       # 
       # _@return_ — +true+ when +nil+ or empty
@@ -1908,6 +1920,28 @@ module FieldStruct
 
       # _@return_ — the top-level +::Array+ class
       def ruby_type: () -> Class
+
+      # Coerce the elements after the first refused one, so the error names
+      # every refused index, then raise the first element's error with them.
+      # The same message reaches every coercion_policy, :raise included —
+      # finishing the scan costs a refused array no more than an accepted one.
+      # 
+      # _@param_ `value` — the input array
+      # 
+      # _@param_ `first` — the index of the first refused element
+      # 
+      # _@param_ `error` — what the element type raised for it
+      # 
+      # _@param_ `element_type` — the element type instance
+      # 
+      # _@param_ `element` — element options
+      def raise_refused!: (
+                            ::Array[Object?] value,
+                            ::Integer first,
+                            StandardError error,
+                            Types::Base element_type,
+                            ::Hash[::Symbol, Object?]? element
+                          ) -> void
 
       # +of_type+ may be either a Types::Base subclass (the DSL form for
       # stock types like +:string+) or an already-built Types::Base
@@ -2273,7 +2307,7 @@ module FieldStruct
     class DateTime < FieldStruct::Types::Base
       # Native options: a +format:+ strftime/strptime String (or Symbol
       # preset; see {.presets}), an +in:+ Array or Range of allowed values,
-      # and a +zone:+ String (+"UTC"+ or +"±HH:MM"+; see {ZoneOption}).
+      # and a +zone:+ String (+"UTC"+, +"±HH:MM"+ or an IANA name; see {ZoneOption}).
       def self.own_option_schema: () -> ::Hash[::Symbol, ::Hash[::Symbol, Object]]
 
       # _@return_ — field-level strftime/strptime format; +nil+
@@ -2317,7 +2351,7 @@ module FieldStruct
       # 
       # _@param_ `format` — strptime/strftime format; +nil+ uses {.default_format} (which itself defaults to +nil+ = ISO-8601 path)
       # 
-      # _@param_ `zone` — +"UTC"+ or +"±HH:MM"+: the offset for a String that names none, and for a +Date+'s midnight. Input carrying its own offset keeps it. +nil+ means UTC. See {ZoneOption}.
+      # _@param_ `zone` — +"UTC"+, +"±HH:MM"+ or an IANA name: the offset for a String that names none, and for a +Date+'s midnight. Input carrying its own offset keeps it. +nil+ means UTC. See {ZoneOption}.
       def coerce: ((::String | ::DateTime | ::Date | ::Time)? value, ?format: ::String?, ?zone: ::String?) -> ::DateTime?
 
       # _@return_ — the top-level +::DateTime+ class
@@ -2372,12 +2406,34 @@ module FieldStruct
     # +Time+, a +DateTime+ (and ActiveSupport's TimeWithZone) keep theirs; a
     # +Date+, which has none, becomes midnight in the zone.
     # 
-    # Accepted values are +"UTC"+ and fixed offsets +"±HH:MM"+. IANA names
-    # (+"America/Denver"+) are refused: the stdlib has no time zone database,
-    # and accepting them only when a host happens to load ActiveSupport would
-    # make a declaration valid in one process and invalid in another
-    # (invariant 7). A DST-aware zone is a different contract — a per-instant
-    # offset — and is left for a separate option.
+    # Accepted values are +"UTC"+, fixed offsets +"±HH:MM"+ and IANA
+    # Area/Location names (+"America/Denver"+). A fixed offset is the same all
+    # year. A name is read through tzinfo's zone database, so a wall-clock time
+    # gets the offset in force at that date and an instant (an epoch) the
+    # offset in force at that instant. tzinfo is required only when a field
+    # declares a name.
+    # 
+    # Daylight-saving edges, for a name:
+    # 
+    # - A wall-clock time the zone skips (02:30 on a spring-forward day) is
+    #   refused, as a 30 February is: it names no instant. ActiveSupport moves
+    #   it an hour forward instead; FieldStruct does not guess.
+    # - A wall-clock time the zone repeats (01:30 on a fall-back day) is read
+    #   at its daylight-time offset — the earlier instant — which is what
+    #   ActiveSupport's TimeWithZone picks, so a Rails app sees the same answer.
+    # - A +Date+ whose midnight the zone skips becomes the first moment of that
+    #   day (01:00 in Santiago on its spring-forward day), as
+    #   +Date#in_time_zone+ does.
+    # 
+    # The value returned is a plain +::Time+ (or +::DateTime+) carrying the
+    # offset, never a +TZInfo::TimeWithOffset+; it does not carry the zone
+    # itself, so arithmetic on it keeps that offset rather than following DST.
+    # 
+    # Refused: abbreviations and legacy aliases with no +/+ (+"MST"+ is a fixed
+    # -07:00 in the database, not Mountain time with DST) and Rails' friendly
+    # names (+"Mountain Time (US & Canada)"+), which only exist when
+    # ActiveSupport is loaded and so would make a declaration valid in one
+    # process and invalid in another (invariant 7).
     module ZoneOption
       OFFSET: ::Regexp
 
@@ -2390,6 +2446,28 @@ module FieldStruct
       # 
       # _@return_ — the options, unchanged
       def self.validate!: (::String type_name, ::Hash[::Symbol, Object?] options) -> ::Hash[::Symbol, Object?]
+
+      # _@param_ `type_name` — the type's short name
+      # 
+      # _@param_ `zone` — the refused +zone:+
+      # 
+      # _@return_ — the declaration error, with a hint for the
+      # shape of +zone+
+      def self.refusal: (::String type_name, ::String zone) -> ::String
+
+      # Look up (and cache) a zone by name, requiring tzinfo on first use.
+      # 
+      # _@param_ `type_name` — the type's short name, for the message
+      # 
+      # _@param_ `zone` — an IANA name
+      # 
+      # _@return_ — the +TZInfo::Timezone+
+      def self.load_timezone: (::String type_name, ::String zone) -> Object
+
+      # _@param_ `zone` — an IANA name {.validate!} accepted
+      # 
+      # _@return_ — the cached +TZInfo::Timezone+
+      def self.timezone: (::String zone) -> Object
 
       # _@param_ `zone` — a declared +zone:+
       # 
@@ -2404,7 +2482,7 @@ module FieldStruct
       # _@return_ — +true+ when the string named no offset at all
       def self.zoneless?: (::Hash[::Symbol, Object] parts) -> bool
 
-      # Read a zone-less String as a wall-clock time at +zone+'s offset.
+      # Read a zone-less String as a wall-clock time in +zone+.
       # 
       # _@param_ `value` — a string {.zoneless?} accepted
       # 
@@ -2412,15 +2490,62 @@ module FieldStruct
       # 
       # _@param_ `zone` — a declared +zone:+
       # 
+      # _@param_ `parts` — the fragments the string parsed to; an epoch (+%s+ / +%Q+) shows up as +:seconds+
+      # 
       # _@return_ — at +zone+'s offset (+utc?+ for +"UTC"+)
-      def self.time_at: (::String value, ::String? format, ::String zone) -> ::Time
+      def self.time_at: (
+                          ::String value,
+                          ::String? format,
+                          ::String zone,
+                          ::Hash[::Symbol, Object] parts
+                        ) -> ::Time
+
+      # {.time_at} for an IANA name: the offset depends on the date.
+      # 
+      # _@param_ `value` — the zone-less string
+      # 
+      # _@param_ `format` — a resolved strptime format, or +nil+
+      # 
+      # _@param_ `timezone` — a +TZInfo::Timezone+
+      # 
+      # _@param_ `parts` — the parsed fragments
+      def self.named_time_at: (
+                                ::String value,
+                                ::String? format,
+                                Object timezone,
+                                ::Hash[::Symbol, Object] parts
+                              ) -> ::Time
+
+      # A wall-clock time in a named zone.
+      # 
+      # _@param_ `timezone` — a +TZInfo::Timezone+
+      # 
+      # _@param_ `civil` — year, month, day, hour, minute and seconds (with any fraction)
+      # 
+      # _@return_ — at the offset in force at that wall-clock time
+      def self.local: (Object timezone, ::Array[::Numeric] civil) -> ::Time
+
+      # _@param_ `time` — an instant
+      # 
+      # _@param_ `timezone` — a +TZInfo::Timezone+
+      # 
+      # _@return_ — the same instant at the zone's offset at that instant
+      def self.in_zone: (::Time time, Object timezone) -> ::Time
 
       # _@param_ `value` — a plain Date
       # 
       # _@param_ `zone` — a declared +zone:+
       # 
-      # _@return_ — midnight at +zone+'s offset
+      # _@return_ — midnight at +zone+'s offset — for a name, the first
+      # moment of that day
       def self.midnight: (::Date value, ::String zone) -> ::Time
+
+      # _@param_ `value` — a plain Date
+      # 
+      # _@param_ `timezone` — a +TZInfo::Timezone+
+      # 
+      # _@return_ — the first moment of that day in the zone
+      def self.named_midnight: (::Date value, Object timezone) -> ::Time
 
       # _@param_ `seconds` — seconds east of UTC
       # 

@@ -132,7 +132,7 @@ RSpec.describe 'array element: options' do
     end
 
     it 'refuses an invalid zone' do
-      expect { struct { optional :at, :array, of: :time, element: {zone: 'America/Denver'} } }
+      expect { struct { optional :at, :array, of: :time, element: {zone: 'Mars/Olympus_Mons'} } }
         .to raise_error(ArgumentError, /\Ain element: of array field :at, zone:/)
     end
 

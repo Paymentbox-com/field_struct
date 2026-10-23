@@ -48,6 +48,9 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency 'bigdecimal', '>= 3.0'
   spec.add_dependency 'oj', '>= 3.11.2'
+  # The zone database for zone: 'America/Denver'. Required lazily, only when a
+  # field declares an IANA name; ~> 2.0 is also what ActiveSupport pins.
+  spec.add_dependency 'tzinfo', '~> 2.0'
 
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html

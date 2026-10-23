@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-23
+
+DST-aware zones and fuller array errors. `zone:` accepts IANA names
+(`'America/Denver'`) and reads zone-less times at that zone's offset on that
+date; a time in a spring-forward gap is refused, an overlap reads at the
+daylight offset as ActiveSupport does. This adds `tzinfo` (`~> 2.0`) as a
+runtime dependency, loaded only when a field names an IANA zone — Rails apps
+already have it. Array errors now name every bad index, and `describe` lists
+element options by name. See `UPGRADING.md` "0.13 → 0.14".
+
 ### Added
 
 - **IANA names in `zone:`** on `:time` and `:datetime`: `optional :starts, :time, zone: 'America/Denver'`. A zone-less string is read as the wall clock in that zone *at that date* (`"2026-07-01 10:00"` → -06:00, `"2026-01-15 10:00"` → -07:00); a `format:` without `%z` likewise, an omitted date being today in the zone; a `Date` becomes midnight at that day's offset; an epoch under `format: '%s'` keeps its instant at the offset in force then. Input with its own offset (strings, `Time`, `DateTime`, TimeWithZone) keeps it, as with fixed offsets. A wall-clock time the zone skips (02:30 on a spring-forward day) is refused with a class-only message naming the zone; one it repeats (01:30 on a fall-back day) takes the daylight-time offset, as ActiveSupport's TimeWithZone does; a `Date` whose midnight is skipped becomes the day's first moment. The value is a plain `Time` / `DateTime` carrying the offset (not a `TZInfo::TimeWithOffset`). Validated at declaration through tzinfo: an unknown name, a no-`/` abbreviation or alias (`"MST"`, `"EST5EDT"`) and a Rails name (`"Mountain Time (US & Canada)"`, with a hint) raise `ArgumentError` naming the option; missing zone data raises saying to add `tzinfo-data`. Identical with and without ActiveSupport. `describe`, `Metadata#to_h` and the RBS are unchanged in shape. See USAGE "Zones".

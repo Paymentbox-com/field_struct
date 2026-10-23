@@ -41,6 +41,8 @@ gem 'field_struct', git: 'https://github.com/Paymentbox-com/field_struct', tag: 
 
 Requires Ruby 3.0+.
 
+Upgrading from an earlier version? [`UPGRADING.md`](UPGRADING.md) lists every visible change, how to find the code it affects, and the fix.
+
 > **New here?** [`docs/getting_started.md`](docs/getting_started.md) walks through
 > using FieldStruct in a repo (general Ruby + a Rails section). For the exhaustive
 > reference, [`USAGE.md`](USAGE.md) is a dense, example-first cheat sheet — every type,

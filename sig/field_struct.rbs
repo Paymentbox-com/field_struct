@@ -1072,6 +1072,14 @@ module FieldStruct
     # +nil+ to derive it. Declared with the +rbs_type:+ field option;
     # signatures only — it never affects coercion or validation.
     attr_reader rbs_type: String?
+
+    # _@return_ — the setter's method name (+:name=+), built once here
+    # so the setter pipeline doesn't intern a dynamic Symbol per call
+    attr_reader setter_name: Symbol
+
+    # _@return_ — the instance variable holding the value (+:@name+),
+    # built once for the same reason as {#setter_name}
+    attr_reader ivar_name: Symbol
   end
 
   # Per-instance collection of validation messages, keyed by field name.

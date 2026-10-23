@@ -715,7 +715,8 @@ module FieldStruct
       def define_field_accessors(field)
         attr_reader field.name
 
-        define_method(:"#{field.name}=") do |value|
+        ivar = field.ivar_name
+        define_method(field.setter_name) do |value|
           if @_initialized && self.class.immutable?
             raise ImmutableError, "#{self.class} is immutable; cannot reassign #{field.name}"
           end
@@ -729,7 +730,7 @@ module FieldStruct
             return apply_coercion_policy(field, value, e)
           end
 
-          instance_variable_set(:"@#{field.name}", coerced)
+          instance_variable_set(ivar, coerced)
           validate_field(field, coerced)
           coerced
         end
@@ -836,10 +837,10 @@ module FieldStruct
       attrs = hash_input!(attrs, '#assign_attributes')
       reject_unknown_attributes!(attrs)
       attrs.each do |key, value|
-        sym = key.to_sym
-        next unless self.class.metadata[sym]
+        field = self.class.metadata[key.to_sym]
+        next unless field
 
-        public_send(:"#{sym}=", value)
+        public_send(field.setter_name, value)
       end
       self
     end
@@ -1135,7 +1136,7 @@ module FieldStruct
       self.class.metadata.each do |field|
         value = field.default
         value = value.call if value.respond_to?(:call)
-        public_send(:"#{field.name}=", value)
+        public_send(field.setter_name, value)
       end
     end
 
@@ -1281,7 +1282,7 @@ module FieldStruct
     # @param error [StandardError] what the type raised
     # @return [void]
     def record_coercion_failure(field, stored_value, error)
-      instance_variable_set(:"@#{field.name}", stored_value)
+      instance_variable_set(field.ivar_name, stored_value)
       errors.clear(field.name)
       errors.add(field.name, "could not be coerced: #{error.message}")
     end

@@ -45,6 +45,16 @@ module FieldStruct
     #   signatures only — it never affects coercion or validation.
     attr_reader :rbs_type
 
+    # @api private
+    # @return [Symbol] the setter's method name (+:name=+), built once here
+    #   so the setter pipeline doesn't intern a dynamic Symbol per call
+    attr_reader :setter_name
+
+    # @api private
+    # @return [Symbol] the instance variable holding the value (+:@name+),
+    #   built once for the same reason as {#setter_name}
+    attr_reader :ivar_name
+
     # @param name [Symbol, String] canonical field name
     # @param type [Class<Types::Base>] the resolved type class
     # @param type_instance [Types::Base, nil] optional pre-built instance —
@@ -68,6 +78,8 @@ module FieldStruct
     #   +values:+, +enum:+, +in:+)
     def initialize(name:, type:, type_instance: nil, required: false, default: nil, coercion_policy: nil, description: nil, rbs_type: nil, sensitive: false, **options)
       @name = name.to_sym
+      @setter_name = :"#{@name}="
+      @ivar_name = :"@#{@name}"
       @type = type
       @required = required
       @default = default

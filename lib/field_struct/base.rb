@@ -64,9 +64,9 @@ module FieldStruct
       #   (locally or via an ancestor)
       def immutable?
         return @immutable if defined?(@immutable)
-        return superclass.immutable? if superclass.respond_to?(:immutable?)
+        return false if equal?(FieldStruct::Base)
 
-        false
+        superclass.immutable?
       end
 
       # Mark this class (and its descendants) frozen-on-construct.
@@ -88,9 +88,9 @@ module FieldStruct
       #   the end of {#initialize} (locally or via an ancestor)
       def frozen_on_construct?
         return @frozen_on_construct if defined?(@frozen_on_construct)
-        return superclass.frozen_on_construct? if superclass.respond_to?(:frozen_on_construct?)
+        return false if equal?(FieldStruct::Base)
 
-        false
+        superclass.frozen_on_construct?
       end
 
       # Class macro: get or set the policy used by the setter pipeline
@@ -108,9 +108,9 @@ module FieldStruct
       def coercion_policy(value = UNSET)
         if value.equal?(UNSET)
           return @coercion_policy if defined?(@coercion_policy)
-          return superclass.coercion_policy if superclass.respond_to?(:coercion_policy)
+          return :keep_raw if equal?(FieldStruct::Base)
 
-          :keep_raw
+          superclass.coercion_policy
         else
           unless VALID_COERCION_POLICIES.include?(value)
             raise ArgumentError, "unknown coercion policy #{value.inspect} " \
@@ -134,9 +134,9 @@ module FieldStruct
       def unknown_attributes(value = UNSET)
         if value.equal?(UNSET)
           return @unknown_attributes if defined?(@unknown_attributes)
-          return superclass.unknown_attributes if superclass.respond_to?(:unknown_attributes)
+          return :ignore if equal?(FieldStruct::Base)
 
-          :ignore
+          superclass.unknown_attributes
         else
           unless VALID_UNKNOWN_POLICIES.include?(value)
             raise ArgumentError, "unknown unknown_attributes policy #{value.inspect} " \

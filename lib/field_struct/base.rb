@@ -815,8 +815,9 @@ module FieldStruct
     #   convertible to one via +to_hash+
     def initialize(attrs = {})
       @errors = Errors.new
-      apply_defaults
-      assign_attributes(hash_input!(attrs.nil? ? {} : attrs, '.new'))
+      attrs = hash_input!(attrs.nil? ? {} : attrs, '.new')
+      apply_defaults(attrs)
+      assign_attributes(attrs)
       run_cross_field_validators if self.class.validators.any?
       @_initialized = true
       freeze if self.class.frozen_on_construct?
@@ -1134,10 +1135,21 @@ module FieldStruct
       [field.options[:element], Types::Array.element_class(field.options[:of_type])]
     end
 
+    # Give every field its default, through the setter. A field with no
+    # default whose key +attrs+ carries only gets its ivar (so the ivar order
+    # stays the declaration order): the assignment that follows runs its
+    # setter, so a nil pass first would only be undone.
+    #
+    # @param attrs [Hash{Symbol, String=>Object, nil}] the input about to be assigned
     # @return [void]
-    def apply_defaults
+    def apply_defaults(attrs)
       self.class.metadata.each do |field|
         value = field.default
+        if value.nil? && (attrs.key?(field.name) || attrs.key?(field.name.name))
+          instance_variable_set(field.ivar_name, nil)
+          next
+        end
+
         value = value.call if value.respond_to?(:call)
         public_send(field.setter_name, value)
       end

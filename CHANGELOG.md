@@ -8,6 +8,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`new` skips the nil default for keys it is given.** A field with no `default:` whose key the input carries is no longer first set to `nil` through its setter: an overridden setter runs once, with the given value, and under `coercion_policy :raise` a custom type that refuses `nil` no longer raises from `new` for a given key. Non-Hash input is refused before callable defaults run. Values, errors and ivar order are unchanged. <!-- upgrading: defaults-skip-nil-pass -->
 - **Faster `new`, `from_json` and `:date` parsing; fewer allocations.** Setter and ivar names are built once per field instead of per assignment, a `:date` string is parsed once rather than twice, `from_json` reuses its reverse `serialize :json` map, arrays without nested structs skip the per-element validity scan, `Errors#empty?` no longer allocates, and the inherited class macros stop walking at `FieldStruct::Base`. A 5-field `new` drops from 39 to 19 allocations. Values, errors and messages are unchanged. <!-- upgrading: none -->
 
 ### Documentation and tooling

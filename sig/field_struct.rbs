@@ -846,7 +846,13 @@ module FieldStruct
     # element type, or the field's own
     def temporal_format_source: (Field? field) -> ([::Hash[Symbol, Object?], Class] | [NilClass, Class] | [NilClass, NilClass])
 
-    def apply_defaults: () -> void
+    # Give every field its default, through the setter. A field with no
+    # default whose key +attrs+ carries only gets its ivar (so the ivar order
+    # stays the declaration order): the assignment that follows runs its
+    # setter, so a nil pass first would only be undone.
+    # 
+    # _@param_ `attrs` — the input about to be assigned
+    def apply_defaults: (::Hash[(Symbol | String), Object?] attrs) -> void
 
     def run_cross_field_validators: () -> void
 

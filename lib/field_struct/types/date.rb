@@ -61,6 +61,9 @@ module FieldStruct
       # @return [::String, nil] +nil+ when the field declares no format
       # @raise [ArgumentError] when a Symbol names no preset in {.presets}
       def self.resolve_format(format)
+        # Skip building the presets Hash for the common, undeclared case.
+        return format if format.nil? || format.is_a?(::String)
+
         TimeFormatResolver.resolve(format, presets)
       end
 
@@ -124,13 +127,31 @@ module FieldStruct
           return ::Date.new(parts[:year], parts[:mon], parts[:mday])
         end
 
+        # The validation step has already parsed the string once; build the
+        # Date from those parts rather than having the stdlib parse it again.
         if format
-          TemporalParser.strptime_parts(value, format)
-          return ::Date.strptime(value, format)
+          parts = TemporalParser.strptime_parts(value, format)
+          return date_from_parts(parts) || ::Date.strptime(value, format)
         end
 
-        TemporalParser.parse_parts(value)
-        ::Date.parse(value)
+        date_from_parts(TemporalParser.parse_parts(value)) || ::Date.parse(value)
+      end
+
+      # +Date.parse+ and +Date.strptime+ build the Date straight from year,
+      # month and day whenever the parts carry all three and neither a Julian
+      # day (+:jd+) nor a day of the year (+:yday+) — date_core.c's fast path
+      # in +d_new_by_frags+ — so this returns the same Date. Any other shape is
+      # left to the stdlib (+nil+).
+      #
+      # @param parts [::Hash{::Symbol=>Object}] already checked by {TemporalParser}
+      # @return [::Date, nil]
+      def date_from_parts(parts)
+        return nil if parts.key?(:jd) || parts.key?(:yday)
+
+        year, month, day = parts.values_at(:year, :mon, :mday)
+        return nil if year.nil? || month.nil? || day.nil?
+
+        ::Date.new(year, month, day)
       end
     end
   end

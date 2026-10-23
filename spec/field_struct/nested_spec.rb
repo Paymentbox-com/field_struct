@@ -267,6 +267,16 @@ RSpec.describe FieldStruct::Base, 'nested FieldStructs' do
       expect(book).to be_valid
     end
 
+    # Only struct elements are asked invalid?; anything else in the array is
+    # skipped. Pinned on a :value field, which holds a mixed array as given.
+    it 'stamps a :value field invalid when an array holds an invalid struct among other values' do
+      addr = address_class
+      holder = Class.new(described_class) { optional :things, :value }
+      expect(holder.new(things: [1, 'two', nil, addr.new(street: '1')]).errors[:things]).to eq(['is invalid'])
+      expect(holder.new(things: [1, 'two', nil, addr.new(street: '1', city: 'NYC')])).to be_valid
+      expect(holder.new(things: [1, 'two', nil])).to be_valid
+    end
+
     it 'deep-walks as_json over array of nested' do
       book = contact_book_class.new(
         addresses: [{street: '1', city: 'NYC'}, {street: '2', city: 'LA'}]

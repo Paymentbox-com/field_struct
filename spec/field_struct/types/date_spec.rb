@@ -117,6 +117,40 @@ RSpec.describe FieldStruct::Types::Date do
     end
   end
 
+  # A string is parsed once: the Date is built from the parts the validation
+  # step already read, except where the stdlib would read those parts
+  # differently (a day of the year or Julian day number among them), or where
+  # they don't name a whole day. Each case pins the stdlib's answer.
+  describe 'what a parsed string becomes' do
+    it 'matches Date.parse for the forms it reads, calendar reform and BC included' do
+      ['2026-01-05', 'Jan 5 2026', 'Monday 2026-01-06', '26-1-5', '5 Jan 2026 BC', '1582-10-15', ' 2026-01-05 '].each do |input|
+        result = type.coerce(input)
+        expect([result, result.start]).to eq([Date.parse(input), Date::ITALY]), input
+      end
+    end
+
+    it 'refuses an ordinal date without a format, as before' do
+      expect { type.coerce('2026-032') }.to raise_error(ArgumentError, 'expected a date with a year, a month and a day')
+    end
+
+    it 'reads a format with a day of the year the way strptime does' do
+      expect(type.coerce('2026-01-05 200', format: '%Y-%m-%d %j')).to eq(Date.new(2026, 7, 19))
+    end
+
+    it 'reads a format without a day the way strptime does' do
+      expect(type.coerce('2026-01', format: '%Y-%m')).to eq(Date.new(2026, 1, 1))
+    end
+
+    it 'keeps the written day when a format also carries epoch seconds' do
+      expect(type.coerce('2026-01-05 0', format: '%Y-%m-%d %s')).to eq(Date.new(2026, 1, 5))
+    end
+
+    it 'still refuses a day that does not exist' do
+      expect { type.coerce('2026-02-30') }.to raise_error(ArgumentError, 'invalid date')
+      expect { type.coerce('30/02/2026', format: '%d/%m/%Y') }.to raise_error(ArgumentError, 'invalid date')
+    end
+  end
+
   describe 'reporting missing values' do
     context 'when value is nil' do
       it 'is missing' do

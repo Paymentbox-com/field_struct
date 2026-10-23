@@ -16,7 +16,9 @@ full history; this page is only what a caller can see.
    [base 10](#integer-strings-parse-in-base-10), [`round: 0`](#round-0-keeps-the-fields-type),
    [`BigDecimal.mode`](#decimal-rounding-ignores-bigdecimalmode), [NaN/Infinity](#nan-and-infinity-are-refused),
    [BigDecimal from JSON](#from_json-reads-decimals-as-bigdecimal), [RangeError](#rangeerror-is-a-coercion-failure),
-   [`dup` errors](#dup-and-clone-own-their-errors) and [hex `:float`](#float-refuses-hex-strings).
+   [`dup` errors](#dup-and-clone-own-their-errors), [hex `:float`](#float-refuses-hex-strings)
+   and, from 0.15, [the skipped nil default](#new-skips-the-nil-default-for-keys-it-is-given)
+   and [`as_json` reading the fields](#as_json-reads-the-fields-not-attributes).
    Every other entry raises or fails a spec. Its Find is for code your suite doesn't reach, so run it when coverage there is thin.
 5. **Regenerate any RBS you produce** with `FieldStruct::RBS.generate`, or with your project's task that wraps it (`rg -n 'FieldStruct::RBS' lib Rakefile`). Fix hand-written sigs that copied the old output ([0.12](#012--generated-rbs-changes-no-runtime-changes)).
 6. **How long:** the fixes take minutes to an hour for a typical app; most are renames, a `.to_h`, and updated message expectations. On top of that come three full suite runs (a baseline, one after the bump, and a final run), so budget 3× your suite's wall time.
@@ -61,6 +63,8 @@ hard to attribute, [bisect by version](#if-something-else-breaks).
 | Steep: new errors on setters, array elements, unions | 0.12 | [0.12 section](#012--generated-rbs-changes-no-runtime-changes) |
 | Bundler adds `tzinfo` and `concurrent-ruby`, or can't resolve `tzinfo` | 0.14 | [tzinfo dependency](#new-runtime-dependency-tzinfo) |
 | `zone: 'America/Denver'` no longer raises; refusal message reworded | 0.14 | [IANA names](#zone-accepts-iana-names) |
+| An overridden setter is no longer called with `nil` during `new`; a refuse-nil type under `:raise` no longer raises | 0.15 | [Nil default skipped](#new-skips-the-nil-default-for-keys-it-is-given) |
+| `to_json` / `as_json` lose keys an `attributes` override added (or regain ones it dropped) | 0.15 | [`as_json` reads fields](#as_json-reads-the-fields-not-attributes) |
 
 ---
 
@@ -610,6 +614,95 @@ fixed offset behave exactly as in 0.13.
 - **Fix:** drop the shapes from the expectation; read them from the element type
   (`FieldStruct::Types::Integer.option_schema`) if you need them.
 - **Why:** the shapes doubled every array line's length and belong to the element type.
+
+## 0.14 → 0.15 (unreleased)
+
+This release changes behaviour in two places (both silent); otherwise it is faster, with identical output.
+
+| Change | Who is affected | What you see | Why |
+|---|---|---|---|
+| [`new` skips the nil default for keys it is given](#new-skips-the-nil-default-for-keys-it-is-given) | Structs that override a field setter, or use `coercion_policy :raise` with a custom type that refuses `nil` | **Silent:** an overridden setter is no longer called with `nil` before the given value; a refuse-nil type no longer raises from `new` when its key is given | The nil pass was overwritten straight away, at the cost of a setter call per given field |
+| [`as_json` reads the fields, not `attributes`](#as_json-reads-the-fields-not-attributes) | Structs that override `attributes` | **Silent:** `as_json` / `to_json` no longer pick up the override's added, renamed or dropped keys | `as_json` built the whole `attributes` Hash and then walked it again; it now reads each field once |
+
+**From 0.14.0:**
+1. Bump the tag to `v0.15.0` once it is released.
+2. Run the Find in each entry below.
+3. Run the suite.
+
+The other six changes are internal (same output, fewer allocations); no caller acts on them.
+
+### `new` skips the nil default for keys it is given
+<!-- upgrading: defaults-skip-nil-pass -->
+
+- **Symptom:** silent. `new` used to give every field its default through the
+  setter, then assign the input through the setter again. A field with no
+  `default:` whose key the input carries (Symbol or String) now gets only the
+  second call. So an overridden setter (`def note=(value)`) sees the given value
+  once, not `nil` first. Under `coercion_policy :raise` (class or field level), a
+  custom type whose `coerce(nil)` raises no longer raises from `new` when the key
+  is given; a key left out still gets the `nil` pass, and still raises. Input
+  that is not a Hash (and has no `to_hash`) is now refused before any callable
+  `default:` runs. Values, errors, error order and JSON are unchanged, and so is
+  instance-variable order unless a setter override never assigns its own ivar
+  (that field's `@name` now exists, holding `nil`).
+- **Find:** overridden setters, and `:raise` policies, in your struct classes:
+  ```sh
+  rg -nP '^\s*def [a-z_]+=\s*\(?' app lib
+  rg -n 'coercion_policy:?\s*\(?\s*:raise' app lib
+  ```
+  Only hits in `FieldStruct::Base` subclasses matter. A setter matters only if
+  it acts on `nil` (resets state, counts calls, logs); a `:raise` hit only if a
+  field's type is your own and refuses `nil`.
+- **Fix:** usually nothing. If a setter relied on the `nil` call, do that work in
+  `initialize` instead:
+  ```ruby
+  # before: the nil call reset @seen on every new
+  def tags=(value)
+    @seen = Set.new if value.nil?
+    super
+  end
+
+  # after
+  def initialize(...)
+    @seen = Set.new
+    super
+  end
+  ```
+- **Why:** the `nil` pass was overwritten by the assignment straight after it,
+  and cost a full setter call (coercion, validation) per given field.
+
+### `as_json` reads the fields, not `attributes`
+<!-- upgrading: as-json-reads-fields -->
+
+- **Symptom:** silent. `as_json` and `to_json` now cover exactly the declared
+  fields, each read through its reader, instead of whatever `attributes` returns.
+  A struct that overrides `attributes` to add, rename or drop keys no longer sees
+  that in its JSON. A reader override (`def note = super&.strip`) still shows, as
+  before. `attributes` and `to_h` are unchanged.
+- **Find:** `attributes` overrides in your struct classes:
+  ```sh
+  rg -nP '^\s*def attributes\b' app lib
+  ```
+  Only hits in `FieldStruct::Base` subclasses matter.
+- **Fix:** if the JSON should carry the change, override `as_json` too
+  (`to_json` goes through it):
+  ```ruby
+  # before: the extra key reached to_json through attributes
+  def attributes
+    super.merge(kind: 'payment')
+  end
+
+  # after
+  def attributes
+    super.merge(kind: 'payment')
+  end
+
+  def as_json(*)
+    super.merge(kind: 'payment')
+  end
+  ```
+- **Why:** `as_json` built the whole `attributes` Hash and then walked it a
+  second time; reading each field once drops the intermediate Hash.
 
 ---
 

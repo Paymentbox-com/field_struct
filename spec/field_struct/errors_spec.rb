@@ -70,6 +70,17 @@ RSpec.describe FieldStruct::Errors do
       errors.clear(:age)
       expect(errors.empty?).to be true
     end
+
+    it 'is empty? when the remaining message lists were emptied in place' do
+      errors[:name].clear
+      errors[:age].clear
+      expect(errors.empty?).to be true
+    end
+
+    it 'is not empty? while any one field still has a message' do
+      errors[:name].clear
+      expect(errors.empty?).to be false
+    end
   end
 
   describe '#full_messages' do

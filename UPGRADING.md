@@ -11,13 +11,21 @@ full history; this page is only what a caller can see.
 
 1. **Who must act:** every project on field_struct 0.10.x. Most will change a few spec expectations and nothing else; Steep users also regenerate RBS.
 2. **Bump** the tag in your Gemfile (`tag: 'v0.14.0'`). If you also use **actionable**: its gemspec from v1.6.0 on requires `field_struct >= 0.12` (v1.5.x needs `>= 0.11`), so bump field_struct first or Bundler will refuse to resolve.
-3. **Run your suite**, then match each failure against the [symptom index](#symptom-index) and apply that entry's Fix. Run every **Find** in the sections between your old and new version, even if nothing failed: some changes (rounding, base 10, BigDecimal from JSON) change values without raising.
-4. **Regenerate any RBS you produce** with `FieldStruct::RBS.generate`, and fix hand-written sigs that copied the old output ([0.12](#012--generated-rbs-changes-no-runtime-changes)).
-5. **How long:** about 15–60 minutes for a typical app. The fixes are mostly renames, a `.to_h`, and updated message expectations.
+3. **Run your suite**, then match each failure against the [symptom index](#symptom-index) and apply that entry's Fix.
+4. **Run the Find of every silent entry, even if the suite is green.** These change a value or a field's validity without raising, so a passing suite proves nothing:
+   [base 10](#integer-strings-parse-in-base-10), [`round: 0`](#round-0-keeps-the-fields-type),
+   [`BigDecimal.mode`](#decimal-rounding-ignores-bigdecimalmode), [NaN/Infinity](#nan-and-infinity-are-refused),
+   [BigDecimal from JSON](#from_json-reads-decimals-as-bigdecimal), [RangeError](#rangeerror-is-a-coercion-failure),
+   [`dup` errors](#dup-and-clone-own-their-errors) and [hex `:float`](#float-refuses-hex-strings).
+   Every other entry raises or fails a spec. Its Find is for code your suite doesn't reach, so run it when coverage there is thin.
+5. **Regenerate any RBS you produce** with `FieldStruct::RBS.generate`, or with your project's task that wraps it (`rg -n 'FieldStruct::RBS' lib Rakefile`). Fix hand-written sigs that copied the old output ([0.12](#012--generated-rbs-changes-no-runtime-changes)).
+6. **How long:** the fixes take minutes to an hour for a typical app; most are renames, a `.to_h`, and updated message expectations. On top of that come three full suite runs (a baseline, one after the bump, and a final run), so budget 3× your suite's wall time.
 
 Find patterns use [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`); the
-ones with `-P` need ripgrep built with PCRE2 (`rg --pcre2-version`). Run them
-from your project root. A pattern finds *candidates*; read each hit.
+ones with `-P` need ripgrep built with PCRE2. Check first, in the shell that will
+run the commands, with `rg --pcre2-version`; an agent's `bash -c` may not see a
+shell function or alias that wraps `rg`. Run them from your project root. A
+pattern finds *candidates*; read each hit, and use the narrowing rule an entry gives.
 
 ## Straight from 0.10 to 0.14
 
@@ -68,8 +76,10 @@ hard to attribute, [bisect by version](#if-something-else-breaks).
   The inputs themselves usually arrive at runtime — no pattern finds those.
   ```sh
   rg -nP --type ruby '(field|required|optional)\s+:\w+,\s*:integer\b'
-  rg -nP "['\"]\s*[-+]?0([xXbBoO]|\d)" spec
+  rg -nP "['\"][-+]?0(\d+|[xX][0-9a-fA-F_]+|[bB][01_]+|[oO][0-7_]+)['\"]" spec
   ```
+  The second pattern matches only whole literals like `"010"`, `"-007"` or `"0x1A"`,
+  not `"0.00"` or dates. A hit matters only if the literal reaches an `:integer` field.
 - **Fix:** if the input really is hex (or another radix), say so.
   ```ruby
   required :code, :integer             # before: "1A" was refused, "0x1A" read as 26
@@ -163,10 +173,13 @@ hard to attribute, [bisect by version](#if-something-else-breaks).
   `assign_attributes(nil)` raises the same `ArgumentError` (was `NoMethodError`);
   `new(nil)` now builds an empty instance. An *unpermitted*
   `ActionController::Parameters` raises Rails' `UnfilteredParameters`.
-- **Find:** literal arrays and `nil` only; pairs built in a variable surface when
-  the suite runs.
+- **Find:** this raises, so a suite that reaches the call finds it. For code it
+  doesn't reach, search literal arrays and `nil` passed to your struct classes.
+  Add your own base classes (e.g. `ApplicationStruct`) to the first pattern's
+  `(…)`; a bare `\.new\(\[` also matches `Array.new` and `Set.new`.
   ```sh
-  rg -nP '\.(new|assign_attributes)\(\s*(\[|nil\b)'
+  names=$(rg -oNP --no-filename 'class\s+\K[\w:]+(?=\s*<\s*(FieldStruct::Base|ApplicationStruct)\b)' app lib | sort -u | paste -sd'|' -)
+  rg -nP "\b($names)\.(new|assign_attributes)\(\s*(\[|nil\b)" app lib spec
   ```
 - **Fix:**
   ```ruby
@@ -265,9 +278,11 @@ hard to attribute, [bisect by version](#if-something-else-breaks).
 
 - **Symptom:** `b = a.dup; b.name = ''` no longer makes `a.valid?` false. Only code
   that relied on the shared `errors` (unlikely) notices.
-- **Find:** no reliable pattern; candidates:
+- **Find:** no reliable pattern. It matters only where the receiver is a struct
+  instance *and* the code reads the original's `valid?` or `errors` after changing
+  the copy. Skip Hash, String and ActiveRecord dups, which are most hits.
   ```sh
-  rg -nP '\.(dup|clone)\b'
+  rg -nP '\.(dup|clone)\b' app lib
   ```
 - **Fix:** validate the copy you changed. Copies are still shallow — mutate nested
   structs through `with` (0.13) or by re-assigning.

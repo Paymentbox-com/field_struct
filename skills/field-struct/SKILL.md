@@ -115,13 +115,17 @@ guess from memory.
 2. Bump the Gemfile tag. If the project uses **actionable** >= 1.6, field_struct
    must be >= 0.12 (its gemspec says so); if `oj` is pinned below 3.11.2, loosen it.
    `bundle update field_struct`.
-3. Run every **Find** command in those sections from the project root; read each hit.
+3. Check `rg --pcre2-version` works in your shell. Run the Find of every entry
+   the TL;DR lists as **silent**, from the project root, and read each hit using the
+   entry's narrowing rule. Run the other entries' Finds only for code the suite
+   doesn't reach; those changes raise or fail a spec.
 4. Apply the matching **Fix** to each real hit. Don't change behaviour you weren't
    asked to — e.g. keep a renamed reserved field's wire name with `serialize :json`.
 5. Run the full suite. Match each failure against UPGRADING.md's symptom index and
    fix it; if nothing matches, follow its "If something else breaks" section.
-6. If the project generates RBS with `FieldStruct::RBS.generate`, regenerate it and
-   run Steep if the project does.
+6. If the project generates RBS with `FieldStruct::RBS.generate`, or with a task that
+   wraps it (`rg -n 'FieldStruct::RBS' lib Rakefile`), regenerate it and run Steep if
+   the project does.
 7. Report: old → new version, each entry that applied (file:line, fix), each Find
    with no hits, and anything left unexplained.
 

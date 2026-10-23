@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Faster `new`, `from_json` and `:date` parsing; fewer allocations.** Setter and ivar names are built once per field instead of per assignment, a `:date` string is parsed once rather than twice, `from_json` reuses its reverse `serialize :json` map, arrays without nested structs skip the per-element validity scan, `Errors#empty?` no longer allocates, and the inherited class macros stop walking at `FieldStruct::Base`. A 5-field `new` drops from 39 to 19 allocations. Values, errors and messages are unchanged. <!-- upgrading: none -->
+
 ## [0.14.0] - 2026-10-23
 
 DST-aware zones and fuller array errors. `zone:` accepts IANA names

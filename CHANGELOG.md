@@ -29,6 +29,12 @@ adheres to [Semantic Versioning](https://semver.org/).
   Symbol keys, every field is written (unset optionals as `nil` / `null`), and
   there is no per-call `only:` / `except:`, with a doctested way to leave a
   field out. Gaps found by the docs-site tutorial.
+- README installs from RubyGems (`gem 'field_struct'`); 0.15.0 is published there.
+
+### Added
+
+- **MIT license.** The gem now ships `LICENSE.txt` and declares `spec.license = 'MIT'`;
+  earlier releases (0.15.0 and before) shipped no license.
 
 ## [0.15.0] - 2026-10-23
 

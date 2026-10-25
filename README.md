@@ -32,12 +32,13 @@ never *looks* fine when it isn't.
 
 ## Installation
 
-FieldStruct isn't on RubyGems yet. Add it to your Gemfile from GitHub,
-pinned to a release tag:
+Add it to your Gemfile from [RubyGems](https://rubygems.org/gems/field_struct):
 
 ```ruby
-gem 'field_struct', git: 'https://github.com/Paymentbox-com/field_struct', tag: 'v0.15.0'
+gem 'field_struct'
 ```
+
+or run `bundle add field_struct`.
 
 Requires Ruby 3.3+.
 
@@ -643,3 +644,7 @@ The plan-of-record for Phase 1 lives in [`docs/origin/plan.md`](docs/origin/plan
 ## Contributing
 
 Bug reports and pull requests are welcome at <https://github.com/Paymentbox-com/field_struct>. Contributors are expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+[MIT](LICENSE.txt).

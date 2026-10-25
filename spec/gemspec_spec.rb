@@ -16,6 +16,11 @@ RSpec.describe 'the packaged gem' do
       'skills/field-struct/SKILL.md')
   end
 
+  it 'is MIT-licensed and ships the license text' do
+    expect(gemspec.license).to eq('MIT')
+    expect(files).to include('LICENSE.txt')
+  end
+
   it 'leaves out contributor-only files' do
     expect(files.grep(%r{\A(\.claude|CLAUDE\.md|docs/origin/|gemfiles/|benchmarks/|Rakefile|rakelib/|Steepfile|\.rubocop|\.yardopts|\.rspec|rbs_collection)}))
       .to be_empty

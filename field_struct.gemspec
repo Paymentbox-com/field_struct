@@ -20,6 +20,7 @@ Gem::Specification.new do |spec|
     Mirrors the AM interface shape where it helps adoption, but reuses no AM
     code.
   DESC
+  spec.license = 'MIT'
   spec.homepage = 'https://github.com/Paymentbox-com/field_struct'
   spec.required_ruby_version = '>= 3.3.0'
 

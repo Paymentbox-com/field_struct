@@ -10,7 +10,7 @@ end
 # Each example proves the nil at runtime, then reads the declared type out of
 # sig/field_struct.rbs.
 RSpec.describe 'sig/field_struct.rbs nullability' do
-  before { skip 'rbs gem not installed (Ruby-floor job)' unless defined?(RBS::Parser) }
+  before { skip 'rbs gem not installed (ActiveSupport lane)' unless defined?(RBS::Parser) }
 
   let(:struct) do
     Class.new(FieldStruct::Base) do

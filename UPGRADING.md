@@ -1,8 +1,8 @@
 # Upgrading FieldStruct
 
-<!-- upgrading-range: 0.10.0..0.15.0 -->
+<!-- upgrading-range: 0.10.0..0.16.0 -->
 
-What changes when you move a project from **0.10.x to 0.11, 0.12, 0.13, 0.14 or 0.15**, how
+What changes when you move a project from **0.10.x to 0.11, 0.12, 0.13, 0.14, 0.15 or 0.16**, how
 to find the code each change touches, and how to fix it. Written to be followed
 step by step by a person or an AI agent. [`CHANGELOG.md`](CHANGELOG.md) has the
 full history; this page is only what a caller can see.
@@ -10,7 +10,7 @@ full history; this page is only what a caller can see.
 ## TL;DR
 
 1. **Who must act:** every project on field_struct 0.10.x. Most will change a few spec expectations and nothing else; Steep users also regenerate RBS.
-2. **Bump** the tag in your Gemfile (`tag: 'v0.15.0'`). If you also use **actionable**: its gemspec from v1.6.0 on requires `field_struct >= 0.12` (v1.5.x needs `>= 0.11`), so bump field_struct first or Bundler will refuse to resolve.
+2. **Bump** field_struct in your Gemfile to 0.16.0 (`gem 'field_struct', '~> 0.16'` from RubyGems, or `tag: 'v0.16.0'` from GitHub). If you also use **actionable**: its gemspec from v1.6.0 on requires `field_struct >= 0.12` (v1.5.x needs `>= 0.11`), so bump field_struct first or Bundler will refuse to resolve.
 3. **Run your suite**, then match each failure against the [symptom index](#symptom-index) and apply that entry's Fix.
 4. **Run the Find of every silent entry, even if the suite is green.** These change a value or a field's validity without raising, so a passing suite proves nothing:
    [base 10](#integer-strings-parse-in-base-10), [`round: 0`](#round-0-keeps-the-fields-type),
@@ -29,11 +29,11 @@ run the commands, with `rg --pcre2-version`; an agent's `bash -c` may not see a
 shell function or alias that wraps `rg`. Run them from your project root. A
 pattern finds *candidates*; read each hit, and use the narrowing rule an entry gives.
 
-## Straight from 0.10 to 0.15
+## Straight from 0.10 to 0.16
 
-You don't have to stop at 0.11–0.14: bump straight to `v0.15.0`, then walk
+You don't have to stop at 0.11–0.15: bump straight to `v0.16.0`, then walk
 the [0.11](#011--correctness-and-safer-input), [0.12](#012--generated-rbs-changes-no-runtime-changes),
-[0.13](#013--safer-input-and-log-safety), [0.14](#013--014) and [0.15](#014--015) sections
+[0.13](#013--safer-input-and-log-safety), [0.14](#013--014), [0.15](#014--015) and [0.16](#015--016) sections
 in that order. Run the Find of every silent entry (TL;DR step 4) and read each hit;
 the other entries raise or fail a spec, so the suite finds them. The [reserved field names](#reserved-field-names) pattern already includes
 the names 0.13 added, so a hit there covers both versions. If the failures are
@@ -706,6 +706,32 @@ The other six changes are internal (same output, fewer allocations); no caller a
   second time; reading each field once drops the intermediate Hash.
 
 ---
+
+## 0.15 → 0.16
+
+Ruby 3.3 or newer is now required. Nothing else changes for callers.
+
+| Change | Who is affected | What you see | Why |
+|---|---|---|---|
+| [Ruby 3.3 or newer is required](#ruby-33-or-newer-is-required) | Apps on Ruby 3.0, 3.1 or 3.2 | `bundle install` / `bundle update` refuses: `field_struct-0.16.0 requires ruby version >= 3.3.0` | 3.3 is the oldest Ruby a known client runs, and older ones can't build on the CI runners |
+
+**From 0.15.0:**
+1. Check `ruby -v` (or `.ruby-version`) is 3.3 or newer. If not, stay on 0.15.x.
+2. Bump the tag to `v0.16.0` and run the suite.
+
+### Ruby 3.3 or newer is required
+<!-- upgrading: ruby-floor-3-3 -->
+
+- **Symptom:** on Ruby 3.0–3.2, Bundler refuses the bump with
+  `field_struct-0.16.0 requires ruby version >= 3.3.0, which is incompatible with the current version`.
+- **Find:**
+  ```sh
+  rg -n '^\s*ruby\b|^[0-9]' .ruby-version Gemfile .tool-versions mise.toml 2>/dev/null
+  ```
+- **Fix:** upgrade the app to Ruby 3.3 or newer first, or stay on `v0.15.0`.
+  The library's behaviour is identical in 0.16.0.
+- **Why:** 3.3 is the oldest Ruby a known client runs. CI moves to self-hosted
+  Ubuntu 26.04 runners, where Ruby 3.0 doesn't build against OpenSSL 3.
 
 ## New, opt-in — worth adopting
 

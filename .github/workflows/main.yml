@@ -15,11 +15,9 @@ jobs:
       # Test every version independently — don't let one failure mask the rest.
       fail-fast: false
       matrix:
-        # Full battery (specs + rubocop + rbs/sord type-signature guards). The
-        # dev toolchain (`rbs`) needs Ruby >= 3.2, so this job's floor is 3.2.
-        # The gem's own runtime floor (>= 3.0) is covered by the `floor` job.
+        # Full battery (specs + rubocop + rbs/sord type-signature guards), from
+        # the gem's floor (>= 3.3, the oldest Ruby a known client runs) up.
         ruby:
-          - '3.2'
           - '3.3'
           - '3.4'
           - '4.0'
@@ -40,33 +38,6 @@ jobs:
     # to the committed untyped ceiling. Both only let sig/ get more typed.
     - name: Type signature guards (staleness, allowlist, grammar, untyped ceiling)
       run: bundle exec rake sigs:check sigs:validate sigs:untyped
-
-  # The gem advertises Ruby >= 3.0 (its runtime deps support it), but the dev
-  # toolchain above can't run that low. This job proves the *library* works on
-  # the advertised floor by running its specs with a minimal gemfile that omits
-  # rbs/sord/yard (see gemfiles/floor.gemfile). The one grammar-validation
-  # example that needs the rbs gem self-skips here.
-  floor:
-    runs-on: ubuntu-latest
-    name: Ruby ${{ matrix.ruby }} (library specs)
-    env:
-      BUNDLE_GEMFILE: gemfiles/floor.gemfile
-    strategy:
-      fail-fast: false
-      matrix:
-        ruby:
-          - '3.0'
-          - '3.1'
-
-    steps:
-    - uses: actions/checkout@v4
-    - name: Set up Ruby
-      uses: ruby/setup-ruby@v1
-      with:
-        ruby-version: ${{ matrix.ruby }}
-        bundler-cache: true
-    - name: Run the library specs
-      run: bundle exec rspec
 
   # FieldStruct has no ActiveSupport dependency and is not getting one. But
   # "framework independent" has to mean "behaves the same whether or not
@@ -95,15 +66,13 @@ jobs:
       matrix:
         # 7.2 and 8.x are not interchangeable: they differ on
         # to_time_preserves_timezone, which changes what DateTime#to_time
-        # returns and how many examples fail. Both are pinned. AS 7.2 needs
-        # Ruby >= 3.1 and 8.1 needs >= 3.2, so this lane cannot ride the
-        # Ruby-floor job above.
+        # returns and how many examples fail. Both are pinned.
         include:
           # `activesupport` is the display version, `gemfile` the (snake_case)
           # file that pins it.
           - activesupport: '7.2'
             gemfile: activesupport_7_2
-            ruby: '3.2'
+            ruby: '3.3'
           - activesupport: '8.1'
             gemfile: activesupport_8_1
             ruby: '3.4'
@@ -119,8 +88,7 @@ jobs:
       run: bundle exec rspec
 
   # Report-only Steep. Steep 2.x / rbs 4.x need Ruby >= 3.3, so they live in
-  # gemfiles/types.gemfile rather than the main Gemfile (which must install on
-  # the 3.2 lane). This job prints the problem count and NEVER fails the build:
+  # gemfiles/types.gemfile rather than the main Gemfile. This job prints the problem count and NEVER fails the build:
   # sig/ is gated by the rake guards above, not by Steep. It is deliberately
   # left out of `ci`'s needs.
   types:
@@ -151,11 +119,10 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     name: ci
-    needs: [build, floor, activesupport]
+    needs: [build, activesupport]
     if: always()
     steps:
     - name: Require every job to pass
       run: |
         test "${{ needs.build.result }}" = "success"
-        test "${{ needs.floor.result }}" = "success"
         test "${{ needs.activesupport.result }}" = "success"

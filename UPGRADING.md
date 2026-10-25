@@ -1,8 +1,8 @@
 # Upgrading FieldStruct
 
-<!-- upgrading-range: 0.10.0..0.15.0 -->
+<!-- upgrading-range: 0.10.0..0.16.0 -->
 
-What changes when you move a project from **0.10.x to 0.11, 0.12, 0.13, 0.14 or 0.15**, how
+What changes when you move a project from **0.10.x to 0.11, 0.12, 0.13, 0.14, 0.15 or 0.16**, how
 to find the code each change touches, and how to fix it. Written to be followed
 step by step by a person or an AI agent. [`CHANGELOG.md`](CHANGELOG.md) has the
 full history; this page is only what a caller can see.
@@ -706,6 +706,32 @@ The other six changes are internal (same output, fewer allocations); no caller a
   second time; reading each field once drops the intermediate Hash.
 
 ---
+
+## 0.15 → 0.16
+
+Ruby 3.3 or newer is now required. Nothing else changes for callers.
+
+| Change | Who is affected | What you see | Why |
+|---|---|---|---|
+| [Ruby 3.3 or newer is required](#ruby-33-or-newer-is-required) | Apps on Ruby 3.0, 3.1 or 3.2 | `bundle install` / `bundle update` refuses: `field_struct-0.16.0 requires ruby version >= 3.3.0` | 3.3 is the oldest Ruby a known client runs, and older ones can't build on the CI runners |
+
+**From 0.15.0:**
+1. Check `ruby -v` (or `.ruby-version`) is 3.3 or newer. If not, stay on 0.15.x.
+2. Bump the tag to `v0.16.0` and run the suite.
+
+### Ruby 3.3 or newer is required
+<!-- upgrading: ruby-floor-3-3 -->
+
+- **Symptom:** on Ruby 3.0–3.2, Bundler refuses the bump with
+  `field_struct-0.16.0 requires ruby version >= 3.3.0, which is incompatible with the current version`.
+- **Find:**
+  ```sh
+  rg -n '^\s*ruby\b|^[0-9]' .ruby-version Gemfile .tool-versions mise.toml 2>/dev/null
+  ```
+- **Fix:** upgrade the app to Ruby 3.3 or newer first, or stay on `v0.15.0`.
+  The library's behaviour is identical in 0.16.0.
+- **Why:** 3.3 is the oldest Ruby a known client runs. CI moves to self-hosted
+  Ubuntu 26.04 runners, where Ruby 3.0 doesn't build against OpenSSL 3.
 
 ## New, opt-in — worth adopting
 

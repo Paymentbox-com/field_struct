@@ -39,7 +39,7 @@ pinned to a release tag:
 gem 'field_struct', git: 'https://github.com/Paymentbox-com/field_struct', tag: 'v0.15.0'
 ```
 
-Requires Ruby 3.0+.
+Requires Ruby 3.3+.
 
 Upgrading from an earlier version? [`UPGRADING.md`](UPGRADING.md) lists every visible change, how to find the code it affects, and the fix.
 

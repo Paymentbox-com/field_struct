@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Ruby 3.3 or newer is required** (`required_ruby_version >= 3.3.0`, was
+  `>= 3.0.0`). 3.3 is the oldest Ruby a known client runs; dropping 3.0–3.2
+  lets CI run on our own Ubuntu 26.04 runners, where Ruby 3.0 can't build
+  against OpenSSL 3. The library code is unchanged. CI drops the 3.2 lane and
+  the 3.0/3.1 floor job (and `gemfiles/floor.gemfile`); RuboCop targets 3.3.
+  **Upgrade note:** on Ruby 3.0–3.2, stay on 0.15.x.
+  <!-- upgrading: ruby-floor-3-3 -->
+
 ## [0.15.0] - 2026-10-23
 
 Faster, with two small behaviour changes. `new` is about 45% faster and

@@ -2,7 +2,7 @@ AllCops:
   DisplayCopNames: true
   DisplayStyleGuide: true
   NewCops: enable
-  TargetRubyVersion: 3.0
+  TargetRubyVersion: 3.3
   Exclude:
     - 'scrap/**/*'
     - 'vendor/**/*'
@@ -195,4 +195,12 @@ Style/YodaExpression:
   Enabled: false
 
 Security/Eval:
+  Enabled: false
+
+# Named forwarding (`**options`, `&block`) stays: YARD documents those names
+# and sord turns them into RBS parameters. Anonymous `**` / `&` (Ruby 3.2+)
+# would drop them from the docs and signatures.
+Style/ArgumentsForwarding:
+  Enabled: false
+Naming/BlockForwarding:
   Enabled: false

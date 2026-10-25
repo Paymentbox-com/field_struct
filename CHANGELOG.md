@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-25
+
+Ruby 3.3 or newer is now required; the library itself is unchanged, so on
+Ruby 3.3+ this is a drop-in bump from 0.15.0 (`UPGRADING.md` "0.15 → 0.16").
+The gem is now MIT-licensed (earlier releases shipped no license). The rest is
+docs: a README example that didn't parse is fixed and a spec now parses every
+Ruby block in the docs, USAGE says exactly what `as_json` / `to_json` hold, and
+the README installs from RubyGems. CI runs on our own self-hosted runners.
+
 ### Changed
 
 - **Ruby 3.3 or newer is required** (`required_ruby_version >= 3.3.0`, was

@@ -23,6 +23,13 @@ adheres to [Semantic Versioning](https://semver.org/).
   reads `in: (10..)`. A new spec parses every ```ruby block in the docs, doctest
   or not, so a broken example fails CI.
 
+### Documentation
+
+- USAGE "JSON & serialization" now says what the output holds: `as_json` has
+  Symbol keys, every field is written (unset optionals as `nil` / `null`), and
+  there is no per-call `only:` / `except:`, with a doctested way to leave a
+  field out. Gaps found by the docs-site tutorial.
+
 ## [0.15.0] - 2026-10-23
 
 Faster, with two small behaviour changes. `new` is about 45% faster and

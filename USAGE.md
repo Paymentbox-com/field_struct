@@ -667,6 +667,30 @@ U.new(first: 'Al').to_json          # => '{"firstName":"Al"}'
 U.from_json('{"firstName":"Al"}')   # => #<U first: "Al">
 ```
 
+What the output holds:
+
+- `as_json` returns a Hash with **Symbol** keys (after the mapping); `to_json` is
+  that Hash as a String.
+- **Every** field is written, in declaration order. An optional field you never
+  set is `nil` in `as_json` and `null` in `to_json`, not left out.
+- There is no per-call `only:` / `except:`: both methods ignore their argument.
+  To leave a field out (say, a `sensitive:` one), filter the Hash yourself and
+  dump it with Oj.
+
+<!-- doctest -->
+```ruby
+class Card < FieldStruct::Base
+  required :last4,    :string
+  optional :nickname, :string
+  optional :token,    :string, sensitive: true
+end
+card = Card.new(last4: '4242', token: 'tok_1')
+card.as_json                     # => { last4: '4242', nickname: nil, token: 'tok_1' }
+card.to_json                     # => '{"last4":"4242","nickname":null,"token":"tok_1"}'
+card.to_json(only: [:last4])     # => '{"last4":"4242","nickname":null,"token":"tok_1"}'
+Oj.dump(card.as_json.except(:token), mode: :compat)  # => '{"last4":"4242","nickname":null}'
+```
+
 ---
 
 ## Custom types & namespaces

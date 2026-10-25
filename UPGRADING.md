@@ -10,7 +10,7 @@ full history; this page is only what a caller can see.
 ## TL;DR
 
 1. **Who must act:** every project on field_struct 0.10.x. Most will change a few spec expectations and nothing else; Steep users also regenerate RBS.
-2. **Bump** the tag in your Gemfile (`tag: 'v0.15.0'`). If you also use **actionable**: its gemspec from v1.6.0 on requires `field_struct >= 0.12` (v1.5.x needs `>= 0.11`), so bump field_struct first or Bundler will refuse to resolve.
+2. **Bump** field_struct in your Gemfile to 0.16.0 (`gem 'field_struct', '~> 0.16'` from RubyGems, or `tag: 'v0.16.0'` from GitHub). If you also use **actionable**: its gemspec from v1.6.0 on requires `field_struct >= 0.12` (v1.5.x needs `>= 0.11`), so bump field_struct first or Bundler will refuse to resolve.
 3. **Run your suite**, then match each failure against the [symptom index](#symptom-index) and apply that entry's Fix.
 4. **Run the Find of every silent entry, even if the suite is green.** These change a value or a field's validity without raising, so a passing suite proves nothing:
    [base 10](#integer-strings-parse-in-base-10), [`round: 0`](#round-0-keeps-the-fields-type),
@@ -29,11 +29,11 @@ run the commands, with `rg --pcre2-version`; an agent's `bash -c` may not see a
 shell function or alias that wraps `rg`. Run them from your project root. A
 pattern finds *candidates*; read each hit, and use the narrowing rule an entry gives.
 
-## Straight from 0.10 to 0.15
+## Straight from 0.10 to 0.16
 
-You don't have to stop at 0.11–0.14: bump straight to `v0.15.0`, then walk
+You don't have to stop at 0.11–0.15: bump straight to `v0.16.0`, then walk
 the [0.11](#011--correctness-and-safer-input), [0.12](#012--generated-rbs-changes-no-runtime-changes),
-[0.13](#013--safer-input-and-log-safety), [0.14](#013--014) and [0.15](#014--015) sections
+[0.13](#013--safer-input-and-log-safety), [0.14](#013--014), [0.15](#014--015) and [0.16](#015--016) sections
 in that order. Run the Find of every silent entry (TL;DR step 4) and read each hit;
 the other entries raise or fail a spec, so the suite finds them. The [reserved field names](#reserved-field-names) pattern already includes
 the names 0.13 added, so a hit there covers both versions. If the failures are

@@ -237,7 +237,7 @@ required :status,    :string,  enum: %w[on off]
 required :position,  :symbol,  enum: %i[before after]
 required :page_size, :integer, in: [10, 20, 30]
 required :amount,    :float,   in: 1.0..10.0
-required :height,    :integer, in: 10..
+required :height,    :integer, in: (10..)   # parentheses: a bare `10..` at line end swallows the next line
 required :start_on,  :date,    in: Date.new(2024, 1, 1)..Date.new(2024, 12, 31)
 ```
 

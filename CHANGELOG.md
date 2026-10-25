@@ -16,6 +16,13 @@ adheres to [Semantic Versioning](https://semver.org/).
   **Upgrade note:** on Ruby 3.0–3.2, stay on 0.15.x.
   <!-- upgrading: ruby-floor-3-3 -->
 
+### Fixed
+
+- README's `in:` example `required :height, :integer, in: 10..` didn't parse: a
+  bare endless range at the end of a line takes the next line as its end. It now
+  reads `in: (10..)`. A new spec parses every ```ruby block in the docs, doctest
+  or not, so a broken example fails CI.
+
 ## [0.15.0] - 2026-10-23
 
 Faster, with two small behaviour changes. `new` is about 45% faster and

@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'set'
-
 RSpec.describe FieldStruct::Base, 'structural equality and hashing' do
   let(:klass) do
     Class.new(described_class) do

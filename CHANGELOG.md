@@ -6,6 +6,36 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Ruby 3.3 or newer is required** (`required_ruby_version >= 3.3.0`, was
+  `>= 3.0.0`). 3.3 is the oldest Ruby a known client runs; dropping 3.0–3.2
+  lets CI run on our own Ubuntu 26.04 runners, where Ruby 3.0 can't build
+  against OpenSSL 3. The library code is unchanged. CI drops the 3.2 lane and
+  the 3.0/3.1 floor job (and `gemfiles/floor.gemfile`); RuboCop targets 3.3.
+  **Upgrade note:** on Ruby 3.0–3.2, stay on 0.15.x.
+  <!-- upgrading: ruby-floor-3-3 -->
+
+### Fixed
+
+- README's `in:` example `required :height, :integer, in: 10..` didn't parse: a
+  bare endless range at the end of a line takes the next line as its end. It now
+  reads `in: (10..)`. A new spec parses every ```ruby block in the docs, doctest
+  or not, so a broken example fails CI.
+
+### Documentation
+
+- USAGE "JSON & serialization" now says what the output holds: `as_json` has
+  Symbol keys, every field is written (unset optionals as `nil` / `null`), and
+  there is no per-call `only:` / `except:`, with a doctested way to leave a
+  field out. Gaps found by the docs-site tutorial.
+- README installs from RubyGems (`gem 'field_struct'`); 0.15.0 is published there.
+
+### Added
+
+- **MIT license.** The gem now ships `LICENSE.txt` and declares `spec.license = 'MIT'`;
+  earlier releases (0.15.0 and before) shipped no license.
+
 ## [0.15.0] - 2026-10-23
 
 Faster, with two small behaviour changes. `new` is about 45% faster and

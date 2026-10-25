@@ -9,28 +9,36 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, afs-ci]
     name: Ruby ${{ matrix.ruby }}
     strategy:
       # Test every version independently — don't let one failure mask the rest.
       fail-fast: false
       matrix:
-        # Full battery (specs + rubocop + rbs/sord type-signature guards). The
-        # dev toolchain (`rbs`) needs Ruby >= 3.2, so this job's floor is 3.2.
-        # The gem's own runtime floor (>= 3.0) is covered by the `floor` job.
+        # Full battery (specs + rubocop + rbs/sord type-signature guards), from
+        # the gem's floor (>= 3.3, the oldest Ruby a known client runs) up.
         ruby:
-          - '3.2'
           - '3.3'
           - '3.4'
           - '4.0'
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Ruby
-      uses: ruby/setup-ruby@v1
+    # p01 (Ubuntu 26.04) has no hostedtoolcache and gha-ci no sudo, so
+    # setup-ruby can't run there; mise installs Ruby into the runner's
+    # persistent ~/.local/share/mise, the way quantum-enclave's p01 jobs do.
+    # The mise version and linux-x64 sha256 match quantum-enclave's ci.yml.
+    - name: Set up Ruby (mise)
+      uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
       with:
-        ruby-version: ${{ matrix.ruby }}
-        bundler-cache: true
+        version: 2026.10.3
+        sha256: 8d48bc510b7d844fad0bc7156c0855c2a1e7230c51e498a7f6b63b021f8b57c5
+        cache: false
+        mise_toml: |
+          [tools]
+          ruby = "${{ matrix.ruby }}"
+    - name: Install gems
+      run: bundle install --jobs 4
     - name: Install RBS collection (stdlib sigs for sigs:validate)
       run: bundle exec rbs collection install
     - name: Run the default task
@@ -41,33 +49,6 @@ jobs:
     - name: Type signature guards (staleness, allowlist, grammar, untyped ceiling)
       run: bundle exec rake sigs:check sigs:validate sigs:untyped
 
-  # The gem advertises Ruby >= 3.0 (its runtime deps support it), but the dev
-  # toolchain above can't run that low. This job proves the *library* works on
-  # the advertised floor by running its specs with a minimal gemfile that omits
-  # rbs/sord/yard (see gemfiles/floor.gemfile). The one grammar-validation
-  # example that needs the rbs gem self-skips here.
-  floor:
-    runs-on: ubuntu-latest
-    name: Ruby ${{ matrix.ruby }} (library specs)
-    env:
-      BUNDLE_GEMFILE: gemfiles/floor.gemfile
-    strategy:
-      fail-fast: false
-      matrix:
-        ruby:
-          - '3.0'
-          - '3.1'
-
-    steps:
-    - uses: actions/checkout@v4
-    - name: Set up Ruby
-      uses: ruby/setup-ruby@v1
-      with:
-        ruby-version: ${{ matrix.ruby }}
-        bundler-cache: true
-    - name: Run the library specs
-      run: bundle exec rspec
-
   # FieldStruct has no ActiveSupport dependency and is not getting one. But
   # "framework independent" has to mean "behaves the same whether or not
   # ActiveSupport is loaded", and it did not: AS defines String#to_date /
@@ -77,7 +58,7 @@ jobs:
   # because its own suite never ran in that environment. This job is that
   # environment. Dev dependency only; the gemspec is untouched.
   activesupport:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, afs-ci]
     name: ActiveSupport ${{ matrix.activesupport }} (Ruby ${{ matrix.ruby }})
     env:
       BUNDLE_GEMFILE: gemfiles/${{ matrix.gemfile }}.gemfile
@@ -95,36 +76,40 @@ jobs:
       matrix:
         # 7.2 and 8.x are not interchangeable: they differ on
         # to_time_preserves_timezone, which changes what DateTime#to_time
-        # returns and how many examples fail. Both are pinned. AS 7.2 needs
-        # Ruby >= 3.1 and 8.1 needs >= 3.2, so this lane cannot ride the
-        # Ruby-floor job above.
+        # returns and how many examples fail. Both are pinned.
         include:
           # `activesupport` is the display version, `gemfile` the (snake_case)
           # file that pins it.
           - activesupport: '7.2'
             gemfile: activesupport_7_2
-            ruby: '3.2'
+            ruby: '3.3'
           - activesupport: '8.1'
             gemfile: activesupport_8_1
             ruby: '3.4'
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Ruby
-      uses: ruby/setup-ruby@v1
+    # Same mise setup as the first job (see its comment).
+    - name: Set up Ruby (mise)
+      uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
       with:
-        ruby-version: ${{ matrix.ruby }}
-        bundler-cache: true
+        version: 2026.10.3
+        sha256: 8d48bc510b7d844fad0bc7156c0855c2a1e7230c51e498a7f6b63b021f8b57c5
+        cache: false
+        mise_toml: |
+          [tools]
+          ruby = "${{ matrix.ruby }}"
+    - name: Install gems
+      run: bundle install --jobs 4
     - name: Run the library specs against an ActiveSupport host
       run: bundle exec rspec
 
   # Report-only Steep. Steep 2.x / rbs 4.x need Ruby >= 3.3, so they live in
-  # gemfiles/types.gemfile rather than the main Gemfile (which must install on
-  # the 3.2 lane). This job prints the problem count and NEVER fails the build:
+  # gemfiles/types.gemfile rather than the main Gemfile. This job prints the problem count and NEVER fails the build:
   # sig/ is gated by the rake guards above, not by Steep. It is deliberately
   # left out of `ci`'s needs.
   types:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, afs-ci]
     name: Steep (report only)
     continue-on-error: true
     env:
@@ -132,11 +117,18 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Ruby
-      uses: ruby/setup-ruby@v1
+    # Same mise setup as the first job (see its comment).
+    - name: Set up Ruby (mise)
+      uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
       with:
-        ruby-version: '3.4'
-        bundler-cache: true
+        version: 2026.10.3
+        sha256: 8d48bc510b7d844fad0bc7156c0855c2a1e7230c51e498a7f6b63b021f8b57c5
+        cache: false
+        mise_toml: |
+          [tools]
+          ruby = "3.4"
+    - name: Install gems
+      run: bundle install --jobs 4
     - name: steep check (report only)
       run: |
         status=0
@@ -149,13 +141,12 @@ jobs:
   # One stable check name for branch protection: it passes only when every
   # job above passed, so the required check survives matrix changes.
   ci:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, afs-ci]
     name: ci
-    needs: [build, floor, activesupport]
+    needs: [build, activesupport]
     if: always()
     steps:
     - name: Require every job to pass
       run: |
         test "${{ needs.build.result }}" = "success"
-        test "${{ needs.floor.result }}" = "success"
         test "${{ needs.activesupport.result }}" = "success"

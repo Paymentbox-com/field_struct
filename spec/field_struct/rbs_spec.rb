@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# The rbs gem is part of the dev toolchain (Ruby >= 3.2); it's absent on the
-# Ruby-floor CI job, where the single grammar-validation example below skips.
+# The rbs gem is part of the dev toolchain; it's absent on the ActiveSupport
+# CI lanes (gemfiles/activesupport_*), where the grammar-validation example skips.
 begin
   require 'rbs'
 rescue LoadError
@@ -207,7 +207,7 @@ RSpec.describe FieldStruct::RBS do
     # own sig/ and validating every type in them (what `rbs validate` does)
     # does not.
     it 'produces RBS whose definitions build and validate against the gem sigs' do
-      skip 'rbs gem not installed (Ruby-floor job)' unless defined?(RBS::DefinitionBuilder)
+      skip 'rbs gem not installed (ActiveSupport lane)' unless defined?(RBS::DefinitionBuilder)
 
       hash_type = Class.new(FieldStruct::Types::Base) do
         def coerce(value, **) = value
